@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace DhtCrawler
@@ -33,24 +34,29 @@ namespace DhtCrawler
             {
                 return EncodeString((string)item);
             }
-            else if (item is long)
+            if (item is long || item is int || item is short)
             {
                 return EncodeNumber((long)item);
             }
-            else if (item is IList<object>)
+            if (item is IList<object>)
             {
                 return (EncodeList((IList<object>)item));
             }
-            else if (item is IDictionary<string, object>)
+            if (item is IDictionary<string, object>)
             {
                 return (EncodeDictionary((IDictionary<string, object>)item));
             }
-            else
+            if (item is byte[])
             {
-                throw new ArgumentException("the type must be string,number,list or dictionary");
+                return EncodeString((byte[])item);
             }
+            throw new ArgumentException("the type must be string,number,list or dictionary");
         }
 
+        public static string EncodeString(byte[] bytes)
+        {
+            return bytes.Length + ":" + string.Concat(bytes.Select(b => (char)b));
+        }
         public static string EncodeString(string str)
         {
             var length = Encoding.ASCII.GetByteCount(str);
@@ -64,6 +70,8 @@ namespace DhtCrawler
 
         public static string EncodeList(IList<object> list)
         {
+            if (list == null || list.Count <= 0)
+                return string.Empty;
             var sb = new StringBuilder("l");
             foreach (var item in list)
             {
@@ -74,6 +82,8 @@ namespace DhtCrawler
 
         public static string EncodeDictionary(IDictionary<string, object> dictionary)
         {
+            if (dictionary == null || dictionary.Count <= 0)
+                return string.Empty;
             var sb = new StringBuilder("d");
             foreach (var kv in dictionary)
             {
@@ -86,6 +96,23 @@ namespace DhtCrawler
         {
             var index = 0;
             return Decode(data, ref index);
+        }
+
+        private static byte[] DecodeByte(byte[] data, ref int index)
+        {
+            var length = new StringBuilder();
+            for (; index < data.Length; index++)
+            {
+                if (data[index] == Flags.Split)
+                    break;
+                length.Append((char)data[index]);
+            }
+            var startIndex = index + 1;
+            var strlength = int.Parse(length.ToString());
+            index = startIndex + strlength;
+            var strBytes = new byte[strlength];
+            Array.Copy(data, startIndex, strBytes, 0, strlength);
+            return strBytes;
         }
 
         public static object Decode(byte[] data, ref int index)
@@ -113,19 +140,7 @@ namespace DhtCrawler
                 case Flags.String7:
                 case Flags.String8:
                 case Flags.String9:
-                    var length = new StringBuilder();
-                    for (; index < data.Length; index++)
-                    {
-                        if (data[index] == Flags.Split)
-                            break;
-                        length.Append((char)data[index]);
-                    }
-                    var startIndex = index + 1;
-                    var strlength = int.Parse(length.ToString());
-                    index = startIndex + strlength;
-                    var strBytes = new byte[strlength];
-                    Array.Copy(data, startIndex, strBytes, 0, strlength);
-                    return Encoding.ASCII.GetString(strBytes);
+                    return Encoding.ASCII.GetString(DecodeByte(data, ref index));
                 case Flags.List:
                     index++;
                     var list = new List<object>();
@@ -143,7 +158,7 @@ namespace DhtCrawler
                     while (index < data.Length)
                     {
                         var key = (string)Decode(data, ref index);
-                        var value = Decode(data, ref index);
+                        var value = key == "id" || key == "ip" || key == "nodes" ? DecodeByte(data, ref index) : Decode(data, ref index);
                         dic.Add(key, value);
                         if (data[index] == Flags.End)
                             break;

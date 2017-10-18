@@ -4,7 +4,7 @@ namespace DhtCrawler.DHT
 {
     public class DhtNode
     {
-        public string NodeId { get; set; }
+        public byte[] NodeId { get; set; }
         public string Host { get; set; }
         public ushort Port { get; set; }
 
@@ -13,7 +13,7 @@ namespace DhtCrawler.DHT
             var node = obj as DhtNode;
             if (node == null)
                 return false;
-            return (string.IsNullOrWhiteSpace(NodeId) && NodeId == node.NodeId) || (node.Port == this.Port && string.Equals(Host, node.Host, StringComparison.OrdinalIgnoreCase));
+            return (NodeId != null && NodeId == node.NodeId) || (node.Port == this.Port && string.Equals(Host, node.Host, StringComparison.OrdinalIgnoreCase));
         }
 
         public override int GetHashCode()
