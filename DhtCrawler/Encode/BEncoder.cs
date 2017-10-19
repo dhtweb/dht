@@ -36,7 +36,7 @@ namespace DhtCrawler
             }
             if (item is long || item is int || item is short || item is ushort)
             {
-                return EncodeNumber((long)item);
+                return EncodeNumber(Convert.ToInt64(item));
             }
             if (item is IList<object>)
             {
@@ -168,7 +168,7 @@ namespace DhtCrawler
                     index++;
                     return dic;
                 default:
-                    throw new ArgumentException("unknown type flag,cann't decode");
+                    throw new ArgumentException($"unknown type flag byte:{data[index]}char:{(char)data[index]} ,cann't decode");
             }
         }
     }
