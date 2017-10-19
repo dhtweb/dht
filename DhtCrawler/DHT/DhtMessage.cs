@@ -122,6 +122,20 @@ namespace DhtCrawler.DHT
             }
         }
 
+        private List<object> _errorList;
+        public IList<object> Errors
+        {
+            get
+            {
+                if (!_message.TryGetValue("e", out object list))
+                {
+                    list = new List<object>(2);
+                    _message.Add("e", list);
+                }
+                return (List<object>)list;
+            }
+        }
+
         public string BEncode()
         {
             return BEncoder.EncodeDictionary(_message);

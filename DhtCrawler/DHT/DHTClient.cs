@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
+using System.Linq;
+using System.IO;
 
 namespace DhtCrawler.DHT
 {
@@ -32,6 +35,9 @@ namespace DhtCrawler.DHT
         {
             _endPoint = new IPEndPoint(IPAddress.Any, port);
             _client = new UdpClient(_endPoint);
+            _client.Client.IOControl((IOControlCode)(-1744830452), new byte[] { 0, 0, 0, 0 }, null);
+            _client.Ttl = byte.MaxValue;
+            //_client.Client.IsBound
             _bootstrap_node = new HashSet<DhtNode>(new[] { new DhtNode() { Host = "router.bittorrent.com", Port = 6881 }, new DhtNode() { Host = "dht.transmissionbt.com", Port = 6881 }, new DhtNode() { Host = "router.utorrent.com", Port = 6881 } });
             _node = new DhtNode() { Host = "0.0.0.0", Port = port, NodeId = GenerateRandomNodeId() };
         }
@@ -39,32 +45,123 @@ namespace DhtCrawler.DHT
         private void Recevie_Data(IAsyncResult asyncResult)
         {
             var client = (UdpClient)asyncResult.AsyncState;
-            var data = client.EndReceive(asyncResult, ref _endPoint);
-            ProcessMsgData(data);
-            client.BeginReceive(Recevie_Data, client);
-        }
-
-        private void ProcessMsgData(byte[] data)
-        {
             try
             {
-                var dic = (Dictionary<string, object>)BEncoder.Decode(data);
-                var msg = new DhtMessage(dic);
-                msg.CommandType = MsgIdMap[msg.MessageId];
-                if (msg.MesageType == MessageType.Request)
-                {
-                    OnReceiveRequest?.Invoke(this, msg);
-                }
-                else if (msg.MesageType == MessageType.Response)
-                {
-                    OnReceiveResponse?.Invoke(this, msg);
-                }
+                var remotePoint = _endPoint;
+                var data = client.EndReceive(asyncResult, ref remotePoint);
+                ProcessMsgData(data, remotePoint);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
             }
+            while (true)
+            {
+                try
+                {
+                    client.BeginReceive(Recevie_Data, client);
+                    break;
+                }
+                catch (SocketException ex)
+                {
+                    Console.WriteLine("recevice error {0}", ex);
+                }
+            }
         }
+
+        private void ProcessMsgData(byte[] data, IPEndPoint remotePoint)
+        {
+            try
+            {
+                var dic = (Dictionary<string, object>)BEncoder.Decode(data);
+                var decodeItems = new[] { "t", "y", "q", "r" };
+                foreach (var key in decodeItems)
+                {
+                    if (dic.ContainsKey(key) && dic[key] is byte[])
+                    {
+                        dic[key] = Encoding.ASCII.GetString((byte[])dic[key]);
+                    }
+                }
+                var msg = new DhtMessage(dic);
+                Console.WriteLine($"receive msg type is {msg.MesageType}");
+                if (msg.MesageType == MessageType.Request)
+                {
+                    var response = new DhtMessage
+                    {
+                        MessageId = msg.MessageId,
+                        MesageType = MessageType.Response
+                    };
+                    response.Data.Add("id", _node.NodeId);
+                    switch (msg.CommandType)
+                    {
+                        case CommandType.Find_Node:
+                            response.Data.Add("nodes", "");
+                            break;
+                        case CommandType.Get_Peers:
+                            var hash = BitConverter.ToString((byte[])msg.Data["info_hash"]).Replace("-", "");
+                            lock (this)
+                            {
+                                File.AppendAllText("hash.txt", hash + "\r\n");
+                            }
+                            response.Data.Add("nodes", "");
+                            response.Data.Add("token", hash.Substring(0, 2));
+                            break;
+                        case CommandType.Ping:
+                        case CommandType.Announce_Peer:
+                            break;
+                        default:
+                            return;
+                    }
+                    var sendBytes = response.BEncodeBytes();
+                    _client.Send(sendBytes, sendBytes.Length, remotePoint);
+                }
+                else if (msg.MesageType == MessageType.Response)
+                {
+                    msg.CommandType = MsgIdMap[msg.MessageId];
+                    switch (msg.CommandType)
+                    {
+                        case CommandType.Find_Node:
+                            if (!msg.Data.TryGetValue("nodes", out object nodeObj))
+                                break;
+                            var nodeBytes = (byte[])nodeObj;
+                            var nodes = new HashSet<DhtNode>();
+                            for (var i = 0; i < nodeBytes.Length; i += 26)
+                            {
+                                nodes.Add(ParseNode(nodeBytes, i));
+                            }
+                            foreach (var node in nodes)
+                            {
+                                FindNode(node);
+                            }
+                            break;
+                    }
+                    OnReceiveResponse?.Invoke(this, msg);
+                }
+            }
+            catch (Exception ex)
+            {
+                var response = new DhtMessage
+                {
+                    MesageType = MessageType.Exception,
+                    MessageId = "ex"
+                };
+                response.Errors.Add(201);
+                response.Errors.Add("Server Error");
+                var sendBytes = response.BEncodeBytes();
+                _client.Send(sendBytes, sendBytes.Length, remotePoint);
+            }
+        }
+
+        private DhtNode ParseNode(byte[] data, int startIndex)
+        {
+            byte[] idArray = new byte[20], ipArray = new byte[4], portArray = new byte[2];
+            Array.Copy(data, startIndex, idArray, 0, 20);
+            Array.Copy(data, startIndex + 20, ipArray, 0, 4);
+            Array.Copy(data, startIndex + 24, portArray, 0, 2);
+            return new DhtNode() { Host = string.Join(".", ipArray), Port = BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0), NodeId = idArray };
+        }
+
+        #region 发送请求
 
         private void SendMsg(CommandType command, IDictionary<string, object> data, DhtNode node)
         {
@@ -90,6 +187,7 @@ namespace DhtCrawler.DHT
         {
             SendMsg(CommandType.Ping, null, node);
         }
+
         public void GetPeers(DhtNode node, byte[] infoHash)
         {
             var data = new Dictionary<string, object> { { "info_hash", infoHash } };
@@ -102,16 +200,26 @@ namespace DhtCrawler.DHT
             SendMsg(CommandType.Announce_Peer, data, node);
         }
 
-        public event Action<DhtClient, DhtMessage> OnReceiveRequest;
+        #endregion
 
         public event Action<DhtClient, DhtMessage> OnReceiveResponse;
 
         public void Run()
         {
+            _running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            foreach (var node in _bootstrap_node)
+            LoopFindNodes();
+        }
+
+        private async void LoopFindNodes()
+        {
+            while (_running)
             {
-                FindNode(node);
+                foreach (var node in _bootstrap_node)
+                {
+                    FindNode(node);
+                }
+                await Task.Delay(1000 * 10);
             }
         }
     }

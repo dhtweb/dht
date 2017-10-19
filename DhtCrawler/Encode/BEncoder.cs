@@ -34,7 +34,7 @@ namespace DhtCrawler
             {
                 return EncodeString((string)item);
             }
-            if (item is long || item is int || item is short)
+            if (item is long || item is int || item is short || item is ushort)
             {
                 return EncodeNumber((long)item);
             }
@@ -140,7 +140,8 @@ namespace DhtCrawler
                 case Flags.String7:
                 case Flags.String8:
                 case Flags.String9:
-                    return Encoding.ASCII.GetString(DecodeByte(data, ref index));
+                    return DecodeByte(data, ref index);
+                //return Encoding.ASCII.GetString();
                 case Flags.List:
                     index++;
                     var list = new List<object>();
@@ -157,8 +158,9 @@ namespace DhtCrawler
                     var dic = new Dictionary<string, object>();
                     while (index < data.Length)
                     {
-                        var key = (string)Decode(data, ref index);
-                        var value = key == "id" || key == "ip" || key == "nodes" ? DecodeByte(data, ref index) : Decode(data, ref index);
+                        var key = Encoding.ASCII.GetString(DecodeByte(data, ref index));
+                        var value = Decode(data, ref index);
+                        //var value = key == "id" || key == "ip" || key == "nodes" ? DecodeByte(data, ref index) : Decode(data, ref index);
                         dic.Add(key, value);
                         if (data[index] == Flags.End)
                             break;

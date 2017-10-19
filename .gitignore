@@ -7,3 +7,4 @@
 /DhtCrawler/bin/Debug/netcoreapp2.0
 /.vs/DhtCrawler/v15
 /DhtCrawler/obj
+*.txt
