@@ -1,6 +1,5 @@
 ﻿using DhtCrawler.DHT;
 using System;
-using System.Collections.Generic;
 
 namespace DhtCrawler
 {
