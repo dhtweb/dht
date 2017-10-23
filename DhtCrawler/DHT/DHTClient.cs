@@ -272,7 +272,6 @@ namespace DhtCrawler.DHT
 
         private async void LoopFindNodes()
         {
-            var startTime = DateTime.Now;
             while (_running)
             {
                 if (!_nodeQueue.TryDequeue(out DhtNode node))
@@ -281,10 +280,10 @@ namespace DhtCrawler.DHT
                     {
                         _nodeQueue.Enqueue(item);
                     }
-                    await Task.Delay(1000);
+                    await Task.Delay(5000);
                     continue;
                 }
-                if (_sendMessageQueue.Count >= ushort.MaxValue)
+                if (_sendMessageQueue.Count > 2048 || _nodeQueue.Count > 2048)
                     continue;
                 FindNode(node);
             }

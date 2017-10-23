@@ -9,3 +9,6 @@
 /DhtCrawler/obj
 *.txt
 /.vs
+/DhtCrawler/bin/Release
+/DhtCrawler/Properties/PublishProfiles
+*.user
