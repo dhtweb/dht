@@ -31,7 +31,7 @@ namespace DhtCrawler.DHT
         private readonly DhtNode _node;
 
         private readonly ConcurrentQueue<DhtNode> _nodeQueue;
-
+        private readonly ConcurrentQueue<InfoHash> _downQueue;
         private readonly BlockingCollection<DhtData> _recvMessageQueue;
         private readonly BlockingCollection<DhtData> _sendMessageQueue;
 
@@ -44,6 +44,7 @@ namespace DhtCrawler.DHT
             _node = new DhtNode() { Host = "0.0.0.0", Port = port, NodeId = GenerateRandomNodeId() };
 
             _nodeQueue = new ConcurrentQueue<DhtNode>(bootstrapNodes);
+            _downQueue = new ConcurrentQueue<InfoHash>();
             _recvMessageQueue = new BlockingCollection<DhtData>();
             _sendMessageQueue = new BlockingCollection<DhtData>();
         }
@@ -75,7 +76,7 @@ namespace DhtCrawler.DHT
             }
         }
 
-        private void ProcessMsgData()
+        private async void ProcessMsgData()
         {
             while (_running)
             {
@@ -107,15 +108,25 @@ namespace DhtCrawler.DHT
                                     response.Data.Add("nodes", "");
                                     break;
                                 case CommandType.Get_Peers:
-                                case CommandType.Announce_Peer://implied_port !=0 则端口使用port                                    
-                                    var hash = BitConverter.ToString((byte[])msg.Data["info_hash"]).Replace("-", "");
-                                    Console.WriteLine(hash);
-                                    File.AppendAllText("hash.txt", hash + "\r\n");
+                                case CommandType.Announce_Peer://implied_port !=0 则端口使用port  
+                                    var infoHash = new InfoHash((byte[])msg.Data["info_hash"]);
+                                    Console.WriteLine(infoHash.Value);
+                                    await File.AppendAllTextAsync("hash.txt", infoHash.Value + "\r\n");
                                     if (msg.CommandType == CommandType.Get_Peers)
                                     {
                                         response.Data.Add("nodes", "");
-                                        response.Data.Add("token", hash.Substring(0, 2));
+                                        response.Data.Add("token", infoHash.Value.Substring(0, 2));
                                     }
+                                    else
+                                    {
+                                        var peer = dhtData.RemoteEndPoint;
+                                        if (msg.Data.Keys.Contains("implied_port") && !0.Equals(msg.Data["implied_port"]))
+                                        {
+                                            peer.Port = (int)msg.Data["port"];
+                                        }
+                                        infoHash.Peers = new HashSet<IPEndPoint>(1) { peer };
+                                    }
+                                    _downQueue.Enqueue(infoHash);
                                     break;
                                 case CommandType.Ping:
                                     break;
@@ -136,6 +147,20 @@ namespace DhtCrawler.DHT
                                     for (var i = 0; i < nodeBytes.Length; i += 26)
                                     {
                                         _nodeQueue.Enqueue(ParseNode(nodeBytes, i));
+                                    }
+                                    break;
+                                case CommandType.Get_Peers:
+                                    if (msg.Data.TryGetValue("values", out object peersObj))
+                                    {
+
+                                    }
+                                    else if (msg.Data.TryGetValue("nodes", out object nodesObj))
+                                    {
+                                        var infoHash = new InfoHash((byte[])msg.Data["info_hash"]);
+                                        var peerBytes = (byte[])nodesObj;
+                                        for (var i = 0; i < peerBytes.Length; i += 26)
+                                        {
+                                        }
                                     }
                                     break;
                             }
