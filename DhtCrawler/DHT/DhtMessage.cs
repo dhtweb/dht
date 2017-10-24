@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using DhtCrawler.Encode;
 
 namespace DhtCrawler.DHT
 {
@@ -136,14 +137,9 @@ namespace DhtCrawler.DHT
             }
         }
 
-        public string BEncode()
-        {
-            return BEncoder.EncodeDictionary(_message);
-        }
-
         public byte[] BEncodeBytes()
         {
-            return Encoding.ASCII.GetBytes(BEncode());
+            return BEncoder.EncodeObject(_message);
         }
     }
 }

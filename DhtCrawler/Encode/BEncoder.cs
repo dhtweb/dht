@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace DhtCrawler
+namespace DhtCrawler.Encode
 {
-    public class BEncoder
+    public static class BEncoder
     {
         private static class Flags
         {
@@ -28,69 +29,136 @@ namespace DhtCrawler
 
         }
 
-        private static string EncodeObject(object item)
+        #region Encode
+
+        private static void WriteBytesToStream(this Stream stream, string str)
+        {
+            var bytes = Encoding.ASCII.GetBytes(str);
+            stream.Write(bytes, 0, bytes.Length);
+        }
+
+        private static void EncodeBytes(byte[] item, Stream stream)
+        {
+            stream.Write(item, 0, item.Length);
+        }
+
+        private static void EncodeDictionary(IDictionary<string, object> dictionary, Stream stream)
+        {
+            if (dictionary == null || dictionary.Count <= 0)
+                return;
+            stream.WriteBytesToStream("d");
+            foreach (var kv in dictionary)
+            {
+                EncodeString(kv.Key, stream);
+                EncodeObject(kv.Value, stream);
+            }
+            stream.WriteBytesToStream("e");
+        }
+
+        private static void EncodeList(IList<object> list, Stream stream)
+        {
+            if (list == null || list.Count <= 0)
+                return;
+            stream.WriteBytesToStream("l");
+            foreach (var item in list)
+            {
+                EncodeObject(item, stream);
+            }
+            stream.WriteBytesToStream("e");
+        }
+
+        private static void EncodeNumber(long number, Stream stream)
+        {
+            stream.WriteBytesToStream("i" + number + "e");
+
+        }
+
+        private static void EncodeString(string str, Stream stream)
+        {
+            var length = Encoding.ASCII.GetByteCount(str);
+            stream.WriteBytesToStream(length + ":" + str);
+
+        }
+
+        public static void EncodeObject(object item, Stream stream)
         {
             if (item is string)
             {
-                return EncodeString((string)item);
+                EncodeString((string)item, stream);
             }
-            if (item is long || item is int || item is short || item is ushort)
+            else if (item is long || item is int || item is short || item is ushort)
             {
-                return EncodeNumber(Convert.ToInt64(item));
+                EncodeNumber(Convert.ToInt64(item), stream);
             }
-            if (item is IList<object>)
+            else if (item is IList<object>)
             {
-                return (EncodeList((IList<object>)item));
+                EncodeList((IList<object>)item, stream);
             }
-            if (item is IDictionary<string, object>)
+            else if (item is IDictionary<string, object>)
             {
-                return (EncodeDictionary((IDictionary<string, object>)item));
+                EncodeDictionary((IDictionary<string, object>)item, stream);
             }
-            if (item is byte[])
+            else if (item is byte[])
             {
-                return EncodeString((byte[])item);
+                EncodeBytes((byte[])item, stream);
             }
             throw new ArgumentException("the type must be string,number,list or dictionary");
         }
 
-        public static string EncodeString(byte[] bytes)
+        public static byte[] EncodeObject(object item)
         {
-            return bytes.Length + ":" + string.Concat(bytes.Select(b => (char)b));
-        }
-        public static string EncodeString(string str)
-        {
-            var length = Encoding.ASCII.GetByteCount(str);
-            return length + ":" + str;
-        }
-
-        public static string EncodeNumber(long number)
-        {
-            return "i" + number + "e";
-        }
-
-        public static string EncodeList(IList<object> list)
-        {
-            if (list == null || list.Count <= 0)
-                return string.Empty;
-            var sb = new StringBuilder("l");
-            foreach (var item in list)
+            using (var stream = new MemoryStream(64))
             {
-                sb.Append(EncodeObject(item));
+                EncodeObject(item, stream);
+                return stream.ToArray();
             }
-            return sb.Append("e").ToString();
         }
 
-        public static string EncodeDictionary(IDictionary<string, object> dictionary)
-        {
-            if (dictionary == null || dictionary.Count <= 0)
-                return string.Empty;
-            var sb = new StringBuilder("d");
-            foreach (var kv in dictionary)
-            {
-                sb.Append(EncodeString(kv.Key)).Append(EncodeObject(kv.Value));
-            }
-            return sb.Append("e").ToString();
-        }
+        #endregion
+
+
+
+        #region 暂注
+
+        //private static string EncodeString(byte[] bytes)
+        //{
+        //    return bytes.Length + ":" + string.Concat(bytes.Select(b => (char)b));
+        //}
+        //private static string EncodeString(string str)
+        //{
+        //    var length = Encoding.ASCII.GetByteCount(str);
+        //    return length + ":" + str;
+        //}
+
+        //private static string EncodeNumber(long number)
+        //{
+        //    return "i" + number + "e";
+        //}
+
+        //private static string EncodeList(IList<object> list)
+        //{
+        //    if (list == null || list.Count <= 0)
+        //        return string.Empty;
+        //    var sb = new StringBuilder("l");
+        //    foreach (var item in list)
+        //    {
+        //        sb.Append(EncodeObject(item));
+        //    }
+        //    return sb.Append("e").ToString();
+        //}
+
+        //private static string EncodeDictionary(IDictionary<string, object> dictionary)
+        //{
+        //    if (dictionary == null || dictionary.Count <= 0)
+        //        return string.Empty;
+        //    var sb = new StringBuilder("d");
+        //    foreach (var kv in dictionary)
+        //    {
+        //        sb.Append(EncodeString(kv.Key)).Append(EncodeObject(kv.Value));
+        //    }
+        //    return sb.Append("e").ToString();
+        //}
+        #endregion
 
         public static object Decode(byte[] data)
         {

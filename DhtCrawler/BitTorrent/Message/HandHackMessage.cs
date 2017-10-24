@@ -14,11 +14,11 @@ namespace DhtCrawler.BitTorrent.Message
         public byte[] InfoHash { get; private set; }
         private byte[] peerId;
 
-        public override int Length
+        public override uint Length
         {
             get
             {
-                return 1 + Protocol.Length + ReservedBytes.Length + 20 + 20;
+                return (uint)(1 + Protocol.Length + ReservedBytes.Length + 20 + 20);
             }
         }
 

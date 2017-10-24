@@ -6,7 +6,7 @@ namespace DhtCrawler.BitTorrent.Message
 {
     public abstract class Message
     {
-        public abstract int Length { get; }
+        public abstract uint Length { get; }
 
         public abstract byte[] Encode();
     }
