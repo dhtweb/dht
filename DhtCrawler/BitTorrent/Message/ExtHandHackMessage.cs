@@ -32,5 +32,12 @@ namespace DhtCrawler.BitTorrent.Message
                 return stream.ToArray();
             }
         }
+
+        public void Decode(byte[] bytes)
+        {
+            var msgId = bytes[0];//读取消息Id
+            var extId = bytes[1];//读取扩展Id
+            var data = BEncoder.Decode(bytes.Skip(2).ToArray());
+        }
     }
 }

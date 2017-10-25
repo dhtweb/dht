@@ -185,7 +185,7 @@ namespace DhtCrawler.Encode
             return strBytes;
         }
 
-        public static object Decode(byte[] data, ref int index)
+        private static object Decode(byte[] data, ref int index)
         {
             switch (data[index])
             {
