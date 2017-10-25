@@ -39,6 +39,7 @@ namespace DhtCrawler.Encode
 
         private static void EncodeBytes(byte[] item, Stream stream)
         {
+            stream.WriteBytesToStream(item.Length + ":");
             stream.Write(item, 0, item.Length);
         }
 
@@ -102,7 +103,8 @@ namespace DhtCrawler.Encode
             {
                 EncodeBytes((byte[])item, stream);
             }
-            throw new ArgumentException("the type must be string,number,list or dictionary");
+            else
+                throw new ArgumentException("the type must be string,number,list or dictionary");
         }
 
         public static byte[] EncodeObject(object item)

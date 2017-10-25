@@ -127,7 +127,7 @@ namespace DhtCrawler.DHT
                                         var peer = dhtData.RemoteEndPoint;
                                         if (msg.Data.Keys.Contains("implied_port") && !0.Equals(msg.Data["implied_port"]))
                                         {
-                                            peer.Port = (int)msg.Data["port"];
+                                            peer.Port = Convert.ToInt32(msg.Data["port"]);
                                         }
                                         infoHash.Peers = new HashSet<IPEndPoint>(1) { peer };
                                     }
@@ -292,7 +292,7 @@ namespace DhtCrawler.DHT
                     await Task.Delay(5000);
                     continue;
                 }
-                if (_sendMessageQueue.Count > 2048 || _nodeQueue.Count > 2048)
+                if (_sendMessageQueue.Count > 2048 * 5 || _nodeQueue.Count > 2048 * 5)
                     continue;
                 FindNode(node);
             }
