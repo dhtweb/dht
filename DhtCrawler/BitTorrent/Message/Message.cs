@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace DhtCrawler.BitTorrent.Message
+﻿namespace DhtCrawler.BitTorrent.Message
 {
     public abstract class Message
     {

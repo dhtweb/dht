@@ -15,8 +15,12 @@ namespace DhtCrawler.DHT
     {
         private static byte[] GenerateRandomNodeId()
         {
-            return Encoding.ASCII.GetBytes(Guid.NewGuid().ToString("N").Substring(0, 20));
+            var random = new Random();
+            var ids = new byte[20];
+            random.NextBytes(ids);
+            return ids;
         }
+
         private static readonly IDictionary<CommandType, string> CommandMap = new Dictionary<CommandType, string>()
         {
             { CommandType.Ping, "pg" }, { CommandType.Find_Node, "fn" }, { CommandType.Get_Peers, "gp" }, { CommandType.Announce_Peer, "ap" }
@@ -35,6 +39,15 @@ namespace DhtCrawler.DHT
         private readonly ConcurrentQueue<InfoHash> _downQueue;
         private readonly ConcurrentQueue<DhtData> _recvMessageQueue;
         private readonly ConcurrentQueue<DhtData> _sendMessageQueue;
+
+
+        private byte[] GetNeighborNodeId(byte[] targetId)
+        {
+            var selfId = _node.NodeId;
+            if (targetId == null)
+                targetId = _node.NodeId;
+            return targetId.Take(10).Concat(selfId.Skip(10)).ToArray();
+        }
 
         public DhtClient(ushort port = 0)
         {
@@ -100,23 +113,27 @@ namespace DhtCrawler.DHT
                     var msg = new DhtMessage(dic);
                     switch (msg.MesageType)
                     {
+                        case MessageType.Exception:
+                            Console.WriteLine(msg.Errors[0] + ":" + Encoding.ASCII.GetString((byte[])msg.Errors[1]));
+                            break;
                         case MessageType.Request:
                             var response = new DhtMessage
                             {
                                 MessageId = msg.MessageId,
                                 MesageType = MessageType.Response
                             };
-                            response.Data.Add("id", _node.NodeId);
+                            var requestNodeId = (byte[])msg.Data["id"];
+                            response.Data.Add("id", GetNeighborNodeId(requestNodeId));
                             switch (msg.CommandType)
                             {
                                 case CommandType.Find_Node:
                                     response.Data.Add("nodes", "");
                                     break;
                                 case CommandType.Get_Peers:
-                                case CommandType.Announce_Peer://implied_port !=0 则端口使用port  
+                                case CommandType.Announce_Peer:
                                     var infoHash = new InfoHash((byte[])msg.Data["info_hash"]);
                                     Console.WriteLine(infoHash.Value);
-                                    await File.AppendAllTextAsync("hash.txt", infoHash.Value + "\r\n");
+                                    await File.AppendAllTextAsync("hash.txt", infoHash.Value + Environment.NewLine);
                                     if (msg.CommandType == CommandType.Get_Peers)
                                     {
                                         response.Data.Add("nodes", "");
@@ -125,11 +142,12 @@ namespace DhtCrawler.DHT
                                     else
                                     {
                                         var peer = dhtData.RemoteEndPoint;
-                                        if (msg.Data.Keys.Contains("implied_port") && !0.Equals(msg.Data["implied_port"]))
+                                        if (!msg.Data.Keys.Contains("implied_port") || 0.Equals(msg.Data["implied_port"]))//implied_port !=0 则端口使用port  
                                         {
                                             peer.Port = Convert.ToInt32(msg.Data["port"]);
                                         }
                                         infoHash.Peers = new HashSet<IPEndPoint>(1) { peer };
+                                        await File.AppendAllTextAsync("dhash.txt", infoHash.Value + "|" + peer.Address.ToString() + ":" + peer.Port + ":" + msg.Data["port"] + Environment.NewLine);
                                     }
                                     _downQueue.Enqueue(infoHash);
                                     break;
@@ -174,6 +192,7 @@ namespace DhtCrawler.DHT
                 }
                 catch (Exception ex)
                 {
+                    Console.WriteLine(ex);
                     var response = new DhtMessage
                     {
                         MesageType = MessageType.Exception,
@@ -222,9 +241,13 @@ namespace DhtCrawler.DHT
                     else if (dhtData.Node != null)
                         await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.Node.Host, dhtData.Node.Port);
                 }
-                catch (SocketException ex)
+                catch (SocketException)
                 {
-
+                    _sendMessageQueue.Enqueue(dhtData);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
                 }
             }
         }
@@ -238,7 +261,7 @@ namespace DhtCrawler.DHT
                 MesageType = MessageType.Request,
                 Data = data
             };
-            msg.Data.Add("id", _node.NodeId);
+            msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
             var bytes = msg.BEncodeBytes();
             var dhtItem = new DhtData() { Data = bytes, Node = node };
             _sendMessageQueue.Enqueue(dhtItem);
@@ -273,10 +296,17 @@ namespace DhtCrawler.DHT
         {
             _running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            ProcessMsgData();
-            LoopFindNodes();
-            LoopSendMsg();
             Console.WriteLine("start run");
+            Task.WaitAll(Task.Run(() =>
+            {
+                ProcessMsgData();
+            }), Task.Run(() =>
+            {
+                LoopFindNodes();
+            }), Task.Run(() =>
+            {
+                LoopSendMsg();
+            }));
         }
 
         private async void LoopFindNodes()
@@ -292,7 +322,7 @@ namespace DhtCrawler.DHT
                     await Task.Delay(5000);
                     continue;
                 }
-                if (_sendMessageQueue.Count > 2048 * 5 || _nodeQueue.Count > 2048 * 5)
+                if (_nodeQueue.Count > 2048 * 3)//_sendMessageQueue.Count > 2048 * 3 ||
                     continue;
                 FindNode(node);
             }

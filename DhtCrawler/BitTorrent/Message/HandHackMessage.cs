@@ -1,7 +1,4 @@
-﻿using DhtCrawler.DHT;
-using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System;
 
 namespace DhtCrawler.BitTorrent.Message
 {
@@ -22,15 +19,11 @@ namespace DhtCrawler.BitTorrent.Message
             }
         }
 
-        public HandHackMessage(InfoHash infoHash)
+        private HandHackMessage() { }
+        public HandHackMessage(byte[] infoHash, byte[] peerId)
         {
-            this.InfoHash = infoHash.Bytes;
-            //this.peerId = peerId;
-        }
-
-        private HandHackMessage()
-        {
-
+            this.InfoHash = infoHash;
+            this.peerId = peerId;
         }
 
         public override byte[] Encode()
@@ -52,9 +45,7 @@ namespace DhtCrawler.BitTorrent.Message
             return buffer;
         }
 
-
-
-        public static implicit operator HandHackMessage(byte[] buffer)
+        public static HandHackMessage Decode(byte[] buffer)
         {
             var message = new HandHackMessage
             {

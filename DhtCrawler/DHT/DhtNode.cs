@@ -13,7 +13,7 @@ namespace DhtCrawler.DHT
             var node = obj as DhtNode;
             if (node == null)
                 return false;
-            return (NodeId != null && NodeId == node.NodeId) || (node.Port == this.Port && string.Equals(Host, node.Host, StringComparison.OrdinalIgnoreCase));
+            return node.Port == this.Port && string.Equals(Host, node.Host, StringComparison.OrdinalIgnoreCase);
         }
 
         public override int GetHashCode()
