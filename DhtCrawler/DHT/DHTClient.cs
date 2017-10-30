@@ -34,11 +34,13 @@ namespace DhtCrawler.DHT
         private readonly IPEndPoint _endPoint;
         private volatile bool _running = false;
         private readonly DhtNode _node;
+        private readonly RouteTable _kTable;
 
         private readonly ConcurrentQueue<DhtNode> _nodeQueue;
         private readonly ConcurrentQueue<InfoHash> _downQueue;
         private readonly ConcurrentQueue<DhtData> _recvMessageQueue;
         private readonly ConcurrentQueue<DhtData> _sendMessageQueue;
+        private readonly ConcurrentQueue<DhtData> _responseMessageQueue;
 
 
         private byte[] GetNeighborNodeId(byte[] targetId)
@@ -56,12 +58,15 @@ namespace DhtCrawler.DHT
             _client.Client.IOControl((IOControlCode)(-1744830452), new byte[] { 0, 0, 0, 0 }, null);
             _client.Ttl = byte.MaxValue;
             _node = new DhtNode() { Host = "0.0.0.0", Port = port, NodeId = GenerateRandomNodeId() };
+            _kTable = new RouteTable(2048);
 
             _nodeQueue = new ConcurrentQueue<DhtNode>(bootstrapNodes);
             _downQueue = new ConcurrentQueue<InfoHash>();
             _recvMessageQueue = new ConcurrentQueue<DhtData>();
             _sendMessageQueue = new ConcurrentQueue<DhtData>();
+            _responseMessageQueue = new ConcurrentQueue<DhtData>();
         }
+
 
         private void Recevie_Data(IAsyncResult asyncResult)
         {
@@ -90,6 +95,99 @@ namespace DhtCrawler.DHT
             }
         }
 
+        private async Task ProcessErrorAsync(DhtMessage msg, IPEndPoint remotePoint)
+        {
+            var errorStr = msg.Errors[0] + ":" + Encoding.ASCII.GetString((byte[])msg.Errors[1]);
+            Console.WriteLine(errorStr);
+            await File.AppendAllTextAsync("error.log", remotePoint.ToString() + "\t" + errorStr + Environment.NewLine);
+        }
+
+        private async Task ProcessRequestAsync(DhtMessage msg, IPEndPoint remotePoint)
+        {
+            var response = new DhtMessage
+            {
+                MessageId = msg.MessageId,
+                MesageType = MessageType.Response
+            };
+            var requestNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address.ToString(), Port = (ushort)remotePoint.Port };
+            _kTable.AddNode(requestNode);
+            response.Data.Add("id", GetNeighborNodeId(requestNode.NodeId));
+            switch (msg.CommandType)
+            {
+                case CommandType.Find_Node:
+                    var targetNodeId = (byte[])msg.Data["target"];
+                    response.Data.Add("nodes", _kTable.FindNodes(targetNodeId).SelectMany(n => n.CompactNode()).ToArray());
+                    break;
+                case CommandType.Get_Peers:
+                case CommandType.Announce_Peer:
+                    var infoHash = new InfoHash((byte[])msg.Data["info_hash"]);
+                    Console.WriteLine(infoHash.Value);
+                    await File.AppendAllTextAsync("hash.txt", infoHash.Value + Environment.NewLine);
+                    if (msg.CommandType == CommandType.Get_Peers)
+                    {
+                        response.Data.Add("nodes", _kTable.FindNodes(infoHash.Bytes).SelectMany(n => n.CompactNode()).ToArray());
+                        response.Data.Add("token", infoHash.Value.Substring(0, 2));
+                    }
+                    else
+                    {
+                        var peer = remotePoint;
+                        if (!msg.Data.Keys.Contains("implied_port") || 0.Equals(msg.Data["implied_port"]))//implied_port !=0 则端口使用port  
+                        {
+                            peer.Port = Convert.ToInt32(msg.Data["port"]);
+                        }
+                        infoHash.Peers = new HashSet<IPEndPoint>(1) { peer };
+                        await File.AppendAllTextAsync("dhash.txt", infoHash.Value + "|" + peer.Address.ToString() + ":" + peer.Port + ":" + msg.Data["port"] + Environment.NewLine);
+                    }
+                    _downQueue.Enqueue(infoHash);
+                    break;
+                case CommandType.Ping:
+                    break;
+                default:
+                    return;
+            }
+            var sendData = new DhtData
+            {
+                RemoteEndPoint = remotePoint,
+                Data = response.BEncodeBytes()
+            };
+            _responseMessageQueue.Enqueue(sendData);
+        }
+
+        private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
+        {
+            msg.CommandType = MsgIdMap[msg.MessageId];
+            var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address.ToString(), Port = (ushort)remotePoint.Port };
+            _kTable.AddNode(responseNode);
+            switch (msg.CommandType)
+            {
+                case CommandType.Find_Node:
+                    if (!msg.Data.TryGetValue("nodes", out object nodeObj))
+                        break;
+                    var nodes = new HashSet<DhtNode>();
+                    var nodeBytes = (byte[])nodeObj;
+                    for (var i = 0; i < nodeBytes.Length; i += 26)
+                    {
+                        nodes.Add(DhtNode.ParseNode(nodeBytes, i));
+                    }
+                    foreach (var node in nodes)
+                    {
+                        _nodeQueue.Enqueue(node);
+                        _kTable.AddNode(node);
+                    }
+                    break;
+                case CommandType.Get_Peers:
+                    if (msg.Data.TryGetValue("values", out object peersObj))
+                    {
+
+                    }
+                    else if (msg.Data.TryGetValue("nodes", out object nodesObj))
+                    {
+
+                    }
+                    break;
+            }
+        }
+
         private async void ProcessMsgData()
         {
             while (_running)
@@ -114,79 +212,13 @@ namespace DhtCrawler.DHT
                     switch (msg.MesageType)
                     {
                         case MessageType.Exception:
-                            Console.WriteLine(msg.Errors[0] + ":" + Encoding.ASCII.GetString((byte[])msg.Errors[1]));
+                            await ProcessErrorAsync(msg, dhtData.RemoteEndPoint);
                             break;
                         case MessageType.Request:
-                            var response = new DhtMessage
-                            {
-                                MessageId = msg.MessageId,
-                                MesageType = MessageType.Response
-                            };
-                            var requestNodeId = (byte[])msg.Data["id"];
-                            response.Data.Add("id", GetNeighborNodeId(requestNodeId));
-                            switch (msg.CommandType)
-                            {
-                                case CommandType.Find_Node:
-                                    response.Data.Add("nodes", "");
-                                    break;
-                                case CommandType.Get_Peers:
-                                case CommandType.Announce_Peer:
-                                    var infoHash = new InfoHash((byte[])msg.Data["info_hash"]);
-                                    Console.WriteLine(infoHash.Value);
-                                    await File.AppendAllTextAsync("hash.txt", infoHash.Value + Environment.NewLine);
-                                    if (msg.CommandType == CommandType.Get_Peers)
-                                    {
-                                        response.Data.Add("nodes", "");
-                                        response.Data.Add("token", infoHash.Value.Substring(0, 2));
-                                    }
-                                    else
-                                    {
-                                        var peer = dhtData.RemoteEndPoint;
-                                        if (!msg.Data.Keys.Contains("implied_port") || 0.Equals(msg.Data["implied_port"]))//implied_port !=0 则端口使用port  
-                                        {
-                                            peer.Port = Convert.ToInt32(msg.Data["port"]);
-                                        }
-                                        infoHash.Peers = new HashSet<IPEndPoint>(1) { peer };
-                                        await File.AppendAllTextAsync("dhash.txt", infoHash.Value + "|" + peer.Address.ToString() + ":" + peer.Port + ":" + msg.Data["port"] + Environment.NewLine);
-                                    }
-                                    _downQueue.Enqueue(infoHash);
-                                    break;
-                                case CommandType.Ping:
-                                    break;
-                                default:
-                                    return;
-                            }
-                            dhtData.Data = response.BEncodeBytes();
-                            _sendMessageQueue.Enqueue(dhtData);
+                            await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
                             break;
                         case MessageType.Response:
-                            msg.CommandType = MsgIdMap[msg.MessageId];
-                            switch (msg.CommandType)
-                            {
-                                case CommandType.Find_Node:
-                                    if (!msg.Data.TryGetValue("nodes", out object nodeObj))
-                                        break;
-                                    var nodeBytes = (byte[])nodeObj;
-                                    for (var i = 0; i < nodeBytes.Length; i += 26)
-                                    {
-                                        _nodeQueue.Enqueue(ParseNode(nodeBytes, i));
-                                    }
-                                    break;
-                                case CommandType.Get_Peers:
-                                    if (msg.Data.TryGetValue("values", out object peersObj))
-                                    {
-
-                                    }
-                                    else if (msg.Data.TryGetValue("nodes", out object nodesObj))
-                                    {
-                                        //var peerBytes = (byte[])nodesObj;
-                                        //var infoHash = new InfoHash((byte[])msg.Data["info_hash"]);
-                                        //for (var i = 0; i < peerBytes.Length; i += 26)
-                                        //{
-                                        //}
-                                    }
-                                    break;
-                            }
+                            await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
                             break;
                     }
                 }
@@ -201,7 +233,7 @@ namespace DhtCrawler.DHT
                     if (ex is ArgumentException || ex is FormatException)
                     {
                         response.Errors.Add(203);
-                        response.Errors.Add("Error Packet");
+                        response.Errors.Add("Error Protocol");
                     }
                     else
                     {
@@ -214,22 +246,14 @@ namespace DhtCrawler.DHT
             }
         }
 
-        private DhtNode ParseNode(byte[] data, int startIndex)
-        {
-            byte[] idArray = new byte[20], ipArray = new byte[4], portArray = new byte[2];
-            Array.Copy(data, startIndex, idArray, 0, 20);
-            Array.Copy(data, startIndex + 20, ipArray, 0, 4);
-            Array.Copy(data, startIndex + 24, portArray, 0, 2);
-            return new DhtNode() { Host = string.Join(".", ipArray), Port = BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0), NodeId = idArray };
-        }
-
         #region 发送请求
 
         private async void LoopSendMsg()
         {
             while (_running)
             {
-                if (!_sendMessageQueue.TryDequeue(out DhtData dhtData))
+                var queue = _responseMessageQueue.IsEmpty ? _sendMessageQueue : _responseMessageQueue;
+                if (!queue.TryDequeue(out DhtData dhtData))
                 {
                     await Task.Delay(500);
                     continue;
@@ -243,7 +267,7 @@ namespace DhtCrawler.DHT
                 }
                 catch (SocketException)
                 {
-                    _sendMessageQueue.Enqueue(dhtData);
+                    queue.Enqueue(dhtData);
                 }
                 catch (Exception ex)
                 {
@@ -259,7 +283,7 @@ namespace DhtCrawler.DHT
                 CommandType = command,
                 MessageId = CommandMap[command],
                 MesageType = MessageType.Request,
-                Data = data
+                Data = new SortedDictionary<string, object>(data)
             };
             msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
             var bytes = msg.BEncodeBytes();
@@ -286,7 +310,7 @@ namespace DhtCrawler.DHT
 
         public void AnnouncePeer(DhtNode node, byte[] infoHash, ushort port, string token)
         {
-            var data = new Dictionary<string, object> { { "info_hash", infoHash }, { "port", port }, { "port", port } };
+            var data = new Dictionary<string, object> { { "info_hash", infoHash }, { "port", port }, { "token", token } };
             SendMsg(CommandType.Announce_Peer, data, node);
         }
 
@@ -311,20 +335,39 @@ namespace DhtCrawler.DHT
 
         private async void LoopFindNodes()
         {
+            int limitNode = 1024 * 10, limitSendMsg = 1024 * 20;
+            var nodeSet = new HashSet<DhtNode>();
             while (_running)
             {
-                if (!_nodeQueue.TryDequeue(out DhtNode node))
+                //if (!_nodeQueue.TryDequeue(out DhtNode node))
+                if (_nodeQueue.IsEmpty)
                 {
                     foreach (var item in bootstrapNodes)
                     {
                         _nodeQueue.Enqueue(item);
                     }
+                    foreach (var dhtNode in _kTable)
+                    {
+                        _nodeQueue.Enqueue(dhtNode);
+                    }
                     await Task.Delay(5000);
                     continue;
                 }
-                if (_nodeQueue.Count > 2048 * 3)//_sendMessageQueue.Count > 2048 * 3 ||
+                while (_nodeQueue.TryDequeue(out var node) && nodeSet.Count <= limitNode)
+                {
+                    nodeSet.Add(node);
+                }
+                //_nodeQueue.Clear();
+                if (_sendMessageQueue.Count > limitSendMsg)
+                {
+                    nodeSet.Clear();
                     continue;
-                FindNode(node);
+                }
+                foreach (var node in nodeSet)
+                {
+                    FindNode(node);
+                }
+                nodeSet.Clear();
             }
         }
     }

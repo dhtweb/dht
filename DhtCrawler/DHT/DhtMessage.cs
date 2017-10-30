@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 using DhtCrawler.Encode;
 
 namespace DhtCrawler.DHT
@@ -106,10 +104,10 @@ namespace DhtCrawler.DHT
                 var key = MessageType.Request == this.MesageType ? "a" : "r";
                 if (!_message.TryGetValue(key, out object dic))
                 {
-                    dic = new Dictionary<string, object>();
+                    dic = new SortedDictionary<string, object>();
                     _message.Add(key, dic);
                 }
-                return (Dictionary<string, object>)dic;
+                return (IDictionary<string, object>)dic;
             }
             set
             {

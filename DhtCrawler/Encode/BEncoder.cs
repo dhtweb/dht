@@ -118,50 +118,6 @@ namespace DhtCrawler.Encode
 
         #endregion
 
-
-
-        #region 暂注
-
-        //private static string EncodeString(byte[] bytes)
-        //{
-        //    return bytes.Length + ":" + string.Concat(bytes.Select(b => (char)b));
-        //}
-        //private static string EncodeString(string str)
-        //{
-        //    var length = Encoding.ASCII.GetByteCount(str);
-        //    return length + ":" + str;
-        //}
-
-        //private static string EncodeNumber(long number)
-        //{
-        //    return "i" + number + "e";
-        //}
-
-        //private static string EncodeList(IList<object> list)
-        //{
-        //    if (list == null || list.Count <= 0)
-        //        return string.Empty;
-        //    var sb = new StringBuilder("l");
-        //    foreach (var item in list)
-        //    {
-        //        sb.Append(EncodeObject(item));
-        //    }
-        //    return sb.Append("e").ToString();
-        //}
-
-        //private static string EncodeDictionary(IDictionary<string, object> dictionary)
-        //{
-        //    if (dictionary == null || dictionary.Count <= 0)
-        //        return string.Empty;
-        //    var sb = new StringBuilder("d");
-        //    foreach (var kv in dictionary)
-        //    {
-        //        sb.Append(EncodeString(kv.Key)).Append(EncodeObject(kv.Value));
-        //    }
-        //    return sb.Append("e").ToString();
-        //}
-        #endregion
-
         public static object Decode(byte[] data)
         {
             var index = 0;
