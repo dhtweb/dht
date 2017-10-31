@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 
 namespace DhtCrawler.Encode
@@ -167,15 +166,14 @@ namespace DhtCrawler.Encode
                 case Flags.String8:
                 case Flags.String9:
                     return DecodeByte(data, ref index);
-                //return Encoding.ASCII.GetString();
                 case Flags.List:
                     index++;
                     var list = new List<object>();
                     while (index < data.Length)
                     {
-                        list.Add(Decode(data, ref index));
                         if (data[index] == Flags.End)
                             break;
+                        list.Add(Decode(data, ref index));
                     }
                     index++;
                     return list;
@@ -184,12 +182,11 @@ namespace DhtCrawler.Encode
                     var dic = new Dictionary<string, object>();
                     while (index < data.Length)
                     {
-                        var key = Encoding.ASCII.GetString(DecodeByte(data, ref index));
-                        var value = Decode(data, ref index);
-                        //var value = key == "id" || key == "ip" || key == "nodes" ? DecodeByte(data, ref index) : Decode(data, ref index);
-                        dic.Add(key, value);
                         if (data[index] == Flags.End)
                             break;
+                        var key = Encoding.ASCII.GetString(DecodeByte(data, ref index));
+                        var value = Decode(data, ref index);
+                        dic.Add(key, value);
                     }
                     index++;
                     return dic;

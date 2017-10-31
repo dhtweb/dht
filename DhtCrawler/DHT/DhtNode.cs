@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace DhtCrawler.DHT
@@ -28,6 +29,28 @@ namespace DhtCrawler.DHT
             Array.Copy(data, startIndex + 20, ipArray, 0, 4);
             Array.Copy(data, startIndex + 24, portArray, 0, 2);
             return new DhtNode() { Host = string.Join(".", ipArray), Port = BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0), NodeId = idArray };
+        }
+
+        public static DhtNode ParsePeer(byte[] data, int startIndex)
+        {
+            byte[] ipArray = new byte[4], portArray = new byte[2];
+            Array.Copy(data, startIndex, ipArray, 0, 4);
+            Array.Copy(data, startIndex + 4, portArray, 0, 2);
+            return new DhtNode() { Host = string.Join(".", ipArray), Port = BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0) };
+        }
+
+        public static ISet<DhtNode> ParseNode(byte[] nodeBytes)
+        {
+            if (nodeBytes == null || nodeBytes.Length <= 0)
+            {
+                return new HashSet<DhtNode>(0);
+            }
+            var nodes = new HashSet<DhtNode>();
+            for (var i = 0; i < nodeBytes.Length; i += 26)
+            {
+                nodes.Add(ParseNode(nodeBytes, i));
+            }
+            return nodes;
         }
 
         public byte[] CompactNode()

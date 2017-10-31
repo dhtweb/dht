@@ -1,11 +1,11 @@
 ﻿using System.Collections.Generic;
 using DhtCrawler.Encode;
 
-namespace DhtCrawler.DHT
+namespace DhtCrawler.DHT.Message
 {
     public class DhtMessage
     {
-        private SortedDictionary<string, object> _message;
+        private readonly SortedDictionary<string, object> _message;
 
         public DhtMessage()
         {
@@ -44,19 +44,19 @@ namespace DhtCrawler.DHT
             }
         }
 
-        public string MessageId
+        public MessageId MessageId
         {
             get
             {
                 if (_message.TryGetValue("t", out object msgId))
                 {
-                    return (string)msgId;
+                    return (byte[])msgId;
                 }
-                return string.Empty;
+                return null;
             }
             set
             {
-                _message["t"] = value;
+                _message["t"] = (byte[])value;
             }
         }
 
