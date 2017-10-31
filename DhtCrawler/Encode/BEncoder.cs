@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using DhtCrawler.Encode.Exception;
 
 namespace DhtCrawler.Encode
 {
@@ -120,7 +121,15 @@ namespace DhtCrawler.Encode
         public static object Decode(byte[] data)
         {
             var index = 0;
-            return Decode(data, ref index);
+            try
+            {
+                return Decode(data, ref index);
+            }
+            catch (System.Exception ex)
+            {
+                throw new DecodeException(data, index, "BDecode Error", ex);
+            }
+
         }
 
         private static byte[] DecodeByte(byte[] data, ref int index)

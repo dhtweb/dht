@@ -44,7 +44,7 @@ namespace DhtCrawler.DHT.Message
             }
         }
 
-        public MessageId MessageId
+        public TransactionId MessageId
         {
             get
             {
@@ -121,7 +121,6 @@ namespace DhtCrawler.DHT.Message
             }
         }
 
-        private List<object> _errorList;
         public IList<object> Errors
         {
             get

@@ -10,8 +10,8 @@ namespace DhtCrawler
     {
         static void Main(string[] args)
         {
-            TestBEncode();
-            return;
+            //TestBEncode();
+            //return;
             var locker = new ManualResetEvent(false);
             var dhtClient = new DhtClient(53386);
             Console.CancelKeyPress += (sender, e) =>

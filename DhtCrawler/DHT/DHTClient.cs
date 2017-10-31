@@ -9,6 +9,7 @@ using System.Linq;
 using System.IO;
 using DhtCrawler.DHT.Message;
 using DhtCrawler.Encode;
+using DhtCrawler.Encode.Exception;
 using NLog;
 
 namespace DhtCrawler.DHT
@@ -161,7 +162,7 @@ namespace DhtCrawler.DHT
 
         private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
         {
-            var requestMsg = MessageFactory.UnRegisterMessageId(msg);
+            var requestMsg = MessageMap.RequireRegisteredMessage(msg);
             if (requestMsg == null)
                 return;
             msg.CommandType = requestMsg.CommandType;
@@ -177,7 +178,7 @@ namespace DhtCrawler.DHT
                     nodes = DhtNode.ParseNode((byte[])nodeInfo);
                     foreach (var node in nodes)
                     {
-                        _nodeQueue.Add(node);
+                        _nodeQueue.TryAdd(node);
                         _kTable.AddNode(node);
                     }
                     break;
@@ -250,25 +251,24 @@ namespace DhtCrawler.DHT
                 catch (Exception ex)
                 {
                     logger.Error(ex);
-                    await File.AppendAllTextAsync("errorData.log", BitConverter.ToString(dhtData.Data) + Environment.NewLine);
                     var response = new DhtMessage
                     {
                         MesageType = MessageType.Exception,
                         MessageId = new byte[] { 0, 0 }
                     };
-
-                    if (ex is ArgumentException || ex is FormatException)
+                    if (ex is DecodeException)
                     {
+                        await File.AppendAllTextAsync("errorData.log", BitConverter.ToString(dhtData.Data) + Environment.NewLine);
                         response.Errors.Add(203);
                         response.Errors.Add("Error Protocol");
                     }
                     else
                     {
                         response.Errors.Add(202);
-                        response.Errors.Add("Server Error");
+                        response.Errors.Add("Server Error:" + ex.Message);
                     }
                     dhtData.Data = response.BEncodeBytes();
-                    _sendMessageQueue.Add(dhtData);
+                    _sendMessageQueue.TryAdd(dhtData);
                 }
             }
         }
@@ -296,7 +296,7 @@ namespace DhtCrawler.DHT
                 }
                 catch (SocketException)
                 {
-                    queue.Add(dhtData);
+                    queue.TryAdd(dhtData);
                 }
                 catch (Exception ex)
                 {
@@ -313,11 +313,18 @@ namespace DhtCrawler.DHT
                 MesageType = MessageType.Request,
                 Data = new SortedDictionary<string, object>(data)
             };
-            MessageFactory.RegisterMessage(msg);
+            MessageMap.RegisterMessage(msg);
             msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
             var bytes = msg.BEncodeBytes();
             var dhtItem = new DhtData() { Data = bytes, Node = node };
-            _sendMessageQueue.Add(dhtItem);
+            if (command == CommandType.Get_Peers)
+            {
+                _sendMessageQueue.Add(dhtItem);
+            }
+            else
+            {
+                _sendMessageQueue.TryAdd(dhtItem);
+            }
         }
 
         public void FindNode(DhtNode node)
@@ -382,16 +389,13 @@ namespace DhtCrawler.DHT
             {
                 if (_nodeQueue.Count <= 0 && !_nodeQueue.IsCompleted)
                 {
-                    foreach (var item in bootstrapNodes)
+                    foreach (var dhtNode in bootstrapNodes.Union(_kTable))
                     {
-                        _nodeQueue.Add(item);
+                        if (!_nodeQueue.TryAdd(dhtNode))
+                            break;
                     }
-                    foreach (var dhtNode in _kTable)
-                    {
-                        _nodeQueue.Add(dhtNode);
-                    }
-                    await Task.Delay(5000);
-                    continue;
+                    if (_nodeQueue.Count <= bootstrapNodes.Length)
+                        await Task.Delay(5000);
                 }
                 while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
                 {

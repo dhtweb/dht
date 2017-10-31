@@ -11,7 +11,7 @@
             ErrorIndex = errorIndex;
         }
 
-        public DecodeException(byte[] errorBytes, int errorIndex, string msg) : base(msg, null)
+        public DecodeException(byte[] errorBytes, int errorIndex, string msg) : this(errorBytes, errorIndex, msg, null)
         {
 
         }
