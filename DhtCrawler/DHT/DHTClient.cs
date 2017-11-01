@@ -199,6 +199,7 @@ namespace DhtCrawler.DHT
                             foreach (var dhtNode in nodes)
                             {
                                 Console.WriteLine("\t" + dhtNode.Host + ":" + dhtNode.Port);
+                                await File.AppendAllTextAsync("down.txt", infoHash.Value + "\t" + dhtNode.Host + ":" + dhtNode.Port + Environment.NewLine);
                             }
                         }
                     }
