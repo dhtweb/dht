@@ -8,8 +8,14 @@ namespace DhtCrawler.DHT.Message
 {
     public class MessageMap
     {
+        private class MapInfo
+        {
+            public CommandType Type { get; set; }
+            public byte[] InfoHash { get; set; }
+            public DateTime LastTime { get; set; }
+        }
         private static readonly BlockingCollection<TransactionId> Bucket = new BlockingCollection<TransactionId>();
-        private static readonly ConcurrentDictionary<TransactionId, Tuple<DhtMessage, DateTime>> MappingInfo = new ConcurrentDictionary<TransactionId, Tuple<DhtMessage, DateTime>>();
+        private static readonly ConcurrentDictionary<TransactionId, MapInfo> MappingInfo = new ConcurrentDictionary<TransactionId, MapInfo>();
         private static readonly IDictionary<CommandType, TransactionId> TypeMapTransactionId;
         private static readonly IDictionary<TransactionId, CommandType> TransactionIdMapType;
         static MessageMap()
@@ -44,7 +50,7 @@ namespace DhtCrawler.DHT.Message
             foreach (var item in MappingInfo)
             {
                 var tuple = item.Value;
-                if ((DateTime.Now - tuple.Item2).TotalSeconds > 30)
+                if ((DateTime.Now - tuple.LastTime).TotalSeconds > 30)
                 {
                     MappingInfo.TryRemove(item.Key, out var rm);
                     Bucket.Add(item.Key);
@@ -78,23 +84,34 @@ namespace DhtCrawler.DHT.Message
                     ClearExpireMessage();
                 }
             }
-            MappingInfo.AddOrUpdate(messageId, new Tuple<DhtMessage, DateTime>(message, DateTime.Now), (key, item) => new Tuple<DhtMessage, DateTime>(item.Item1, DateTime.Now));
+
+            MappingInfo.AddOrUpdate(messageId, new MapInfo()
+            {
+                Type = CommandType.Get_Peers,
+                LastTime = DateTime.Now,
+                InfoHash = message.Get<byte[]>("info_hash")
+            }, (key, item) =>
+            {
+                item.LastTime = DateTime.Now;
+                return item;
+            });
             message.MessageId = messageId;
 
 
         }
 
-        public static DhtMessage RequireRegisteredMessage(DhtMessage message)
+        public static void RequireRegisteredInfo(DhtMessage message)
         {
             if (TransactionIdMapType.ContainsKey(message.MessageId))
             {
                 message.CommandType = TransactionIdMapType[message.MessageId];
-                return message;
+                return;
             }
             message.CommandType = CommandType.Get_Peers;
             MappingInfo.TryRemove(message.MessageId, out var obj);
             Bucket.Add(message.MessageId);
-            return obj?.Item1;
+            if (obj != null)
+                message.Data.Add("info_hash", obj.InfoHash);
         }
     }
 }

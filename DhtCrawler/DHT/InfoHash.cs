@@ -13,10 +13,9 @@ namespace DhtCrawler.DHT
                 throw new ArgumentException("argument bytes must be not null and length is 20");
             }
             this.Bytes = bytes;
-            this.Value = BitConverter.ToString(bytes).Replace("-", "");
         }
         public byte[] Bytes { get; private set; }
-        public string Value { get; private set; }
+        public string Value => BitConverter.ToString(Bytes).Replace("-", "");
         public ISet<IPEndPoint> Peers { get; set; }
     }
 }

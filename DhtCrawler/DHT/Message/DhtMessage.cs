@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Text;
 using DhtCrawler.Encode;
 
 namespace DhtCrawler.DHT.Message
@@ -12,9 +13,17 @@ namespace DhtCrawler.DHT.Message
             _message = new SortedDictionary<string, object>();
         }
 
-        public DhtMessage(IDictionary<string, object> dictionary)
+        public DhtMessage(IDictionary<string, object> dic)
         {
-            _message = new SortedDictionary<string, object>(dictionary);
+            var decodeItems = new[] { "y", "q", "r" };
+            foreach (var key in decodeItems)
+            {
+                if (dic.ContainsKey(key) && dic[key] is byte[])
+                {
+                    dic[key] = Encoding.ASCII.GetString((byte[])dic[key]);
+                }
+            }
+            _message = new SortedDictionary<string, object>(dic);
         }
 
         public CommandType CommandType
@@ -137,6 +146,15 @@ namespace DhtCrawler.DHT.Message
         public byte[] BEncodeBytes()
         {
             return BEncoder.EncodeObject(_message);
+        }
+
+        public T Get<T>(string key) where T : class
+        {
+            if (Data.TryGetValue(key, out object item))
+            {
+                return item as T;
+            }
+            return null;
         }
     }
 }

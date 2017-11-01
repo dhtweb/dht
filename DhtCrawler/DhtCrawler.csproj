@@ -9,4 +9,14 @@
     <PackageReference Include="NLog.Extensions.Logging" Version="1.0.0-rtm-rc2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\BitTorrent\BitTorrent.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="NLog.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

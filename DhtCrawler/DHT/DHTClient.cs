@@ -34,7 +34,6 @@ namespace DhtCrawler.DHT
         private readonly RouteTable _kTable;
 
         private readonly BlockingCollection<DhtNode> _nodeQueue;
-        //private readonly BlockingCollection<InfoHash> _downQueue;
         private readonly BlockingCollection<DhtData> _recvMessageQueue;
         private readonly BlockingCollection<DhtData> _sendMessageQueue;
         private readonly BlockingCollection<DhtData> _responseMessageQueue;
@@ -47,6 +46,13 @@ namespace DhtCrawler.DHT
                 targetId = _node.NodeId;
             return targetId.Take(10).Concat(selfId.Skip(10)).ToArray();
         }
+
+
+        #region 事件
+
+        public event Func<InfoHash, Task> OnFindPeer;
+
+        #endregion
 
         public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 10)
         {
@@ -97,13 +103,6 @@ namespace DhtCrawler.DHT
         }
 
         #region 处理收到消息
-
-        private async Task ProcessErrorAsync(DhtMessage msg, IPEndPoint remotePoint)
-        {
-            var errorStr = msg.Errors[0] + ":" + Encoding.ASCII.GetString((byte[])msg.Errors[1]);
-            Console.WriteLine(errorStr);
-            await File.AppendAllTextAsync("error.log", remotePoint.ToString() + "\t" + errorStr + Environment.NewLine);
-        }
 
         private async Task ProcessRequestAsync(DhtMessage msg, IPEndPoint remotePoint)
         {
@@ -162,10 +161,7 @@ namespace DhtCrawler.DHT
 
         private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
         {
-            var requestMsg = MessageMap.RequireRegisteredMessage(msg);
-            if (requestMsg == null)
-                return;
-            msg.CommandType = requestMsg.CommandType;
+            MessageMap.RequireRegisteredInfo(msg);
             var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address.ToString(), Port = (ushort)remotePoint.Port };
             _kTable.AddNode(responseNode);
             object nodeInfo;
@@ -183,23 +179,29 @@ namespace DhtCrawler.DHT
                     }
                     break;
                 case CommandType.Get_Peers:
-                    var infoHash = new InfoHash((byte[])requestMsg.Data["info_hash"]);
+                    var hashByte = msg.Get<byte[]>("info_hash");
+                    if (hashByte == null)
+                    {
+                        return;
+                    }
+                    var infoHash = new InfoHash(hashByte);
                     if (msg.Data.TryGetValue("values", out nodeInfo))
                     {
                         var peerInfo = (IList<object>)nodeInfo;
-                        nodes = new HashSet<DhtNode>(peerInfo.Count);
+                        var peers = new HashSet<IPEndPoint>(peerInfo.Count);
                         for (var i = 0; i < peerInfo.Count; i++)
                         {
                             var peer = (byte[])peerInfo[i];
-                            nodes.Add(DhtNode.ParsePeer(peer, 6 * i));
+                            peers.Add(DhtNode.ParsePeer(peer, 6 * i));
                         }
-                        if (nodes.Count > 0)
+                        if (peers.Count > 0)
                         {
-                            Console.WriteLine($"get {infoHash.Value} peers success");
-                            foreach (var dhtNode in nodes)
+                            infoHash.Peers = peers;
+                            if (OnFindPeer != null)
                             {
-                                Console.WriteLine("\t" + dhtNode.Host + ":" + dhtNode.Port);
+                                await OnFindPeer(infoHash);
                             }
+                            Console.WriteLine($"get {infoHash.Value} peers success");
                         }
                     }
                     if (msg.Data.TryGetValue("nodes", out nodeInfo))
@@ -226,20 +228,9 @@ namespace DhtCrawler.DHT
                 try
                 {
                     var dic = (Dictionary<string, object>)BEncoder.Decode(dhtData.Data);
-                    var decodeItems = new[] { "y", "q", "r" };
-                    foreach (var key in decodeItems)
-                    {
-                        if (dic.ContainsKey(key) && dic[key] is byte[])
-                        {
-                            dic[key] = Encoding.ASCII.GetString((byte[])dic[key]);
-                        }
-                    }
                     var msg = new DhtMessage(dic);
                     switch (msg.MesageType)
                     {
-                        case MessageType.Exception:
-                            await ProcessErrorAsync(msg, dhtData.RemoteEndPoint);
-                            break;
                         case MessageType.Request:
                             await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
                             break;
@@ -250,7 +241,7 @@ namespace DhtCrawler.DHT
                 }
                 catch (Exception ex)
                 {
-                    logger.Error(ex);
+                    logger.Error(ex, $"ErrorData:{BitConverter.ToString(dhtData.Data)}");
                     var response = new DhtMessage
                     {
                         MesageType = MessageType.Exception,
@@ -258,7 +249,6 @@ namespace DhtCrawler.DHT
                     };
                     if (ex is DecodeException)
                     {
-                        await File.AppendAllTextAsync("errorData.log", BitConverter.ToString(dhtData.Data) + Environment.NewLine);
                         response.Errors.Add(203);
                         response.Errors.Add("Error Protocol");
                     }
@@ -269,6 +259,7 @@ namespace DhtCrawler.DHT
                     }
                     dhtData.Data = response.BEncodeBytes();
                     _sendMessageQueue.TryAdd(dhtData);
+
                 }
             }
         }
@@ -277,11 +268,44 @@ namespace DhtCrawler.DHT
 
         #region 发送请求
 
+        private void SendMsg(CommandType command, IDictionary<string, object> data, DhtNode node)
+        {
+            var msg = new DhtMessage
+            {
+                CommandType = command,
+                MesageType = MessageType.Request,
+                Data = new SortedDictionary<string, object>(data)
+            };
+            MessageMap.RegisterMessage(msg);
+            msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
+            MessageEnqueue(msg, node);
+        }
+
+        private void MessageEnqueue(DhtMessage msg, DhtNode node)
+        {
+            if (_sendMessageQueue.IsAddingCompleted)
+                return;
+            var bytes = msg.BEncodeBytes();
+            var dhtItem = new DhtData() { Data = bytes, Node = node };
+            if (msg.CommandType == CommandType.Get_Peers)
+            {
+                _sendMessageQueue.Add(dhtItem);
+            }
+            else
+            {
+                _sendMessageQueue.TryAdd(dhtItem);
+            }
+        }
+
         private async Task LoopSendMsg()
         {
-            while (!_responseMessageQueue.IsCompleted || !_sendMessageQueue.IsCompleted)
+            while (true)
             {
                 var queue = _responseMessageQueue.Count <= 0 ? _sendMessageQueue : _responseMessageQueue;
+                if (queue.IsAddingCompleted)
+                {
+                    return;
+                }
                 if (!queue.TryTake(out DhtData dhtData))
                 {
                     await Task.Delay(500);
@@ -305,28 +329,39 @@ namespace DhtCrawler.DHT
             }
         }
 
-        private void SendMsg(CommandType command, IDictionary<string, object> data, DhtNode node)
+        private async Task LoopFindNodes()
         {
-            var msg = new DhtMessage
+            int limitNode = 1024 * 10;
+            var nodeSet = new HashSet<DhtNode>();
+            while (!_nodeQueue.IsAddingCompleted)
             {
-                CommandType = command,
-                MesageType = MessageType.Request,
-                Data = new SortedDictionary<string, object>(data)
-            };
-            MessageMap.RegisterMessage(msg);
-            msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
-            var bytes = msg.BEncodeBytes();
-            var dhtItem = new DhtData() { Data = bytes, Node = node };
-            if (command == CommandType.Get_Peers)
-            {
-                _sendMessageQueue.Add(dhtItem);
-            }
-            else
-            {
-                _sendMessageQueue.TryAdd(dhtItem);
+                if (_nodeQueue.Count <= 0)
+                {
+                    foreach (var dhtNode in bootstrapNodes.Union(_kTable))
+                    {
+                        if (_nodeQueue.IsAddingCompleted)
+                            return;
+                        if (!_nodeQueue.TryAdd(dhtNode))
+                            break;
+                    }
+                    if (_nodeQueue.Count <= bootstrapNodes.Length)
+                        await Task.Delay(5000);
+                }
+                while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
+                {
+                    nodeSet.Add(node);
+                }
+                foreach (var node in nodeSet)
+                {
+                    FindNode(node);
+                }
+                nodeSet.Clear();
             }
         }
 
+        #endregion
+
+        #region dht协议命令
         public void FindNode(DhtNode node)
         {
             var data = new Dictionary<string, object> { { "target", GenerateRandomNodeId() } };
@@ -349,7 +384,6 @@ namespace DhtCrawler.DHT
             var data = new Dictionary<string, object> { { "info_hash", infoHash }, { "port", port }, { "token", token } };
             SendMsg(CommandType.Announce_Peer, data, node);
         }
-
         #endregion
 
         public void Run()
@@ -358,7 +392,7 @@ namespace DhtCrawler.DHT
             _tasks.Add(ProcessMsgData());
             _tasks.Add(LoopFindNodes());
             _tasks.Add(LoopSendMsg());
-            Console.WriteLine("start run");
+            logger.Info("starting");
         }
 
         public void ShutDown()
@@ -373,40 +407,17 @@ namespace DhtCrawler.DHT
             _recvMessageQueue.CompleteAdding();
             _sendMessageQueue.CompleteAdding();
             _responseMessageQueue.CompleteAdding();
-            Console.WriteLine("正在等待任务结束");
-            Task.WaitAll(_tasks.ToArray());
+            logger.Info("shuting down");
+            Task.WhenAll(_tasks.ToArray()).ContinueWith(t =>
+            {
+                logger.Info("closed");
+            }).Wait();
             foreach (var disposable in disposeItems)
             {
                 disposable.Dispose();
             }
         }
 
-        private async Task LoopFindNodes()
-        {
-            int limitNode = 1024 * 10;//, limitSendMsg = 1024 * 20;
-            var nodeSet = new HashSet<DhtNode>();
-            while (!_nodeQueue.IsCompleted)
-            {
-                if (_nodeQueue.Count <= 0 && !_nodeQueue.IsCompleted)
-                {
-                    foreach (var dhtNode in bootstrapNodes.Union(_kTable))
-                    {
-                        if (!_nodeQueue.TryAdd(dhtNode))
-                            break;
-                    }
-                    if (_nodeQueue.Count <= bootstrapNodes.Length)
-                        await Task.Delay(5000);
-                }
-                while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
-                {
-                    nodeSet.Add(node);
-                }
-                foreach (var node in nodeSet)
-                {
-                    FindNode(node);
-                }
-                nodeSet.Clear();
-            }
-        }
+
     }
 }

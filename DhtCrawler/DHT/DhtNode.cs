@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 
 namespace DhtCrawler.DHT
 {
@@ -31,12 +32,12 @@ namespace DhtCrawler.DHT
             return new DhtNode() { Host = string.Join(".", ipArray), Port = BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0), NodeId = idArray };
         }
 
-        public static DhtNode ParsePeer(byte[] data, int startIndex)
+        public static IPEndPoint ParsePeer(byte[] data, int startIndex)
         {
             byte[] ipArray = new byte[4], portArray = new byte[2];
             Array.Copy(data, startIndex, ipArray, 0, 4);
             Array.Copy(data, startIndex + 4, portArray, 0, 2);
-            return new DhtNode() { Host = string.Join(".", ipArray), Port = BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0) };
+            return new IPEndPoint(new IPAddress(ipArray), BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0));
         }
 
         public static ISet<DhtNode> ParseNode(byte[] nodeBytes)

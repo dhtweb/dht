@@ -12,3 +12,6 @@
 /.vs
 /.vscode
 *.log
+/BitTorrent/bin/Debug/netstandard2.0
+/BitTorrent/obj
+/packages/Bencode.1.1.0

@@ -1,19 +1,25 @@
 ﻿using DhtCrawler.DHT;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using DhtCrawler.Encode;
+using DhtCrawler.Utils;
+using Tancoder.Torrent.Client;
 
 namespace DhtCrawler
 {
     class Program
     {
+        private static ConcurrentStack<InfoHash> downLoadQueue = new ConcurrentStack<InfoHash>();
         static void Main(string[] args)
         {
-            //TestBEncode();
-            //return;
             var locker = new ManualResetEvent(false);
             var dhtClient = new DhtClient(53386);
+            dhtClient.OnFindPeer += DhtClient_OnFindPeer;
             Console.CancelKeyPress += (sender, e) =>
             {
                 dhtClient.ShutDown();
@@ -21,7 +27,47 @@ namespace DhtCrawler
                 e.Cancel = true;
             };
             dhtClient.Run();
+            Task.Factory.StartNew(async () =>
+            {
+                while (true)
+                {
+                    if (!downLoadQueue.TryPop(out InfoHash info))
+                    {
+                        await Task.Delay(500);
+                        continue;
+                    }
+                    foreach (var peer in info.Peers)
+                    {
+                        try
+                        {
+                            using (var client = new WireClient(peer))
+                            {
+
+                                var meta = client.GetMetaData(new Tancoder.Torrent.InfoHash(info.Bytes));
+                                if (meta == null)
+                                    continue;
+                                foreach (var key in meta.Keys)
+                                {
+                                    Console.WriteLine(key + "|" + meta[key]);
+                                }
+
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(ex);
+                        }
+                    }
+
+                }
+            }, TaskCreationOptions.LongRunning);
             locker.WaitOne();
+        }
+
+        private static Task DhtClient_OnFindPeer(InfoHash arg)
+        {
+            downLoadQueue.Push(arg);
+            return Task.CompletedTask;
         }
 
         static void TestBEncode()
@@ -35,6 +81,24 @@ namespace DhtCrawler
             }
             var dic = BEncoder.Decode(bytes.ToArray());
             Console.WriteLine(dic);
+        }
+
+        static void TestNetUtils()
+        {
+            byte[] portArray = new byte[] { 0, 0, 12, 25 };
+            foreach (var b in portArray)
+            {
+                var sb = new StringBuilder();
+                for (int i = 1; i <= 8; i++)
+                {
+                    sb.Append((b >> (8 - i)) & 1);
+                }
+                Console.WriteLine(sb);
+            }
+            var int1 = BitConverter.ToInt32(portArray.Reverse().ToArray(), 0);
+            var int3 = BitConverter.ToInt32(portArray, 0);
+            var int2 = NetUtils.ToInt32(portArray);
+            Console.WriteLine(int2 == int1);
         }
     }
 }
