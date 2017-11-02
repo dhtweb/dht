@@ -22,7 +22,6 @@ namespace Tancoder.Torrent.Client
 
         public WireClient(IPEndPoint endpoint)
         {
-            //client = new TcpClient(new IPEndPoint(IPAddress.Any, 60000))
             client = new TcpClient()
             {
                 SendTimeout = 5000,

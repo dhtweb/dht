@@ -3,14 +3,14 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading.Tasks;
 using System.Linq;
 using System.IO;
 using DhtCrawler.DHT.Message;
 using DhtCrawler.Encode;
 using DhtCrawler.Encode.Exception;
-using NLog;
+using log4net;
+
 
 namespace DhtCrawler.DHT
 {
@@ -26,7 +26,7 @@ namespace DhtCrawler.DHT
 
         private static readonly DhtNode[] bootstrapNodes = { new DhtNode() { Host = "router.bittorrent.com", Port = 6881 }, new DhtNode() { Host = "dht.transmissionbt.com", Port = 6881 }, new DhtNode() { Host = "router.utorrent.com", Port = 6881 } };
 
-        private readonly Logger logger = LogManager.GetCurrentClassLogger();
+        private readonly ILog logger = LogManager.GetLogger(typeof(DhtClient));
 
         private readonly UdpClient _client;
         private readonly IPEndPoint _endPoint;
@@ -86,7 +86,7 @@ namespace DhtCrawler.DHT
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "接受消息回调时失败");
+                logger.Error(ex);
             }
             while (true)
             {
@@ -143,7 +143,10 @@ namespace DhtCrawler.DHT
                             peer.Port = Convert.ToInt32(msg.Data["port"]);
                         }
                         infoHash.Peers = new HashSet<IPEndPoint>(1) { peer };
-                        await File.AppendAllTextAsync("dhash.txt", infoHash.Value + "|" + peer.Address.ToString() + ":" + peer.Port + ":" + msg.Data["port"] + Environment.NewLine);
+                        if (OnFindPeer != null)
+                        {
+                            await OnFindPeer(infoHash);
+                        }
                     }
                     break;
                 case CommandType.Ping:
@@ -161,7 +164,10 @@ namespace DhtCrawler.DHT
 
         private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
         {
-            MessageMap.RequireRegisteredInfo(msg);
+            if (!MessageMap.RequireRegisteredInfo(msg))
+            {
+                return;
+            }
             var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address.ToString(), Port = (ushort)remotePoint.Port };
             _kTable.AddNode(responseNode);
             object nodeInfo;
@@ -180,19 +186,15 @@ namespace DhtCrawler.DHT
                     break;
                 case CommandType.Get_Peers:
                     var hashByte = msg.Get<byte[]>("info_hash");
-                    if (hashByte == null)
-                    {
-                        return;
-                    }
                     var infoHash = new InfoHash(hashByte);
                     if (msg.Data.TryGetValue("values", out nodeInfo))
                     {
                         var peerInfo = (IList<object>)nodeInfo;
                         var peers = new HashSet<IPEndPoint>(peerInfo.Count);
-                        for (var i = 0; i < peerInfo.Count; i++)
+                        foreach (var t in peerInfo)
                         {
-                            var peer = (byte[])peerInfo[i];
-                            peers.Add(DhtNode.ParsePeer(peer, 6 * i));
+                            var peer = (byte[])t;
+                            peers.Add(DhtNode.ParsePeer(peer, 0));
                         }
                         if (peers.Count > 0)
                         {
@@ -201,7 +203,7 @@ namespace DhtCrawler.DHT
                             {
                                 await OnFindPeer(infoHash);
                             }
-                            Console.WriteLine($"get {infoHash.Value} peers success");
+                            return;
                         }
                     }
                     if (msg.Data.TryGetValue("nodes", out nodeInfo))
@@ -241,7 +243,7 @@ namespace DhtCrawler.DHT
                 }
                 catch (Exception ex)
                 {
-                    logger.Error(ex, $"ErrorData:{BitConverter.ToString(dhtData.Data)}");
+                    logger.Error($"ErrorData:{BitConverter.ToString(dhtData.Data)}", ex);
                     var response = new DhtMessage
                     {
                         MesageType = MessageType.Exception,
@@ -276,7 +278,10 @@ namespace DhtCrawler.DHT
                 MesageType = MessageType.Request,
                 Data = new SortedDictionary<string, object>(data)
             };
-            MessageMap.RegisterMessage(msg);
+            if (!MessageMap.RegisterMessage(msg))
+            {
+                return;
+            }
             msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
             MessageEnqueue(msg, node);
         }

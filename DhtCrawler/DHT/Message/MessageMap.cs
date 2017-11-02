@@ -58,21 +58,21 @@ namespace DhtCrawler.DHT.Message
             }
         }
 
-        public static void RegisterMessage(DhtMessage message)
+        public static bool RegisterMessage(DhtMessage message)
         {
             switch (message.CommandType)
             {
                 case CommandType.UnKnow:
-                    return;
+                    return false;
                 case CommandType.Ping:
                 case CommandType.Find_Node:
                 case CommandType.Announce_Peer:
                     message.MessageId = TypeMapTransactionId[message.CommandType];
-                    return;
+                    return true;
                 case CommandType.Get_Peers:
                     break;
                 default:
-                    return;
+                    return false;
             }
             TransactionId messageId;
             while (!Bucket.TryTake(out messageId))
@@ -84,34 +84,35 @@ namespace DhtCrawler.DHT.Message
                     ClearExpireMessage();
                 }
             }
-
-            MappingInfo.AddOrUpdate(messageId, new MapInfo()
+            if (!MappingInfo.TryAdd(messageId, new MapInfo()
             {
                 Type = CommandType.Get_Peers,
                 LastTime = DateTime.Now,
                 InfoHash = message.Get<byte[]>("info_hash")
-            }, (key, item) =>
+            }))
             {
-                item.LastTime = DateTime.Now;
-                return item;
-            });
+                return false;
+            }
             message.MessageId = messageId;
-
-
+            return true;
         }
 
-        public static void RequireRegisteredInfo(DhtMessage message)
+        public static bool RequireRegisteredInfo(DhtMessage message)
         {
             if (TransactionIdMapType.ContainsKey(message.MessageId))
             {
                 message.CommandType = TransactionIdMapType[message.MessageId];
-                return;
+                return true;
             }
             message.CommandType = CommandType.Get_Peers;
             MappingInfo.TryRemove(message.MessageId, out var obj);
             Bucket.Add(message.MessageId);
-            if (obj != null)
-                message.Data.Add("info_hash", obj.InfoHash);
+            if (obj == null)
+            {
+                return false;
+            }
+            message.Data.Add("info_hash", obj.InfoHash);
+            return true;
         }
     }
 }

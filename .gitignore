@@ -6,12 +6,9 @@
 *.pdb
 *.txt
 *.user
-/DhtCrawler/bin
-/DhtCrawler/obj
-/DhtCrawler/Properties
+*.log
+bin/
+obj/
+Properties/
 /.vs
 /.vscode
-*.log
-/BitTorrent/bin/Debug/netstandard2.0
-/BitTorrent/obj
-/packages/Bencode.1.1.0
