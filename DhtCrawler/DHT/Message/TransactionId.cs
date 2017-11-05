@@ -7,8 +7,8 @@ namespace DhtCrawler.DHT.Message
     {
         internal static readonly TransactionId FindNode = new byte[] { 0, 0 };
         internal static readonly TransactionId Ping = new byte[] { 0, 1 };
-        internal static readonly TransactionId GetPeers = new byte[] { 0, 2 };
-        internal static readonly TransactionId AnnouncePeer = new byte[] { 0, 3 };
+        internal static readonly TransactionId AnnouncePeer = new byte[] { 0, 2 };
+        //internal static readonly TransactionId GetPeers = new byte[] { 0, 2 };
         private readonly byte[] _bytes;
         public TransactionId(byte[] bytes)
         {

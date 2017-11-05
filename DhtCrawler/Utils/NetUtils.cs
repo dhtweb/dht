@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Text;
 
 namespace DhtCrawler.Utils
@@ -21,6 +22,13 @@ namespace DhtCrawler.Utils
                 bytes[i] = (byte)((num >> (8 * j)) & 0xFF);
             }
             return bytes;
+        }
+
+        public static long ToInt64(this IPEndPoint endPoint)
+        {
+            var bytes = endPoint.Address.GetAddressBytes();
+            long ipNum = ToInt32(bytes);
+            return ipNum << 2 | endPoint.Port;
         }
     }
 }

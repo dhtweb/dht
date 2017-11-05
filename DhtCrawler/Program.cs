@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using DhtCrawler.Collections;
 using DhtCrawler.Utils;
 using log4net;
 using log4net.Config;
@@ -35,16 +36,19 @@ namespace DhtCrawler
             Task.Factory.StartNew(async () =>
             {
                 Directory.CreateDirectory("torrent");
-                var list = new List<InfoHash>(64);
+                var downSize = 128;
+                var list = new List<InfoHash>(downSize);
+                var downlaodedSet = new ConcurrentHashSet<string>();
+                var badAddress = new ConcurrentHashSet<long>();
                 while (true)
                 {
-                    if (!downLoadQueue.TryPop(out InfoHash info))
+                    if (!downLoadQueue.TryPop(out InfoHash info) || downlaodedSet.Contains(info.Value))
                     {
                         await Task.Delay(500);
                         continue;
                     }
                     list.Add(info);
-                    if (list.Count < 32)
+                    if (list.Count < downSize)
                     {
                         continue;
                     }
@@ -60,33 +64,46 @@ namespace DhtCrawler
                          }
                          return result;
                      });
-                    Parallel.ForEach(uniqueItems, infoItem =>
-                    {
-                        foreach (var peer in infoItem.Peers)
-                        {
-                            try
-                            {
-                                using (var client = new WireClient(peer))
-                                {
-                                    var meta = client.GetMetaData(new Tancoder.Torrent.InfoHash(infoItem.Bytes));
-                                    if (meta == null)
-                                        continue;
-                                    var content = new StringBuilder();
-                                    foreach (var key in meta.Keys)
-                                    {
-                                        if (key.Text == "pieces")
-                                            continue;
-                                        Console.WriteLine(key);
-                                        content.Append(key.Text).Append(meta[key]).AppendLine();
-                                    }
-                                    File.WriteAllText(Path.Combine("torrent", infoItem.Value), content.ToString());
-                                }
-                            }
-                            catch (Exception)
-                            {
-                            }
-                        }
-                    });
+                    Parallel.ForEach(uniqueItems, new ParallelOptions() { MaxDegreeOfParallelism = 16, TaskScheduler = TaskScheduler.Current }, infoItem =>
+                         {
+                             if (downlaodedSet.Contains(infoItem.Value))
+                                 return;
+                             foreach (var peer in infoItem.Peers)
+                             {
+                                 try
+                                 {
+                                     var longPeer = peer.ToInt64();
+                                     if (badAddress.Contains(longPeer))
+                                     {
+                                         continue;
+                                     }
+                                     using (var client = new WireClient(peer))
+                                     {
+                                         var meta = client.GetMetaData(new Tancoder.Torrent.InfoHash(infoItem.Bytes));
+                                         if (meta == null)
+                                         {
+                                             badAddress.Add(longPeer);
+                                             continue;
+                                         }
+                                         downlaodedSet.Add(infoItem.Value);
+                                         var content = new StringBuilder();
+                                         foreach (var key in meta.Keys)
+                                         {
+                                             if (key.Text == "pieces")
+                                                 continue;
+                                             Console.WriteLine(key);
+                                             content.Append(key.Text).Append("\t").Append(meta[key]).AppendLine();
+                                         }
+                                         File.WriteAllText(Path.Combine("torrent", infoItem.Value), content.ToString());
+                                         return;
+                                     }
+                                 }
+                                 catch (Exception)
+                                 {
+                                 }
+                             }
+                         });
+                    list.Clear();
                 }
             }, TaskCreationOptions.LongRunning);
             locker.WaitOne();

@@ -71,15 +71,53 @@ namespace DhtCrawler.DHT
                 Node = node,
                 LastTime = DateTime.Now.Ticks
             };
-            if (_kTable.Count >= _maxNodeSize && !_kTable.ContainsKey(route.RouteId))
+            if (_kTable.Count >= _maxNodeSize)
             {
                 return;
             }
+            _kTable.TryAdd(route.RouteId, route);
+        }
+
+        public void AddNodes(IEnumerable<DhtNode> nodes)
+        {
+            foreach (var node in nodes)
+            {
+                AddNode(node);
+            }
+        }
+
+        public void AddOrUpdateNode(DhtNode node)
+        {
+            if (node.NodeId == null)
+                return;
+            if (_kTable.Count >= _maxNodeSize)
+            {
+                ClearExpireNode();
+            }
+            if (_kTable.Count >= _maxNodeSize)
+                return;
+            var route = new Route()
+            {
+                Node = node,
+                LastTime = DateTime.Now.Ticks
+            };
             _kTable.AddOrUpdate(route.RouteId, route, (k, n) =>
             {
+                n.Node = route.Node;
                 n.LastTime = DateTime.Now.Ticks;
                 return n;
             });
+        }
+
+        private void ClearExpireNode()
+        {
+            foreach (var item in _kTable.Values)
+            {
+                if (DateTime.Now.Ticks - item.LastTime > RouteLife.Ticks)
+                {
+                    _kTable.TryRemove(item.RouteId, out Route remove);
+                }
+            }
         }
 
         public IList<DhtNode> FindNodes(byte[] id)

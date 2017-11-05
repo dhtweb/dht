@@ -40,7 +40,7 @@ namespace DhtCrawler.DHT.Message
             {
                 {  TransactionId.Ping,CommandType.Ping },
                 {  TransactionId.FindNode,CommandType.Find_Node },
-                {  TransactionId.GetPeers,CommandType.Get_Peers },
+                //{  TransactionId.GetPeers,CommandType.Get_Peers },
                 {  TransactionId.AnnouncePeer,CommandType.Announce_Peer },
             });
         }
