@@ -20,16 +20,6 @@ namespace DhtCrawler.DHT.Message
         private static readonly IDictionary<TransactionId, CommandType> TransactionIdMapType;
         static MessageMap()
         {
-            var id = new byte[2];
-            for (int i = 0; i <= byte.MaxValue; i++)
-            {
-                id[0] = (byte)i;
-                for (int j = 0; j <= byte.MaxValue; j++)
-                {
-                    id[1] = (byte)j;
-                    Bucket.Add(id.CopyArray());
-                }
-            }
             TypeMapTransactionId = new ReadOnlyDictionary<CommandType, TransactionId>(new Dictionary<CommandType, TransactionId>(3)
             {
                 { CommandType.Ping, TransactionId.Ping },
@@ -40,9 +30,25 @@ namespace DhtCrawler.DHT.Message
             {
                 {  TransactionId.Ping,CommandType.Ping },
                 {  TransactionId.FindNode,CommandType.Find_Node },
-                {  TransactionId.GetPeers,CommandType.Get_Peers },
                 {  TransactionId.AnnouncePeer,CommandType.Announce_Peer },
             });
+            InitBucket();
+        }
+
+        private static void InitBucket()
+        {
+            var id = new byte[2];
+            for (int i = 0; i <= byte.MaxValue; i++)
+            {
+                id[0] = (byte)i;
+                for (int j = 0; j <= byte.MaxValue; j++)
+                {
+                    id[1] = (byte)j;
+                    if (TransactionIdMapType.ContainsKey(id))
+                        continue;
+                    Bucket.Add(id.CopyArray());
+                }
+            }
         }
 
         private static void ClearExpireMessage()
@@ -107,7 +113,7 @@ namespace DhtCrawler.DHT.Message
             message.CommandType = CommandType.Get_Peers;
             MappingInfo.TryRemove(message.MessageId, out var obj);
             Bucket.Add(message.MessageId);
-            if (obj == null)
+            if (obj?.InfoHash == null)
             {
                 return false;
             }

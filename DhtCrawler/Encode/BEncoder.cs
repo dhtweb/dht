@@ -163,7 +163,9 @@ namespace DhtCrawler.Encode
                         number.Append((char)data[index]);
                     }
                     index++;
-                    return long.Parse(number.ToString());
+                    if (long.TryParse(number.ToString(), out long length))
+                        return length;
+                    throw new DecodeException(data, index, $"error string length {number}");
                 case Flags.String0:
                 case Flags.String1:
                 case Flags.String2:

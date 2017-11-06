@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using DhtCrawler.Collections;
 using DhtCrawler.Utils;
 using log4net;
 using log4net.Config;
@@ -34,8 +35,10 @@ namespace DhtCrawler
             dhtClient.Run();
             Task.Factory.StartNew(async () =>
             {
+                var checkSize = 64;
                 Directory.CreateDirectory("torrent");
-                var list = new List<InfoHash>(64);
+                var list = new List<InfoHash>(checkSize);
+                var downloaded = new ConcurrentHashSet<string>();
                 while (true)
                 {
                     if (!downLoadQueue.TryPop(out InfoHash info))
@@ -43,8 +46,9 @@ namespace DhtCrawler
                         await Task.Delay(500);
                         continue;
                     }
+
                     list.Add(info);
-                    if (list.Count < 32)
+                    if (list.Count < checkSize)
                     {
                         continue;
                     }
@@ -62,6 +66,8 @@ namespace DhtCrawler
                      });
                     Parallel.ForEach(uniqueItems, infoItem =>
                     {
+                        if (downloaded.Contains(infoItem.Value))
+                            return;
                         foreach (var peer in infoItem.Peers)
                         {
                             try
@@ -71,15 +77,16 @@ namespace DhtCrawler
                                     var meta = client.GetMetaData(new Tancoder.Torrent.InfoHash(infoItem.Bytes));
                                     if (meta == null)
                                         continue;
+                                    downloaded.Add(infoItem.Value);
                                     var content = new StringBuilder();
                                     foreach (var key in meta.Keys)
                                     {
                                         if (key.Text == "pieces")
                                             continue;
-                                        Console.WriteLine(key);
-                                        content.Append(key.Text).Append(meta[key]).AppendLine();
+                                        content.Append(key.Text).Append("\t").Append(meta[key]).AppendLine();
                                     }
                                     File.WriteAllText(Path.Combine("torrent", infoItem.Value), content.ToString());
+                                    return;
                                 }
                             }
                             catch (Exception)
@@ -87,6 +94,7 @@ namespace DhtCrawler
                             }
                         }
                     });
+                    list.Clear();
                 }
             }, TaskCreationOptions.LongRunning);
             locker.WaitOne();

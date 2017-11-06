@@ -12,13 +12,7 @@ namespace DhtCrawler.DHT
         {
             public DhtNode Node { get; set; }
             public long LastTime { get; set; }
-            public string RouteId
-            {
-                get
-                {
-                    return Node == null ? string.Empty : Node.Host + ":" + Node.Port;
-                }
-            }
+            public string RouteId => Node == null ? string.Empty : Node.Host + ":" + Node.Port;
         }
 
         private class RouteComparer : IComparer<byte[]>
@@ -44,7 +38,7 @@ namespace DhtCrawler.DHT
         private readonly int _maxNodeSize;
         private readonly ConcurrentDictionary<string, Route> _kTable;
 
-        private byte[] computeRouteDistance(byte[] sourceId, byte[] targetId)
+        private static byte[] ComputeRouteDistance(byte[] sourceId, byte[] targetId)
         {
             var result = new byte[20];
             for (var i = 0; i < result.Length; i++)
@@ -66,12 +60,46 @@ namespace DhtCrawler.DHT
         {
             if (node.NodeId == null)
                 return;
+            if (_kTable.Count >= _maxNodeSize)
+            {
+                return;
+            }
             var route = new Route()
             {
                 Node = node,
                 LastTime = DateTime.Now.Ticks
             };
-            if (_kTable.Count >= _maxNodeSize && !_kTable.ContainsKey(route.RouteId))
+            _kTable.TryAdd(route.RouteId, route);
+        }
+
+        public void AddNodes(IEnumerable<DhtNode> nodes)
+        {
+            foreach (var node in nodes)
+            {
+                AddNode(node);
+            }
+        }
+
+        public void AddOrUpdateNode(DhtNode node)
+        {
+            if (node.NodeId == null)
+                return;
+            var route = new Route()
+            {
+                Node = node,
+                LastTime = DateTime.Now.Ticks
+            };
+            if (_kTable.Count >= _maxNodeSize)
+            {
+                foreach (var item in _kTable.Values)
+                {
+                    if (DateTime.Now.Ticks - item.LastTime > RouteLife.Ticks)
+                    {
+                        _kTable.TryRemove(item.RouteId, out Route remove);
+                    }
+                }
+            }
+            if (_kTable.Count >= _maxNodeSize)
             {
                 return;
             }
@@ -92,7 +120,7 @@ namespace DhtCrawler.DHT
                     _kTable.TryRemove(item.RouteId, out Route route);
                     continue;
                 }
-                var distance = computeRouteDistance(item.Node.NodeId, id);
+                var distance = ComputeRouteDistance(item.Node.NodeId, id);
                 if (list.Count >= 8)
                 {
                     if (RouteComparer.Instance.Compare(list.Keys[0], distance) >= 0)//keys<distance时=1 最大的距离大于新节点距离则跳过，如果

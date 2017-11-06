@@ -64,7 +64,6 @@ namespace DhtCrawler.DHT
             _kTable = new RouteTable(2048);
 
             _nodeQueue = new BlockingCollection<DhtNode>(nodeQueueSize);
-            //_downQueue = new ConcurrentQueue<InfoHash>();
             _recvMessageQueue = new BlockingCollection<DhtData>(receiveQueueSize);
             _sendMessageQueue = new BlockingCollection<DhtData>(sendQueueSize);
             _responseMessageQueue = new BlockingCollection<DhtData>();
@@ -112,7 +111,7 @@ namespace DhtCrawler.DHT
                 MesageType = MessageType.Response
             };
             var requestNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address.ToString(), Port = (ushort)remotePoint.Port };
-            _kTable.AddNode(requestNode);
+            _kTable.AddOrUpdateNode(requestNode);
             response.Data.Add("id", GetNeighborNodeId(requestNode.NodeId));
             switch (msg.CommandType)
             {
@@ -169,7 +168,7 @@ namespace DhtCrawler.DHT
                 return;
             }
             var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address.ToString(), Port = (ushort)remotePoint.Port };
-            _kTable.AddNode(responseNode);
+            _kTable.AddOrUpdateNode(responseNode);
             object nodeInfo;
             ISet<DhtNode> nodes;
             switch (msg.CommandType)
@@ -211,6 +210,7 @@ namespace DhtCrawler.DHT
                         nodes = DhtNode.ParseNode((byte[])nodeInfo);
                         foreach (var node in nodes)
                         {
+                            _kTable.AddNode(node);
                             GetPeers(node, infoHash.Bytes);
                         }
                     }
