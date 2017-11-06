@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -23,11 +24,15 @@ namespace DhtCrawler
         private static ConcurrentStack<InfoHash> downLoadQueue = new ConcurrentStack<InfoHash>();
         private static ConcurrentHashSet<string> downlaodedSet = new ConcurrentHashSet<string>();
         private static ConcurrentHashSet<long> badAddress = new ConcurrentHashSet<long>();
-
+        private static ILog log = LogManager.GetLogger(typeof(Program));
         static void Main(string[] args)
         {
             var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
             XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
+            foreach (var file in Directory.GetFiles("torrent"))
+            {
+                downlaodedSet.Add(Path.GetFileName(file));
+            }
             var locker = new ManualResetEvent(false);
             var dhtClient = new DhtClient(53386);
             dhtClient.OnFindPeer += DhtClient_OnFindPeer;
@@ -42,7 +47,7 @@ namespace DhtCrawler
             Task.Factory.StartNew(async () =>
             {
                 Directory.CreateDirectory("torrent");
-                var downSize = 64;
+                var downSize = 128;
                 var list = new List<InfoHash>(downSize);
                 var tasks = new LinkedList<Task>();
                 while (true)
@@ -57,7 +62,7 @@ namespace DhtCrawler
                     {
                         continue;
                     }
-                    var uniqueItems = list.GroupBy(l => l.Value).Select(gl =>
+                    var uniqueItems = list.GroupBy(l => l.Value).SelectMany(gl =>
                      {
                          var result = gl.First();
                          foreach (var hash in gl.Skip(1))
@@ -67,12 +72,12 @@ namespace DhtCrawler
                                  result.Peers.Add(point);
                              }
                          }
-                         return result;
+                         return result.Peers.Select(p => new InfoHash(result.Bytes) { Peers = new HashSet<IPEndPoint>(new[] { p }) });
                      });
                     foreach (var infoItem in uniqueItems)
                     {
                         tasks.AddLast(DownloadBitTorrent(infoItem));
-                        if (tasks.Count < 16)
+                        if (tasks.Count < 8)
                             continue;
                         await Task.WhenAll(tasks);
                         tasks.Clear();
@@ -101,6 +106,7 @@ namespace DhtCrawler
                     {
                         continue;
                     }
+                    Console.WriteLine($"downloading {infoItem.Value} from {peer}");
                     using (var client = new WireClient(peer))
                     {
                         var meta = await client.GetMetaData(new Tancoder.Torrent.InfoHash(infoItem.Bytes));
@@ -111,13 +117,15 @@ namespace DhtCrawler
                         }
                         downlaodedSet.Add(infoItem.Value);
                         var torrent = ParseBitTorrent(meta);
+                        torrent.InfoHash = infoItem.Value;
                         Console.WriteLine($"download {infoItem.Value} success");
                         await File.WriteAllTextAsync(Path.Combine("torrent", infoItem.Value + ".json"), torrent.ToJson());
                         return;
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    log.Error("下载失败", ex);
                 }
             }
         }

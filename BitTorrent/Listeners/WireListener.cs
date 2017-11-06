@@ -24,8 +24,8 @@ namespace Tancoder.Torrent.Client
         {
             client = new TcpClient()
             {
-                SendTimeout = 5000,
-                ReceiveTimeout = 5000,
+                SendTimeout = 10000,
+                ReceiveTimeout = 10000,
             };
             EndPoint = endpoint;
         }
@@ -51,7 +51,7 @@ namespace Tancoder.Torrent.Client
             try
             {
                 //连接
-                Task waitTask = Task.Delay(5000), connectTask = client.ConnectAsync(EndPoint.Address, EndPoint.Port);
+                Task connectTask = client.ConnectAsync(EndPoint.Address, EndPoint.Port), waitTask = Task.Delay(6000);
                 await Task.WhenAny(waitTask, connectTask);
                 if (!connectTask.IsCompleted || connectTask.Status != TaskStatus.RanToCompletion)
                 {

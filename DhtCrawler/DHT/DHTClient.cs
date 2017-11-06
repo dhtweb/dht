@@ -58,7 +58,7 @@ namespace DhtCrawler.DHT
 
         #endregion
 
-        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = byte.MaxValue, int sendQueueSize = byte.MaxValue)
+        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 20)
         {
             _endPoint = new IPEndPoint(IPAddress.Any, port);
             _client = new UdpClient(_endPoint);
@@ -300,8 +300,6 @@ namespace DhtCrawler.DHT
 
         private void MessageEnqueue(DhtMessage msg, DhtNode node)
         {
-            if (_sendMessageQueue.IsAddingCompleted)
-                return;
             var bytes = msg.BEncodeBytes();
             var dhtItem = new DhtData() { Data = bytes, Node = node };
             if (msg.CommandType == CommandType.Get_Peers)
@@ -403,9 +401,9 @@ namespace DhtCrawler.DHT
         {
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, 3).Select(i => ProcessMsgData())));
-            _tasks.Add(Task.Run(LoopFindNodes));
-            _tasks.Add(Task.Run(LoopSendMsg));
+            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, 1).Select(i => ProcessMsgData())));
+            Task.Run(() => _tasks.Add(LoopFindNodes()));
+            Task.Run(() => _tasks.Add(LoopSendMsg()));
             logger.Info("starting");
         }
 
@@ -413,10 +411,21 @@ namespace DhtCrawler.DHT
         {
             logger.Info("shuting down");
             running = false;
+            ClearCollection(_nodeQueue);
+            ClearCollection(_recvMessageQueue);
+            ClearCollection(_sendMessageQueue);
+            ClearCollection(_responseMessageQueue);
             Task.WaitAll(_tasks.ToArray());
             logger.Info("close success");
         }
 
+        private static void ClearCollection<T>(BlockingCollection<T> collection)
+        {
+            while (collection.Count > 0)
+            {
+                collection.TryTake(out T remove);
+            }
+        }
 
         public void Dispose()
         {
