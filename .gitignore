@@ -9,6 +9,8 @@
 *.log
 bin/
 obj/
+log/
+torrent/
 Properties/
 /.vs
 /.vscode

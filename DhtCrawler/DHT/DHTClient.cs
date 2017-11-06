@@ -170,18 +170,13 @@ namespace DhtCrawler.DHT
             var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address.ToString(), Port = (ushort)remotePoint.Port };
             _kTable.AddOrUpdateNode(responseNode);
             object nodeInfo;
-            ISet<DhtNode> nodes;
+            ISet<DhtNode> nodes = null;
             switch (msg.CommandType)
             {
                 case CommandType.Find_Node:
                     if (!msg.Data.TryGetValue("nodes", out nodeInfo))
                         break;
                     nodes = DhtNode.ParseNode((byte[])nodeInfo);
-                    foreach (var node in nodes)
-                    {
-                        _nodeQueue.TryAdd(node);
-                        _kTable.AddNode(node);
-                    }
                     break;
                 case CommandType.Get_Peers:
                     var hashByte = msg.Get<byte[]>("info_hash");
@@ -216,6 +211,14 @@ namespace DhtCrawler.DHT
                     }
                     break;
             }
+            if (nodes != null)
+            {
+                foreach (var node in nodes)
+                {
+                    _nodeQueue.TryAdd(node);
+                    _kTable.AddNode(node);
+                }
+            }
         }
 
         private async Task ProcessMsgData()
@@ -224,7 +227,7 @@ namespace DhtCrawler.DHT
             {
                 if (!_recvMessageQueue.TryTake(out DhtData dhtData))
                 {
-                    await Task.Delay(500);
+                    await Task.Delay(1000);
                     continue;
                 }
                 try
@@ -313,7 +316,7 @@ namespace DhtCrawler.DHT
                 }
                 if (!queue.TryTake(out DhtData dhtData))
                 {
-                    await Task.Delay(500);
+                    await Task.Delay(1000);
                     continue;
                 }
                 try

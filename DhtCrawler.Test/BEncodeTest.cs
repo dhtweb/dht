@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 using DhtCrawler.Encode;
 using Xunit;
 
@@ -20,6 +23,37 @@ namespace DhtCrawler.Test
             }
             var dic = BEncoder.Decode(bytes.ToArray());
             Assert.True(true);
+        }
+        [Fact]
+        static void DecodeTorrentTest()
+        {
+            var path = @"E:\Code\dotnetcore\dht\DhtCrawler.Test\xp1024.com_STP1179MP4.torrent";
+            var bytes = File.ReadAllBytes(path);
+            var dic = (IDictionary<string, object>)BEncoder.Decode(bytes);
+            var info = (IDictionary<string, object>)dic["info"];
+            var name = (byte[])info["name"];
+            Console.WriteLine(Encoding.UTF8.GetString(name));
+            var files = (IList<object>)info["files"];
+            foreach (IDictionary<string, object> file in files)
+            {
+                foreach (var kv in file)
+                {
+                    Console.WriteLine(kv.Key);
+                    if (kv.Value is IList<object> list)
+                    {
+                        foreach (byte[] item in list)
+                        {
+                            Console.WriteLine(Encoding.UTF8.GetString(item));
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine(kv.Value);
+                    }
+                }
+            }
+            Console.WriteLine(info);
+            ;
         }
     }
 }
