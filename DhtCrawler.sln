@@ -7,7 +7,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DhtCrawler", "DhtCrawler\Dh
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitTorrent", "BitTorrent\BitTorrent.csproj", "{F4D83490-9CCB-4A86-8472-ECA169F95265}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DhtCrawler.Test", "DhtCrawler.Test\DhtCrawler.Test.csproj", "{4585ECAF-4245-4A40-A19D-EFD10D20F645}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DhtCrawler.Test", "DhtCrawler.Test\DhtCrawler.Test.csproj", "{4585ECAF-4245-4A40-A19D-EFD10D20F645}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DhtCrawler.Common", "DhtCrawler.Common\DhtCrawler.Common.csproj", "{8C7D7FB7-70D8-46F1-A6E0-87EF9F815EDC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,6 +29,10 @@ Global
 		{4585ECAF-4245-4A40-A19D-EFD10D20F645}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4585ECAF-4245-4A40-A19D-EFD10D20F645}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4585ECAF-4245-4A40-A19D-EFD10D20F645}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C7D7FB7-70D8-46F1-A6E0-87EF9F815EDC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C7D7FB7-70D8-46F1-A6E0-87EF9F815EDC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C7D7FB7-70D8-46F1-A6E0-87EF9F815EDC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C7D7FB7-70D8-46F1-A6E0-87EF9F815EDC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

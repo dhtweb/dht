@@ -14,8 +14,9 @@ namespace DhtCrawler.DHT
             }
             this.Bytes = bytes;
         }
-        public byte[] Bytes { get; private set; }
+        public byte[] Bytes { get; }
         public string Value => BitConverter.ToString(Bytes).Replace("-", "");
         public ISet<IPEndPoint> Peers { get; set; }
+        public bool IsDown { get; set; }
     }
 }

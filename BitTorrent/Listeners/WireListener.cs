@@ -12,7 +12,7 @@ using Tancoder.Torrent.Messages.Wire;
 
 namespace Tancoder.Torrent.Client
 {
-    public class WireClient:IDisposable
+    public class WireClient : IDisposable
     {
         private TcpClient client;
         private NetworkStream stream;
@@ -39,7 +39,7 @@ namespace Tancoder.Torrent.Client
             EndPoint = endpoint;
         }
 
-        public BEncodedDictionary GetMetaData(InfoHash hash)
+        public async Task<BEncodedDictionary> GetMetaData(InfoHash hash)
         {
             WireMessage message;
             ExtHandShack exths;
@@ -51,7 +51,9 @@ namespace Tancoder.Torrent.Client
             try
             {
                 //连接
-                if (!client.ConnectAsync(EndPoint.Address, EndPoint.Port).Wait(5000))
+                Task waitTask = Task.Delay(5000), connectTask = client.ConnectAsync(EndPoint.Address, EndPoint.Port);
+                await Task.WhenAny(waitTask, connectTask);
+                if (!connectTask.IsCompleted || connectTask.Status != TaskStatus.RanToCompletion)
                 {
                     Trace.WriteLine("Connect Timeout", "Socket");
                     return null;
@@ -60,10 +62,10 @@ namespace Tancoder.Torrent.Client
 
                 //发送握手
                 message = new HandShack(hash);
-                SendMessage(message);
+                await SendMessageAsync(message);
 
                 //接受握手
-                message = ReceiveMessage<HandShack>(1);
+                message = await ReceiveMessageAsync<HandShack>(1);
                 if (!message.Legal || !(message as HandShack).SupportExtend)
                 {
                     Trace.WriteLine(EndPoint, "HandShack Fail");
@@ -72,10 +74,10 @@ namespace Tancoder.Torrent.Client
 
                 //发送拓展握手
                 message = new ExtHandShack() { SupportUtMetadata = true };
-                SendMessage(message);
+                await SendMessageAsync(message);
 
                 //接受拓展
-                exths = ReceiveMessage<ExtHandShack>();
+                exths = await ReceiveMessageAsync<ExtHandShack>();
                 if (!exths.Legal || !exths.CanGetMetadate || exths.MetadataSize > MaxMetadataSize || exths.MetadataSize <= 0)
                 {
                     Trace.WriteLine(EndPoint, "ExtendHandShack Fail");
@@ -85,30 +87,27 @@ namespace Tancoder.Torrent.Client
                 ut_metadata = exths.UtMetadata;
                 piecesNum = (int)Math.Ceiling(metadataSize / (decimal)PieceLength);
 
-                //开始接受pieces
-                var rtask = ReceivePiecesAsync(metadataSize, piecesNum);
+                var metaTask = ReceivePiecesAsync(metadataSize, piecesNum);
                 //开始发送piece请求
                 for (int i = 0; i < piecesNum; i++)
                 {
                     message = new ExtQueryPiece(ut_metadata, i);
-                   SendMessage(message);
+                    await SendMessageAsync(message);
                 }
                 //等待pieces接收完毕
-                rtask.Wait();
-                metadata = rtask.Result;
-
+                metadata = await metaTask;
                 if (metadata == null)
                     return null;
-
                 //检查hash值是否正确
-                var sha1 = new System.Security.Cryptography.SHA1CryptoServiceProvider();
-                byte[] infohash = sha1.ComputeHash(metadata);
-                if (!infohash.SequenceEqual(hash.Hash))
+                using (var sha1 = new System.Security.Cryptography.SHA1CryptoServiceProvider())
                 {
-                    Trace.WriteLine(EndPoint, "Hash Wrong");
-                    return null;
+                    byte[] infohash = sha1.ComputeHash(metadata);
+                    if (!infohash.SequenceEqual(hash.Hash))
+                    {
+                        Trace.WriteLine(EndPoint, "Hash Wrong");
+                        return null;
+                    }
                 }
-
                 return BEncodedDictionary.DecodeTorrent(metadata);
             }
             catch (AggregateException ex)
@@ -122,67 +121,64 @@ namespace Tancoder.Torrent.Client
             }
         }
 
-        private Task<byte[]> ReceivePiecesAsync(long metadataSize, int piecesNum)
+        private async Task<byte[]> ReceivePiecesAsync(long metadataSize, int piecesNum)
         {
             Trace.Assert(metadataSize > 0);
-            return Task.Run(() =>
+            try
             {
-                try
+                int tryed = 0;
+                byte[] metadata = new byte[metadataSize];
+                BitArray flags = new BitArray(piecesNum);
+                for (int i = 0; i < piecesNum && tryed < 10;)
                 {
-                    int tryed = 0;
-                    byte[] metadata = new byte[metadataSize];
-                    BitArray flags = new BitArray(piecesNum);
-                    for (int i = 0; i < piecesNum && tryed < 10;)
+                    ExtData data = new ExtData();
+                    data = await ReceiveMessageAsync<ExtData>();
+                    if (data.Legal)
                     {
-                        ExtData data = new ExtData();
-                        data = ReceiveMessage<ExtData>();
-                        if (data.Legal)
+                        if (data.Data.Length > 0 && !flags[data.PieceID])
                         {
-                            if (data.Data.Length > 0 && !flags[data.PieceID])
-                            {
-                                var index = data.PieceID;
-                                flags.Set(index, true);
+                            var index = data.PieceID;
+                            flags.Set(index, true);
 
-                                data.Data.CopyTo(metadata, index * PieceLength);
-                                i++;
-                            }
-                            else
-                            {
-                                Trace.WriteLine(EndPoint, "Received Empty Data");
-                                return null;
-                            }
+                            data.Data.CopyTo(metadata, index * PieceLength);
+                            i++;
                         }
                         else
                         {
-                            Thread.Sleep(100);
-                            tryed++;
-                        }
-                    }
-                    for (int i = 0; i < flags.Length; i++)
-                    {
-                        if (!flags[i])
-                        {
-                            Trace.WriteLine(EndPoint, "Not Received All pieces");
+                            Trace.WriteLine(EndPoint, "Received Empty Data");
                             return null;
                         }
                     }
-                    return metadata;
+                    else
+                    {
+                        Thread.Sleep(100);
+                        tryed++;
+                    }
                 }
-                catch (System.IO.IOException)
+                for (int i = 0; i < flags.Length; i++)
                 {
-                    Trace.WriteLine(EndPoint, "Socket Closed");
-                    return null;
+                    if (!flags[i])
+                    {
+                        Trace.WriteLine(EndPoint, "Not Received All pieces");
+                        return null;
+                    }
                 }
-            });
+                return metadata;
+            }
+            catch (System.IO.IOException)
+            {
+                Trace.WriteLine(EndPoint, "Socket Closed");
+                return null;
+            }
         }
 
-        public void SendMessage(WireMessage message)
+        public async Task SendMessageAsync(WireMessage message)
         {
             byte[] buffer = message.Encode();
-            stream.Write(buffer, 0, buffer.Length);
+            await stream.WriteAsync(buffer, 0, buffer.Length);
         }
-        
-        public T ReceiveMessage<T>(int head = 4) where T : WireMessage, new()
+
+        public async Task<T> ReceiveMessageAsync<T>(int head = 4) where T : WireMessage, new()
         {
             T msg = new T();
             int tmp;
@@ -214,7 +210,7 @@ namespace Tancoder.Torrent.Client
                 int rlen = buffer.Length;
                 while (rlen > 0)//获取数据主体
                 {
-                    int size = stream.Read(buffer, buffer.Length - rlen, rlen);
+                    int size = await stream.ReadAsync(buffer, buffer.Length - rlen, rlen);
                     if (size == 0)
                         return msg;
                     rlen -= size;

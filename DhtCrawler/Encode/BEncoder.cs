@@ -142,7 +142,8 @@ namespace DhtCrawler.Encode
                 length.Append((char)data[index]);
             }
             var startIndex = index + 1;
-            var strlength = int.Parse(length.ToString());
+            if (!int.TryParse(length.ToString(), out int strlength))
+                throw new DecodeException(data, index, $"decode string info error,error data is {length}");
             index = startIndex + strlength;
             var strBytes = new byte[strlength];
             Array.Copy(data, startIndex, strBytes, 0, strlength);
@@ -202,7 +203,7 @@ namespace DhtCrawler.Encode
                     index++;
                     return dic;
                 default:
-                    throw new ArgumentException($"unknown type flag byte:{data[index]}char:{(char)data[index]} ,cann't decode");
+                    throw new DecodeException(data, index, $"unknown type flag byte:{data[index]},char:{(char)data[index]} ,cann't decode");
             }
         }
     }

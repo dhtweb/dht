@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Linq;
-using System.IO;
 using DhtCrawler.DHT.Message;
 using DhtCrawler.Encode;
 using DhtCrawler.Encode.Exception;
@@ -14,7 +13,7 @@ using log4net;
 
 namespace DhtCrawler.DHT
 {
-    public class DhtClient
+    public class DhtClient : IDisposable
     {
         private static byte[] GenerateRandomNodeId()
         {
@@ -38,7 +37,10 @@ namespace DhtCrawler.DHT
         private readonly BlockingCollection<DhtData> _sendMessageQueue;
         private readonly BlockingCollection<DhtData> _responseMessageQueue;
 
-        private IList<Task> _tasks;
+        private readonly IList<Task> _tasks;
+
+        private volatile bool running = false;
+
         private byte[] GetNeighborNodeId(byte[] targetId)
         {
             var selfId = _node.NodeId;
@@ -52,9 +54,11 @@ namespace DhtCrawler.DHT
 
         public event Func<InfoHash, Task> OnFindPeer;
 
+        public event Func<InfoHash, Task> OnReceiveInfoHash;
+
         #endregion
 
-        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 10)
+        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = byte.MaxValue, int sendQueueSize = byte.MaxValue)
         {
             _endPoint = new IPEndPoint(IPAddress.Any, port);
             _client = new UdpClient(_endPoint);
@@ -80,7 +84,7 @@ namespace DhtCrawler.DHT
                 var remotePoint = _endPoint;
                 var data = client.EndReceive(asyncResult, ref remotePoint);
                 _recvMessageQueue.Add(new DhtData() { Data = data, RemoteEndPoint = remotePoint });
-                if (_recvMessageQueue.IsAddingCompleted)
+                if (!running)
                     return;
             }
             catch (Exception ex)
@@ -96,7 +100,7 @@ namespace DhtCrawler.DHT
                 }
                 catch (SocketException ex)
                 {
-                    Console.WriteLine("recevice error {0}", ex);
+                    logger.Error("begin receive error", ex);
                 }
             }
         }
@@ -122,19 +126,24 @@ namespace DhtCrawler.DHT
                 case CommandType.Get_Peers:
                 case CommandType.Announce_Peer:
                     var infoHash = new InfoHash((byte[])msg.Data["info_hash"]);
-                    Console.WriteLine(infoHash.Value);
-                    await File.AppendAllTextAsync("hash.txt", infoHash.Value + Environment.NewLine);
+                    if (OnReceiveInfoHash != null)
+                    {
+                        await OnReceiveInfoHash(infoHash);
+                    }
                     if (msg.CommandType == CommandType.Get_Peers)
                     {
                         var nodes = _kTable.FindNodes(infoHash.Bytes);
                         response.Data.Add("nodes", nodes.SelectMany(n => n.CompactNode()).ToArray());
                         response.Data.Add("token", infoHash.Value.Substring(0, 2));
-                        foreach (var node in nodes)
+                        if (!infoHash.IsDown)
                         {
-                            GetPeers(node, infoHash.Bytes);
+                            foreach (var node in nodes)
+                            {
+                                GetPeers(node, infoHash.Bytes);
+                            }
                         }
                     }
-                    else
+                    else if (!infoHash.IsDown)
                     {
                         var peer = remotePoint;
                         if (!msg.Data.Keys.Contains("implied_port") || 0.Equals(msg.Data["implied_port"]))//implied_port !=0 则端口使用port  
@@ -223,7 +232,7 @@ namespace DhtCrawler.DHT
 
         private async Task ProcessMsgData()
         {
-            while (!_recvMessageQueue.IsCompleted)
+            while (running)
             {
                 if (!_recvMessageQueue.TryTake(out DhtData dhtData))
                 {
@@ -307,13 +316,9 @@ namespace DhtCrawler.DHT
 
         private async Task LoopSendMsg()
         {
-            while (true)
+            while (running)
             {
                 var queue = _responseMessageQueue.Count <= 0 ? _sendMessageQueue : _responseMessageQueue;
-                if (queue.IsAddingCompleted)
-                {
-                    return;
-                }
                 if (!queue.TryTake(out DhtData dhtData))
                 {
                     await Task.Delay(1000);
@@ -341,7 +346,7 @@ namespace DhtCrawler.DHT
         {
             int limitNode = 1024 * 10;
             var nodeSet = new HashSet<DhtNode>();
-            while (!_nodeQueue.IsAddingCompleted)
+            while (running)
             {
                 if (_nodeQueue.Count <= 0)
                 {
@@ -396,36 +401,30 @@ namespace DhtCrawler.DHT
 
         public void Run()
         {
+            running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            _tasks.Add(ProcessMsgData());
-            _tasks.Add(LoopFindNodes());
-            _tasks.Add(LoopSendMsg());
+            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, 3).Select(i => ProcessMsgData())));
+            _tasks.Add(Task.Run(LoopFindNodes));
+            _tasks.Add(Task.Run(LoopSendMsg));
             logger.Info("starting");
         }
 
         public void ShutDown()
         {
-            var disposeItems = new LinkedList<IDisposable>();
-            disposeItems.AddLast(_nodeQueue);
-            disposeItems.AddLast(_recvMessageQueue);
-            disposeItems.AddLast(_sendMessageQueue);
-            disposeItems.AddLast(_responseMessageQueue);
-            disposeItems.AddLast(_client);
-            _nodeQueue.CompleteAdding();
-            _recvMessageQueue.CompleteAdding();
-            _sendMessageQueue.CompleteAdding();
-            _responseMessageQueue.CompleteAdding();
             logger.Info("shuting down");
-            Task.WhenAll(_tasks.ToArray()).ContinueWith(t =>
-            {
-                logger.Info("closed");
-            }).Wait();
-            foreach (var disposable in disposeItems)
-            {
-                disposable.Dispose();
-            }
+            running = false;
+            Task.WaitAll(_tasks.ToArray());
+            logger.Info("close success");
         }
 
 
+        public void Dispose()
+        {
+            _client?.Dispose();
+            _nodeQueue?.Dispose();
+            _recvMessageQueue?.Dispose();
+            _sendMessageQueue?.Dispose();
+            _responseMessageQueue?.Dispose();
+        }
     }
 }

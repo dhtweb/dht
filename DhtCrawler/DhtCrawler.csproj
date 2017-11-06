@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BitTorrent\BitTorrent.csproj" />
+    <ProjectReference Include="..\DhtCrawler.Common\DhtCrawler.Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>

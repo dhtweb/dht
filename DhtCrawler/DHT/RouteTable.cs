@@ -116,6 +116,8 @@ namespace DhtCrawler.DHT
 
         public IList<DhtNode> FindNodes(byte[] id)
         {
+            if (_kTable.Count <= 8)
+                return _kTable.Values.Take(8).Select(route => route.Node).ToArray();
             var list = new SortedList<byte[], DhtNode>(8, RouteComparer.Instance);//大的排在前，小的排在后
             foreach (var item in _kTable.Values)
             {
@@ -157,6 +159,5 @@ namespace DhtCrawler.DHT
             return GetEnumerator();
         }
         #endregion
-
     }
 }
