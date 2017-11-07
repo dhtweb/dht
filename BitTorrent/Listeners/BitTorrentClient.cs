@@ -6,13 +6,14 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Tancoder.Torrent;
 using Tancoder.Torrent.BEncoding;
 using Tancoder.Torrent.Messages;
 using Tancoder.Torrent.Messages.Wire;
 
-namespace Tancoder.Torrent.Client
+namespace BitTorrent.Listeners
 {
-    public class WireClient : IDisposable
+    public class BitTorrentClient : IDisposable
     {
         private TcpClient client;
         private NetworkStream stream;
@@ -20,7 +21,7 @@ namespace Tancoder.Torrent.Client
         public long MaxMetadataSize { get; set; } = 1024 * 1024;
         static readonly long PieceLength = 16 * 1024;
 
-        public WireClient(IPEndPoint endpoint)
+        public BitTorrentClient(IPEndPoint endpoint)
         {
             client = new TcpClient()
             {
@@ -29,7 +30,7 @@ namespace Tancoder.Torrent.Client
             };
             EndPoint = endpoint;
         }
-        public WireClient(IPEndPoint endpoint, int localPort)
+        public BitTorrentClient(IPEndPoint endpoint, int localPort)
         {
             client = new TcpClient(new IPEndPoint(IPAddress.Any, localPort))
             {
@@ -39,7 +40,7 @@ namespace Tancoder.Torrent.Client
             EndPoint = endpoint;
         }
 
-        public async Task<BEncodedDictionary> GetMetaData(InfoHash hash)
+        public async Task<BEncodedDictionary> GetMetaDataAsync(InfoHash hash)
         {
             WireMessage message;
             ExtHandShack exths;

@@ -5,6 +5,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Threading;
+using DhtCrawler.Common.RateLimit;
 using DhtCrawler.DHT.Message;
 using DhtCrawler.Encode;
 using DhtCrawler.Encode.Exception;
@@ -23,9 +25,9 @@ namespace DhtCrawler.DHT
             return ids;
         }
 
-        private static readonly DhtNode[] bootstrapNodes = { new DhtNode() { Host = "router.bittorrent.com", Port = 6881 }, new DhtNode() { Host = "dht.transmissionbt.com", Port = 6881 }, new DhtNode() { Host = "router.utorrent.com", Port = 6881 } };
+        private static readonly DhtNode[] BootstrapNodes = { new DhtNode() { Host = "router.bittorrent.com", Port = 6881 }, new DhtNode() { Host = "dht.transmissionbt.com", Port = 6881 }, new DhtNode() { Host = "router.utorrent.com", Port = 6881 } };
 
-        private readonly ILog logger = LogManager.GetLogger(typeof(DhtClient));
+        private readonly ILog _logger = LogManager.GetLogger(typeof(DhtClient));
 
         private readonly UdpClient _client;
         private readonly IPEndPoint _endPoint;
@@ -38,7 +40,8 @@ namespace DhtCrawler.DHT
         private readonly BlockingCollection<DhtData> _responseMessageQueue;
 
         private readonly IList<Task> _tasks;
-
+        private readonly IRateLimit _sendRateLimit;
+        private readonly IRateLimit _receveRateLimit;
         private volatile bool running = false;
 
         private byte[] GetNeighborNodeId(byte[] targetId)
@@ -72,6 +75,8 @@ namespace DhtCrawler.DHT
             _sendMessageQueue = new BlockingCollection<DhtData>(sendQueueSize);
             _responseMessageQueue = new BlockingCollection<DhtData>();
 
+            _sendRateLimit = new TokenBucketLimit(350 * 1024, 1, TimeUnit.Second);
+            _receveRateLimit = new TokenBucketLimit(350 * 1024, 1, TimeUnit.Second);
             _tasks = new List<Task>();
         }
 
@@ -83,13 +88,17 @@ namespace DhtCrawler.DHT
             {
                 var remotePoint = _endPoint;
                 var data = client.EndReceive(asyncResult, ref remotePoint);
+                while (!_receveRateLimit.Require(data.Length, out var waitTime))
+                {
+                    Thread.Sleep(waitTime);
+                }
                 _recvMessageQueue.Add(new DhtData() { Data = data, RemoteEndPoint = remotePoint });
                 if (!running)
                     return;
             }
             catch (Exception ex)
             {
-                logger.Error(ex);
+                _logger.Error(ex);
             }
             while (true)
             {
@@ -100,7 +109,7 @@ namespace DhtCrawler.DHT
                 }
                 catch (SocketException ex)
                 {
-                    logger.Error("begin receive error", ex);
+                    _logger.Error("begin receive error", ex);
                 }
             }
         }
@@ -255,7 +264,7 @@ namespace DhtCrawler.DHT
                 }
                 catch (Exception ex)
                 {
-                    logger.Error($"ErrorData:{BitConverter.ToString(dhtData.Data)}", ex);
+                    _logger.Error($"ErrorData:{BitConverter.ToString(dhtData.Data)}", ex);
                     var response = new DhtMessage
                     {
                         MesageType = MessageType.Exception,
@@ -324,6 +333,10 @@ namespace DhtCrawler.DHT
                 }
                 try
                 {
+                    while (!_sendRateLimit.Require(dhtData.Data.Length, out var waitTime))
+                    {
+                        await Task.Delay(waitTime);
+                    }
                     if (dhtData.RemoteEndPoint != null)
                         await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.RemoteEndPoint);
                     else if (dhtData.Node != null)
@@ -335,7 +348,7 @@ namespace DhtCrawler.DHT
                 }
                 catch (Exception ex)
                 {
-                    logger.Error(ex);
+                    _logger.Error(ex);
                 }
             }
         }
@@ -348,15 +361,14 @@ namespace DhtCrawler.DHT
             {
                 if (_nodeQueue.Count <= 0)
                 {
-                    foreach (var dhtNode in bootstrapNodes.Union(_kTable))
+                    foreach (var dhtNode in BootstrapNodes.Union(_kTable))
                     {
                         if (_nodeQueue.IsAddingCompleted)
                             return;
                         if (!_nodeQueue.TryAdd(dhtNode))
                             break;
                     }
-                    if (_nodeQueue.Count <= bootstrapNodes.Length)
-                        await Task.Delay(5000);
+                    await Task.Delay(5000);
                 }
                 while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
                 {
@@ -404,19 +416,19 @@ namespace DhtCrawler.DHT
             _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, 1).Select(i => ProcessMsgData())));
             Task.Run(() => _tasks.Add(LoopFindNodes()));
             Task.Run(() => _tasks.Add(LoopSendMsg()));
-            logger.Info("starting");
+            _logger.Info("starting");
         }
 
         public void ShutDown()
         {
-            logger.Info("shuting down");
+            _logger.Info("shuting down");
             running = false;
             ClearCollection(_nodeQueue);
             ClearCollection(_recvMessageQueue);
             ClearCollection(_sendMessageQueue);
             ClearCollection(_responseMessageQueue);
             Task.WaitAll(_tasks.ToArray());
-            logger.Info("close success");
+            _logger.Info("close success");
         }
 
         private static void ClearCollection<T>(BlockingCollection<T> collection)

@@ -5,16 +5,16 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using BitTorrent.Listeners;
 using DhtCrawler.Collections;
 using DhtCrawler.Utils;
 using log4net;
 using log4net.Config;
 using Tancoder.Torrent.BEncoding;
-using Tancoder.Torrent.Client;
 using DhtCrawler.Common;
 
 namespace DhtCrawler
@@ -49,7 +49,7 @@ namespace DhtCrawler
                 Directory.CreateDirectory("torrent");
                 var downSize = 128;
                 var list = new List<InfoHash>(downSize);
-                var tasks = new LinkedList<Task>();
+                //var tasks = new LinkedList<Task>();
                 while (true)
                 {
                     if (!downLoadQueue.TryPop(out InfoHash info) || downlaodedSet.Contains(info.Value))
@@ -67,26 +67,51 @@ namespace DhtCrawler
                          var result = gl.First();
                          foreach (var hash in gl.Skip(1))
                          {
-                             foreach (var point in hash.Peers)
+                             foreach (var point in hash.Peers.Where(point => !badAddress.Contains(point.ToInt64()) && point.Address.IsPublic()))
                              {
                                  result.Peers.Add(point);
                              }
                          }
-                         return result.Peers.Select(p => new InfoHash(result.Bytes) { Peers = new HashSet<IPEndPoint>(new[] { p }) });
+                         return result.Peers.Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
                      });
-                    foreach (var infoItem in uniqueItems)
-                    {
-                        tasks.AddLast(DownloadBitTorrent(infoItem));
-                        if (tasks.Count < 8)
-                            continue;
-                        await Task.WhenAll(tasks);
-                        tasks.Clear();
-                    }
-                    if (tasks.Count > 0)
-                    {
-                        await Task.WhenAll(tasks);
-                        tasks.Clear();
-                    }
+                    Parallel.ForEach(uniqueItems, new ParallelOptions() { MaxDegreeOfParallelism = 16, TaskScheduler = TaskScheduler.Current }, item =>
+                         {
+                             if (downlaodedSet.Contains(item.Value))
+                                 return;
+                             var longPeer = item.Peer.ToInt64();
+                             try
+                             {
+                                 if (badAddress.Contains(longPeer))
+                                 {
+                                     return;
+                                 }
+                                 Console.WriteLine($"downloading {item.Value} from {item.Peer}");
+                                 using (var client = new WireClient(item.Peer))
+                                 {
+                                     var meta = client.GetMetaData(new Tancoder.Torrent.InfoHash(item.Bytes));
+                                     if (meta == null)
+                                     {
+                                         badAddress.Add(longPeer);
+                                         return;
+                                     }
+                                     downlaodedSet.Add(item.Value);
+                                     var torrent = ParseBitTorrent(meta);
+                                     torrent.InfoHash = item.Value;
+                                     Console.WriteLine($"download {item.Value} success");
+                                     File.WriteAllTextAsync(Path.Combine("torrent", item.Value + ".json"),
+                                         torrent.ToJson());
+                                 }
+                             }
+                             catch (SocketException ex)
+                             {
+                                 badAddress.Add(longPeer);
+                                 log.Error("下载失败", ex);
+                             }
+                             catch (Exception ex)
+                             {
+                                 log.Error("下载失败", ex);
+                             }
+                         });
                     list.Clear();
                 }
             }, TaskCreationOptions.LongRunning);
@@ -107,9 +132,9 @@ namespace DhtCrawler
                         continue;
                     }
                     Console.WriteLine($"downloading {infoItem.Value} from {peer}");
-                    using (var client = new WireClient(peer))
+                    using (var client = new BitTorrentClient(peer))
                     {
-                        var meta = await client.GetMetaData(new Tancoder.Torrent.InfoHash(infoItem.Bytes));
+                        var meta = await client.GetMetaDataAsync(new Tancoder.Torrent.InfoHash(infoItem.Bytes));
                         if (meta == null)
                         {
                             badAddress.Add(longPeer);
@@ -142,24 +167,6 @@ namespace DhtCrawler
             downLoadQueue.Push(arg);
             Console.WriteLine($"get {arg.Value} peers success");
             return Task.CompletedTask;
-        }
-
-        static void TestNetUtils()
-        {
-            byte[] portArray = new byte[] { 0, 0, 12, 25 };
-            foreach (var b in portArray)
-            {
-                var sb = new StringBuilder();
-                for (int i = 1; i <= 8; i++)
-                {
-                    sb.Append((b >> (8 - i)) & 1);
-                }
-                Console.WriteLine(sb);
-            }
-            var int1 = BitConverter.ToInt32(portArray.Reverse().ToArray(), 0);
-            var int3 = BitConverter.ToInt32(portArray, 0);
-            var int2 = NetUtils.ToInt32(portArray);
-            Console.WriteLine(int2 == int1);
         }
 
         private static Torrent ParseBitTorrent(BEncodedDictionary metaData)
