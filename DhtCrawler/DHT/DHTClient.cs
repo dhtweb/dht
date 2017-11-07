@@ -24,8 +24,15 @@ namespace DhtCrawler.DHT
             random.NextBytes(ids);
             return ids;
         }
-
-        private static readonly DhtNode[] BootstrapNodes = { new DhtNode() { Host = "router.bittorrent.com", Port = 6881 }, new DhtNode() { Host = "dht.transmissionbt.com", Port = 6881 }, new DhtNode() { Host = "router.utorrent.com", Port = 6881 } };
+        // 
+        private static readonly DhtNode[] BootstrapNodes =
+        {
+            new DhtNode() { Host = Dns.GetHostAddresses("router.bittorrent.com")[0], Port = 6881 },
+            new DhtNode() { Host = Dns.GetHostAddresses("dht.transmissionbt.com")[0], Port = 6881 },
+            new DhtNode() { Host = Dns.GetHostAddresses("router.utorrent.com")[0], Port = 6881 },
+            new DhtNode() { Host = IPAddress.Parse("82.221.103.244"), Port = 6881 },
+            new DhtNode() { Host = IPAddress.Parse("23.21.224.150"), Port = 6881 }
+        };
 
         private readonly ILog _logger = LogManager.GetLogger(typeof(DhtClient));
 
@@ -67,7 +74,7 @@ namespace DhtCrawler.DHT
             _client = new UdpClient(_endPoint);
             _client.Client.IOControl((IOControlCode)(-1744830452), new byte[] { 0, 0, 0, 0 }, null);
             _client.Ttl = byte.MaxValue;
-            _node = new DhtNode() { Host = "0.0.0.0", Port = port, NodeId = GenerateRandomNodeId() };
+            _node = new DhtNode() { Host = IPAddress.Any, Port = port, NodeId = GenerateRandomNodeId() };
             _kTable = new RouteTable(2048);
 
             _nodeQueue = new BlockingCollection<DhtNode>(nodeQueueSize);
@@ -75,8 +82,8 @@ namespace DhtCrawler.DHT
             _sendMessageQueue = new BlockingCollection<DhtData>(sendQueueSize);
             _responseMessageQueue = new BlockingCollection<DhtData>();
 
-            _sendRateLimit = new TokenBucketLimit(350 * 1024, 1, TimeUnit.Second);
-            _receveRateLimit = new TokenBucketLimit(350 * 1024, 1, TimeUnit.Second);
+            _sendRateLimit = new TokenBucketLimit(400 * 1024, 1, TimeUnit.Second);
+            _receveRateLimit = new TokenBucketLimit(400 * 1024, 1, TimeUnit.Second);
             _tasks = new List<Task>();
         }
 
@@ -123,7 +130,7 @@ namespace DhtCrawler.DHT
                 MessageId = msg.MessageId,
                 MesageType = MessageType.Response
             };
-            var requestNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address.ToString(), Port = (ushort)remotePoint.Port };
+            var requestNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
             _kTable.AddOrUpdateNode(requestNode);
             response.Data.Add("id", GetNeighborNodeId(requestNode.NodeId));
             switch (msg.CommandType)
@@ -185,7 +192,7 @@ namespace DhtCrawler.DHT
             {
                 return;
             }
-            var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address.ToString(), Port = (ushort)remotePoint.Port };
+            var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
             _kTable.AddOrUpdateNode(responseNode);
             object nodeInfo;
             ISet<DhtNode> nodes = null;
@@ -310,7 +317,7 @@ namespace DhtCrawler.DHT
         private void MessageEnqueue(DhtMessage msg, DhtNode node)
         {
             var bytes = msg.BEncodeBytes();
-            var dhtItem = new DhtData() { Data = bytes, Node = node };
+            var dhtItem = new DhtData() { Data = bytes, RemoteEndPoint = new IPEndPoint(node.Host, node.Port) };
             if (msg.CommandType == CommandType.Get_Peers)
             {
                 _sendMessageQueue.Add(dhtItem);
@@ -337,10 +344,7 @@ namespace DhtCrawler.DHT
                     {
                         await Task.Delay(waitTime);
                     }
-                    if (dhtData.RemoteEndPoint != null)
-                        await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.RemoteEndPoint);
-                    else if (dhtData.Node != null)
-                        await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.Node.Host, dhtData.Node.Port);
+                    await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.RemoteEndPoint);
                 }
                 catch (SocketException)
                 {

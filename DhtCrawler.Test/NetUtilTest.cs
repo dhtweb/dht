@@ -1,3 +1,4 @@
+using System;
 using System.Net;
 using DhtCrawler.Utils;
 using Xunit;
@@ -10,7 +11,8 @@ namespace DhtCrawler.Test
         [Fact]
         static void IsPublicIpTest()
         {
-            var ip = IPAddress.Parse("248.64.48.247");
+            var ip = IPAddress.Parse("245.2.45.177");
+            Console.WriteLine(ip.IsPublic());
             Assert.True(!ip.IsPublic());
         }
     }

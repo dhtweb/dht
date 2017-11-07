@@ -67,12 +67,12 @@ namespace DhtCrawler
                          var result = gl.First();
                          foreach (var hash in gl.Skip(1))
                          {
-                             foreach (var point in hash.Peers.Where(point => !badAddress.Contains(point.ToInt64()) && point.Address.IsPublic()))
+                             foreach (var point in hash.Peers)
                              {
                                  result.Peers.Add(point);
                              }
                          }
-                         return result.Peers.Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
+                         return result.Peers.Where(point => point.Address.IsPublic() && !badAddress.Contains(point.ToInt64())).Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
                      });
                     Parallel.ForEach(uniqueItems, new ParallelOptions() { MaxDegreeOfParallelism = 16, TaskScheduler = TaskScheduler.Current }, item =>
                          {
@@ -98,8 +98,7 @@ namespace DhtCrawler
                                      var torrent = ParseBitTorrent(meta);
                                      torrent.InfoHash = item.Value;
                                      Console.WriteLine($"download {item.Value} success");
-                                     File.WriteAllTextAsync(Path.Combine("torrent", item.Value + ".json"),
-                                         torrent.ToJson());
+                                     File.WriteAllText(Path.Combine("torrent", item.Value + ".json"), torrent.ToJson());
                                  }
                              }
                              catch (SocketException ex)

@@ -6,6 +6,5 @@ namespace DhtCrawler.DHT
     {
         public byte[] Data { get; set; }
         public IPEndPoint RemoteEndPoint { get; set; }
-        public DhtNode Node { get; set; }
     }
 }

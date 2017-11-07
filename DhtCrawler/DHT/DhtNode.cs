@@ -8,14 +8,14 @@ namespace DhtCrawler.DHT
     public class DhtNode
     {
         public byte[] NodeId { get; set; }
-        public string Host { get; set; }
+        public IPAddress Host { get; set; }
         public ushort Port { get; set; }
 
         public override bool Equals(object obj)
         {
             if (!(obj is DhtNode node))
                 return false;
-            return node.Port == this.Port && string.Equals(Host, node.Host, StringComparison.OrdinalIgnoreCase);
+            return node.Port == Port && node.Host.Equals(node.Host);
         }
 
         public override int GetHashCode()
@@ -29,7 +29,7 @@ namespace DhtCrawler.DHT
             Array.Copy(data, startIndex, idArray, 0, 20);
             Array.Copy(data, startIndex + 20, ipArray, 0, 4);
             Array.Copy(data, startIndex + 24, portArray, 0, 2);
-            return new DhtNode() { Host = string.Join(".", ipArray), Port = BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0), NodeId = idArray };
+            return new DhtNode() { Host = new IPAddress(ipArray), Port = BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0), NodeId = idArray };
         }
 
         public static IPEndPoint ParsePeer(byte[] data, int startIndex)
@@ -58,7 +58,7 @@ namespace DhtCrawler.DHT
         {
             var info = new byte[26];
             Array.Copy(NodeId, info, 20);
-            Array.Copy(Host.Split('.').Select(byte.Parse).ToArray(), 0, info, 20, 4);
+            Array.Copy(Host.GetAddressBytes(), 0, info, 20, 4);
             Array.Copy(BitConverter.IsLittleEndian ? BitConverter.GetBytes(Port).Reverse().ToArray() : BitConverter.GetBytes(Port), 0, info, 24, 2);
             return info;
         }
