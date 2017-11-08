@@ -24,7 +24,7 @@ namespace DhtCrawler
         private static readonly ConcurrentHashSet<string> downlaodedSet = new ConcurrentHashSet<string>();
         private static readonly ConcurrentHashSet<long> badAddress = new ConcurrentHashSet<long>();
         private static readonly ILog log = LogManager.GetLogger(typeof(Program));
-        private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "");
+        private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         static void Main(string[] args)
         {
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
@@ -54,7 +54,6 @@ namespace DhtCrawler
             {
                 var downSize = 128;
                 var list = new List<InfoHash>(downSize);
-                //var tasks = new LinkedList<Task>();
                 while (true)
                 {
                     try
@@ -132,6 +131,8 @@ namespace DhtCrawler
                 while (true)
                 {
                     watchLog.Info($"收到消息数：{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待下载InfoHash数：{downLoadQueue.Count}");
+                    ThreadPool.GetAvailableThreads(out var workThreadNum, out var ioThreadNum);
+                    watchLog.Info($"工作线程数：{workThreadNum},IO线程数:{ioThreadNum}");
                     await Task.Delay(60 * 1000);
                 }
             }, TaskCreationOptions.LongRunning);
