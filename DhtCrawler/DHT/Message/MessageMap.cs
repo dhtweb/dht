@@ -87,10 +87,15 @@ namespace DhtCrawler.DHT.Message
                     return false;
             }
             TransactionId messageId;
+            var start = DateTime.Now;
             while (!Bucket.TryTake(out messageId))
             {
                 lock (Bucket)
                 {
+                    if ((DateTime.Now - start).TotalSeconds > 10)//10秒内获取不到就丢弃
+                    {
+                        return false;
+                    }
                     if (Bucket.TryTake(out messageId))
                         break;
                     ClearExpireMessage();
