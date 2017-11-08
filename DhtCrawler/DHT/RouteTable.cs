@@ -60,15 +60,15 @@ namespace DhtCrawler.DHT
         {
             if (node.NodeId == null)
                 return;
+            if (_kTable.Count >= _maxNodeSize)
+            {
+                return;
+            }
             var route = new Route()
             {
                 Node = node,
                 LastTime = DateTime.Now.Ticks
             };
-            if (_kTable.Count >= _maxNodeSize)
-            {
-                return;
-            }
             _kTable.TryAdd(route.RouteId, route);
         }
 

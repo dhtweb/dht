@@ -356,7 +356,6 @@ namespace DhtCrawler.DHT
                 }
                 catch (SocketException)
                 {
-                    queue.TryAdd(dhtData);
                 }
                 catch (Exception ex)
                 {

@@ -2,7 +2,9 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Reflection;
 using DhtCrawler.Utils;
+using log4net;
 
 namespace DhtCrawler.DHT.Message
 {
@@ -14,6 +16,8 @@ namespace DhtCrawler.DHT.Message
             public byte[] InfoHash { get; set; }
             public DateTime LastTime { get; set; }
         }
+
+        private static readonly ILog log = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         private static readonly BlockingCollection<TransactionId> Bucket = new BlockingCollection<TransactionId>();
         private static readonly ConcurrentDictionary<TransactionId, MapInfo> MappingInfo = new ConcurrentDictionary<TransactionId, MapInfo>();
         private static readonly IDictionary<CommandType, TransactionId> TypeMapTransactionId;
@@ -53,6 +57,7 @@ namespace DhtCrawler.DHT.Message
 
         private static void ClearExpireMessage()
         {
+            log.Info($"开始清理过期的命令ID,清理前可用命令ID{Bucket.Count}");
             foreach (var item in MappingInfo)
             {
                 var tuple = item.Value;
@@ -62,6 +67,7 @@ namespace DhtCrawler.DHT.Message
                     Bucket.Add(item.Key);
                 }
             }
+            log.Info($"清理过期的命令ID结束,清理后可用命令ID{Bucket.Count}");
         }
 
         public static bool RegisterMessage(DhtMessage message)
@@ -111,8 +117,8 @@ namespace DhtCrawler.DHT.Message
                 return true;
             }
             message.CommandType = CommandType.Get_Peers;
-            MappingInfo.TryRemove(message.MessageId, out var obj);
-            Bucket.Add(message.MessageId);
+            if (MappingInfo.TryRemove(message.MessageId, out var obj))
+                Bucket.Add(message.MessageId);
             if (obj?.InfoHash == null)
             {
                 return false;
