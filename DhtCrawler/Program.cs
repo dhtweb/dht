@@ -4,7 +4,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Threading;
@@ -27,6 +26,8 @@ namespace DhtCrawler
         private static ILog log = LogManager.GetLogger(typeof(Program));
         static void Main(string[] args)
         {
+            Directory.CreateDirectory("torrent");
+            Directory.CreateDirectory("info");
             var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
             XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
             foreach (var file in Directory.GetFiles("torrent"))
@@ -46,7 +47,6 @@ namespace DhtCrawler
             dhtClient.Run();
             Task.Factory.StartNew(async () =>
             {
-                Directory.CreateDirectory("torrent");
                 var downSize = 128;
                 var list = new List<InfoHash>(downSize);
                 //var tasks = new LinkedList<Task>();
@@ -158,7 +158,7 @@ namespace DhtCrawler
         private static async Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
         {
             infoHash.IsDown = downlaodedSet.Contains(infoHash.Value);
-            await File.AppendAllTextAsync($"hash{Thread.CurrentThread.ManagedThreadId}.txt", infoHash.Value + Environment.NewLine);
+            await File.AppendAllTextAsync(Path.Combine("info", $"hash{Thread.CurrentThread.ManagedThreadId}.txt"), infoHash.Value + Environment.NewLine);
         }
 
         private static Task DhtClient_OnFindPeer(InfoHash arg)

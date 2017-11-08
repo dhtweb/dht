@@ -72,7 +72,8 @@ namespace DhtCrawler.DHT
         {
             _endPoint = new IPEndPoint(IPAddress.Any, port);
             _client = new UdpClient(_endPoint);
-            _client.Client.IOControl((IOControlCode)(-1744830452), new byte[] { 0, 0, 0, 0 }, null);
+
+            //_client.Client.IOControl((IOControlCode)(-1744830452), new byte[] { 0, 0, 0, 0 }, null);
             _client.Ttl = byte.MaxValue;
             _node = new DhtNode() { Host = IPAddress.Any, Port = port, NodeId = GenerateRandomNodeId() };
             _kTable = new RouteTable(2048);
@@ -82,8 +83,8 @@ namespace DhtCrawler.DHT
             _sendMessageQueue = new BlockingCollection<DhtData>(sendQueueSize);
             _responseMessageQueue = new BlockingCollection<DhtData>();
 
-            _sendRateLimit = new TokenBucketLimit(400 * 1024, 1, TimeUnit.Second);
-            _receveRateLimit = new TokenBucketLimit(400 * 1024, 1, TimeUnit.Second);
+            _sendRateLimit = new TokenBucketLimit(200 * 1024, 1, TimeUnit.Second);
+            _receveRateLimit = new TokenBucketLimit(200 * 1024, 1, TimeUnit.Second);
             _tasks = new List<Task>();
         }
 
