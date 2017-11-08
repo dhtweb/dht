@@ -24,7 +24,7 @@ namespace DhtCrawler.DHT
             random.NextBytes(ids);
             return ids;
         }
-        // 
+        //初始节点 
         private static readonly DhtNode[] BootstrapNodes =
         {
             new DhtNode() { Host = Dns.GetHostAddresses("router.bittorrent.com")[0], Port = 6881 },
@@ -33,7 +33,10 @@ namespace DhtCrawler.DHT
             new DhtNode() { Host = IPAddress.Parse("82.221.103.244"), Port = 6881 },
             new DhtNode() { Host = IPAddress.Parse("23.21.224.150"), Port = 6881 }
         };
-
+        /// <summary>
+        /// 默认入队等待时间（超时丢弃）
+        /// </summary>
+        private static readonly TimeSpan EnqueueWaitTime = TimeSpan.FromSeconds(10);
         private readonly ILog _logger = LogManager.GetLogger(typeof(DhtClient));
 
         private readonly UdpClient _client;
@@ -68,13 +71,17 @@ namespace DhtCrawler.DHT
 
         #endregion
 
+        public int ReceviceMessageCount => _recvMessageQueue.Count;
+        public int SendMessageCount => _sendMessageQueue.Count;
+        public int ResponseMessageCount => _responseMessageQueue.Count;
+        public int FindNodeCount => _nodeQueue.Count;
+
         public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 20)
         {
             _endPoint = new IPEndPoint(IPAddress.Any, port);
-            _client = new UdpClient(_endPoint);
+            _client = new UdpClient(_endPoint) { Ttl = byte.MaxValue };
 
             //_client.Client.IOControl((IOControlCode)(-1744830452), new byte[] { 0, 0, 0, 0 }, null);
-            _client.Ttl = byte.MaxValue;
             _node = new DhtNode() { Host = IPAddress.Any, Port = port, NodeId = GenerateRandomNodeId() };
             _kTable = new RouteTable(2048);
 
@@ -88,6 +95,7 @@ namespace DhtCrawler.DHT
             _tasks = new List<Task>();
         }
 
+        #region 处理收到消息
 
         private void Recevie_Data(IAsyncResult asyncResult)
         {
@@ -100,7 +108,7 @@ namespace DhtCrawler.DHT
                 {
                     Thread.Sleep(waitTime);
                 }
-                _recvMessageQueue.Add(new DhtData() { Data = data, RemoteEndPoint = remotePoint });
+                _recvMessageQueue.TryAdd(new DhtData() { Data = data, RemoteEndPoint = remotePoint }, EnqueueWaitTime);
                 if (!running)
                     return;
             }
@@ -122,7 +130,6 @@ namespace DhtCrawler.DHT
             }
         }
 
-        #region 处理收到消息
 
         private async Task ProcessRequestAsync(DhtMessage msg, IPEndPoint remotePoint)
         {
@@ -184,7 +191,7 @@ namespace DhtCrawler.DHT
                 RemoteEndPoint = remotePoint,
                 Data = response.BEncodeBytes()
             };
-            _responseMessageQueue.Add(sendData);
+            _responseMessageQueue.TryAdd(sendData, EnqueueWaitTime);
         }
 
         private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
@@ -321,7 +328,7 @@ namespace DhtCrawler.DHT
             var dhtItem = new DhtData() { Data = bytes, RemoteEndPoint = new IPEndPoint(node.Host, node.Port) };
             if (msg.CommandType == CommandType.Get_Peers)
             {
-                _sendMessageQueue.Add(dhtItem);
+                _sendMessageQueue.TryAdd(dhtItem, EnqueueWaitTime);
             }
             else
             {
@@ -368,7 +375,7 @@ namespace DhtCrawler.DHT
                 {
                     foreach (var dhtNode in BootstrapNodes.Union(_kTable))
                     {
-                        if (_nodeQueue.IsAddingCompleted)
+                        if (!running)
                             return;
                         if (!_nodeQueue.TryAdd(dhtNode))
                             break;

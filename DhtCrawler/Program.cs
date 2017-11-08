@@ -20,19 +20,24 @@ namespace DhtCrawler
 {
     class Program
     {
-        private static ConcurrentStack<InfoHash> downLoadQueue = new ConcurrentStack<InfoHash>();
-        private static ConcurrentHashSet<string> downlaodedSet = new ConcurrentHashSet<string>();
-        private static ConcurrentHashSet<long> badAddress = new ConcurrentHashSet<long>();
-        private static ILog log = LogManager.GetLogger(typeof(Program));
+        private static readonly ConcurrentStack<InfoHash> downLoadQueue = new ConcurrentStack<InfoHash>();
+        private static readonly ConcurrentHashSet<string> downlaodedSet = new ConcurrentHashSet<string>();
+        private static readonly ConcurrentHashSet<long> badAddress = new ConcurrentHashSet<long>();
+        private static readonly ILog log = LogManager.GetLogger(typeof(Program));
+        private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "");
         static void Main(string[] args)
         {
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+            {
+                watchLog.Error(e.ExceptionObject);
+            };
             Directory.CreateDirectory("torrent");
             Directory.CreateDirectory("info");
             var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
             XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
             foreach (var file in Directory.GetFiles("torrent"))
             {
-                downlaodedSet.Add(Path.GetFileName(file));
+                downlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
             }
             var locker = new ManualResetEvent(false);
             var dhtClient = new DhtClient(53386);
@@ -52,66 +57,82 @@ namespace DhtCrawler
                 //var tasks = new LinkedList<Task>();
                 while (true)
                 {
-                    if (!downLoadQueue.TryPop(out InfoHash info) || downlaodedSet.Contains(info.Value))
+                    try
                     {
-                        await Task.Delay(500);
-                        continue;
-                    }
-                    list.Add(info);
-                    if (list.Count < downSize)
-                    {
-                        continue;
-                    }
-                    var uniqueItems = list.GroupBy(l => l.Value).SelectMany(gl =>
-                     {
-                         var result = gl.First();
-                         foreach (var hash in gl.Skip(1))
+
+                        if (!downLoadQueue.TryPop(out InfoHash info) || downlaodedSet.Contains(info.Value))
+                        {
+                            await Task.Delay(500);
+                            continue;
+                        }
+                        list.Add(info);
+                        if (list.Count < downSize)
+                        {
+                            continue;
+                        }
+                        var uniqueItems = list.GroupBy(l => l.Value).SelectMany(gl =>
                          {
-                             foreach (var point in hash.Peers)
+                             var result = gl.First();
+                             foreach (var hash in gl.Skip(1))
                              {
-                                 result.Peers.Add(point);
-                             }
-                         }
-                         return result.Peers.Where(point => point.Address.IsPublic() && !badAddress.Contains(point.ToInt64())).Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
-                     });
-                    Parallel.ForEach(uniqueItems, new ParallelOptions() { MaxDegreeOfParallelism = 16, TaskScheduler = TaskScheduler.Current }, item =>
-                         {
-                             if (downlaodedSet.Contains(item.Value))
-                                 return;
-                             var longPeer = item.Peer.ToInt64();
-                             try
-                             {
-                                 if (badAddress.Contains(longPeer))
+                                 foreach (var point in hash.Peers)
                                  {
-                                     return;
+                                     result.Peers.Add(point);
                                  }
-                                 Console.WriteLine($"downloading {item.Value} from {item.Peer}");
-                                 using (var client = new WireClient(item.Peer))
+                             }
+                             return result.Peers.Where(point => point.Address.IsPublic() && !badAddress.Contains(point.ToInt64())).Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
+                         });
+                        Parallel.ForEach(uniqueItems, new ParallelOptions() { MaxDegreeOfParallelism = 16, TaskScheduler = TaskScheduler.Current }, item =>
+                             {
+                                 if (downlaodedSet.Contains(item.Value))
+                                     return;
+                                 var longPeer = item.Peer.ToInt64();
+                                 try
                                  {
-                                     var meta = client.GetMetaData(new Tancoder.Torrent.InfoHash(item.Bytes));
-                                     if (meta == null)
+                                     if (badAddress.Contains(longPeer))
                                      {
-                                         badAddress.Add(longPeer);
                                          return;
                                      }
-                                     downlaodedSet.Add(item.Value);
-                                     var torrent = ParseBitTorrent(meta);
-                                     torrent.InfoHash = item.Value;
-                                     Console.WriteLine($"download {item.Value} success");
-                                     File.WriteAllText(Path.Combine("torrent", item.Value + ".json"), torrent.ToJson());
+                                     Console.WriteLine($"downloading {item.Value} from {item.Peer}");
+                                     using (var client = new WireClient(item.Peer))
+                                     {
+                                         var meta = client.GetMetaData(new Tancoder.Torrent.InfoHash(item.Bytes));
+                                         if (meta == null)
+                                         {
+                                             badAddress.Add(longPeer);
+                                             return;
+                                         }
+                                         downlaodedSet.Add(item.Value);
+                                         var torrent = ParseBitTorrent(meta);
+                                         torrent.InfoHash = item.Value;
+                                         Console.WriteLine($"download {item.Value} success");
+                                         File.WriteAllText(Path.Combine("torrent", item.Value + ".json"), torrent.ToJson());
+                                     }
                                  }
-                             }
-                             catch (SocketException ex)
-                             {
-                                 badAddress.Add(longPeer);
-                                 log.Error("下载失败", ex);
-                             }
-                             catch (Exception ex)
-                             {
-                                 log.Error("下载失败", ex);
-                             }
-                         });
-                    list.Clear();
+                                 catch (SocketException ex)
+                                 {
+                                     badAddress.Add(longPeer);
+                                     log.Error("下载失败", ex);
+                                 }
+                                 catch (Exception ex)
+                                 {
+                                     log.Error("下载失败", ex);
+                                 }
+                             });
+                        list.Clear();
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Error("循环下载时错误", ex);
+                    }
+                }
+            }, TaskCreationOptions.LongRunning);
+            Task.Factory.StartNew(async () =>
+            {
+                while (true)
+                {
+                    watchLog.Info($"收到消息数：{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待下载InfoHash数：{downLoadQueue.Count}");
+                    await Task.Delay(60 * 1000);
                 }
             }, TaskCreationOptions.LongRunning);
             locker.WaitOne();
