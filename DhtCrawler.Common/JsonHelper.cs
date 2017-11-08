@@ -8,5 +8,10 @@ namespace DhtCrawler.Common
         {
             return JsonConvert.SerializeObject(obj);
         }
+
+        public static T ToObject<T>(this string json)
+        {
+            return string.IsNullOrWhiteSpace(json) ? default(T) : JsonConvert.DeserializeObject<T>(json);
+        }
     }
 }

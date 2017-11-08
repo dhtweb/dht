@@ -76,22 +76,32 @@ namespace DhtCrawler.DHT
         public int ResponseMessageCount => _responseMessageQueue.Count;
         public int FindNodeCount => _nodeQueue.Count;
 
-        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 20)
+        public DhtClient() : this(DhtConfig.Default)
         {
-            _endPoint = new IPEndPoint(IPAddress.Any, port);
+
+        }
+
+        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 20, int sendRate = 100, int receiveRate = 100) : this(new DhtConfig() { Port = port, NodeQueueMaxSize = nodeQueueSize, ReceiveQueueMaxSize = receiveQueueSize, SendQueueMaxSize = sendQueueSize, SendRateLimit = sendRate, ReceiveRateLimit = receiveRate })
+        {
+
+        }
+
+        public DhtClient(DhtConfig config)
+        {
+            _endPoint = new IPEndPoint(IPAddress.Any, config.Port);
             _client = new UdpClient(_endPoint) { Ttl = byte.MaxValue };
 
             //_client.Client.IOControl((IOControlCode)(-1744830452), new byte[] { 0, 0, 0, 0 }, null);
-            _node = new DhtNode() { Host = IPAddress.Any, Port = port, NodeId = GenerateRandomNodeId() };
+            _node = new DhtNode() { Host = IPAddress.Any, Port = config.Port, NodeId = GenerateRandomNodeId() };
             _kTable = new RouteTable(2048);
 
-            _nodeQueue = new BlockingCollection<DhtNode>(nodeQueueSize);
-            _recvMessageQueue = new BlockingCollection<DhtData>(receiveQueueSize);
-            _sendMessageQueue = new BlockingCollection<DhtData>(sendQueueSize);
+            _nodeQueue = new BlockingCollection<DhtNode>(config.NodeQueueMaxSize);
+            _recvMessageQueue = new BlockingCollection<DhtData>(config.ReceiveQueueMaxSize);
+            _sendMessageQueue = new BlockingCollection<DhtData>(config.SendQueueMaxSize);
             _responseMessageQueue = new BlockingCollection<DhtData>();
 
-            _sendRateLimit = new TokenBucketLimit(200 * 1024, 1, TimeUnit.Second);
-            _receveRateLimit = new TokenBucketLimit(200 * 1024, 1, TimeUnit.Second);
+            _sendRateLimit = new TokenBucketLimit(config.SendRateLimit * 1024, 1, TimeUnit.Second);
+            _receveRateLimit = new TokenBucketLimit(config.ReceiveRateLimit * 1024, 1, TimeUnit.Second);
             _tasks = new List<Task>();
         }
 
@@ -169,12 +179,11 @@ namespace DhtCrawler.DHT
                     }
                     else if (!infoHash.IsDown)
                     {
-                        var peer = remotePoint;
                         if (!msg.Data.Keys.Contains("implied_port") || 0.Equals(msg.Data["implied_port"]))//implied_port !=0 则端口使用port  
                         {
-                            peer.Port = Convert.ToInt32(msg.Data["port"]);
+                            remotePoint.Port = Convert.ToInt32(msg.Data["port"]);
                         }
-                        infoHash.Peers = new HashSet<IPEndPoint>(1) { peer };
+                        infoHash.Peers = new HashSet<IPEndPoint>(1) { remotePoint };
                         if (OnFindPeer != null)
                         {
                             await OnFindPeer(infoHash);
@@ -379,7 +388,6 @@ namespace DhtCrawler.DHT
                         if (!_nodeQueue.TryAdd(dhtNode))
                             break;
                     }
-                    await Task.Delay(5000);
                 }
                 while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
                 {
@@ -390,6 +398,7 @@ namespace DhtCrawler.DHT
                     FindNode(node);
                 }
                 nodeSet.Clear();
+                await Task.Delay(5000);
             }
         }
 

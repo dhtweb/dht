@@ -61,7 +61,7 @@ namespace DhtCrawler.DHT.Message
             foreach (var item in MappingInfo)
             {
                 var tuple = item.Value;
-                if ((DateTime.Now - tuple.LastTime).TotalSeconds > 30)
+                if ((DateTime.Now - tuple.LastTime).TotalSeconds > 60)
                 {
                     MappingInfo.TryRemove(item.Key, out var rm);
                     Bucket.Add(item.Key);
@@ -88,7 +88,7 @@ namespace DhtCrawler.DHT.Message
             }
             TransactionId messageId;
             var start = DateTime.Now;
-            while (!Bucket.TryTake(out messageId))
+            while (!Bucket.TryTake(out messageId, 1000))
             {
                 lock (Bucket)
                 {

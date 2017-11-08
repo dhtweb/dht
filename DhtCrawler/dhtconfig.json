@@ -1,0 +1,8 @@
+﻿{
+  "Port": 53386,
+  "NodeQueueMaxSize": 10240,
+  "ReceiveQueueMaxSize": 10240,
+  "SendQueueMaxSize": 20480,
+  "SendRateLimit": 150,
+  "ReceiveRateLimit": 150
+}

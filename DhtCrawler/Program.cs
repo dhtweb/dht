@@ -9,12 +9,14 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using BitTorrent.Listeners;
+using DhtCrawler.BitTorrent;
 using DhtCrawler.Collections;
 using DhtCrawler.Utils;
 using log4net;
 using log4net.Config;
 using Tancoder.Torrent.BEncoding;
 using DhtCrawler.Common;
+using BitTorrentClient = BitTorrent.Listeners.BitTorrentClient;
 
 namespace DhtCrawler
 {
@@ -27,20 +29,10 @@ namespace DhtCrawler
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         static void Main(string[] args)
         {
-            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
-            {
-                watchLog.Error(e.ExceptionObject);
-            };
-            Directory.CreateDirectory("torrent");
-            Directory.CreateDirectory("info");
-            var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
-            XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
-            foreach (var file in Directory.GetFiles("torrent"))
-            {
-                downlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
-            }
+            Init();
             var locker = new ManualResetEvent(false);
-            var dhtClient = new DhtClient(53386);
+            var config = File.Exists("dhtconfig.json") ? File.ReadAllText("dhtconfig.json").ToObject<DhtConfig>() : DhtConfig.Default;
+            var dhtClient = new DhtClient(config);
             dhtClient.OnFindPeer += DhtClient_OnFindPeer;
             dhtClient.OnReceiveInfoHash += DhtClient_OnReceiveInfoHash;
             Console.CancelKeyPress += (sender, e) =>
@@ -139,6 +131,19 @@ namespace DhtCrawler
             locker.WaitOne();
         }
 
+        private static void Init()
+        {
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) => { watchLog.Error(e.ExceptionObject); };
+            Directory.CreateDirectory("torrent");
+            Directory.CreateDirectory("info");
+            var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
+            XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
+            foreach (var file in Directory.GetFiles("torrent"))
+            {
+                downlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
+            }
+        }
+
         private static async Task DownloadBitTorrent(InfoHash infoItem)
         {
             if (downlaodedSet.Contains(infoItem.Value))
@@ -175,7 +180,6 @@ namespace DhtCrawler
                 }
             }
         }
-
 
         private static async Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
         {
@@ -219,20 +223,5 @@ namespace DhtCrawler
             return torrent;
         }
 
-    }
-
-
-    class Torrent
-    {
-        public string InfoHash { get; set; }
-        public string Name { get; set; }
-        public long FileSize { get; set; }
-        public IList<TorrentFile> Files { get; set; }
-    }
-
-    class TorrentFile
-    {
-        public long FileSize { get; set; }
-        public string Name { get; set; }
     }
 }
