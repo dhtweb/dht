@@ -92,12 +92,12 @@ namespace DhtCrawler.DHT.Message
             {
                 lock (Bucket)
                 {
+                    if (Bucket.TryTake(out messageId))
+                        break;
                     if ((DateTime.Now - start).TotalSeconds > 10)//10秒内获取不到就丢弃
                     {
                         return false;
                     }
-                    if (Bucket.TryTake(out messageId))
-                        break;
                     ClearExpireMessage();
                 }
             }

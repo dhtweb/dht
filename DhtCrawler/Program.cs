@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Threading;
@@ -16,15 +17,17 @@ using log4net;
 using log4net.Config;
 using Tancoder.Torrent.BEncoding;
 using DhtCrawler.Common;
+using DhtCrawler.Store;
 using BitTorrentClient = BitTorrent.Listeners.BitTorrentClient;
 
 namespace DhtCrawler
 {
     class Program
     {
-        private static readonly ConcurrentStack<InfoHash> downLoadQueue = new ConcurrentStack<InfoHash>();
-        private static readonly ConcurrentHashSet<string> downlaodedSet = new ConcurrentHashSet<string>();
-        private static readonly ConcurrentHashSet<long> badAddress = new ConcurrentHashSet<long>();
+        private static readonly ConcurrentStack<InfoHash> DownLoadQueue = new ConcurrentStack<InfoHash>();
+        private static readonly ConcurrentHashSet<string> DownlaodedSet = new ConcurrentHashSet<string>();
+        private static readonly ConcurrentHashSet<long> BadAddress = new ConcurrentHashSet<long>();
+        private static readonly StoreManager<InfoHash> InfoStore = new StoreManager<InfoHash>("infohash.store");
         private static readonly ILog log = LogManager.GetLogger(typeof(Program));
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         static void Main(string[] args)
@@ -35,27 +38,36 @@ namespace DhtCrawler
             var dhtClient = new DhtClient(config);
             dhtClient.OnFindPeer += DhtClient_OnFindPeer;
             dhtClient.OnReceiveInfoHash += DhtClient_OnReceiveInfoHash;
+            dhtClient.Run();
             Console.CancelKeyPress += (sender, e) =>
             {
                 dhtClient.ShutDown();
                 locker.Set();
                 e.Cancel = true;
             };
-            dhtClient.Run();
             Task.Factory.StartNew(async () =>
             {
-                var downSize = 128;
+                var downSize = 256;
                 var list = new List<InfoHash>(downSize);
                 while (true)
                 {
                     try
                     {
-
-                        if (!downLoadQueue.TryPop(out InfoHash info) || downlaodedSet.Contains(info.Value))
+                        if (!DownLoadQueue.TryPop(out InfoHash info))
                         {
-                            await Task.Delay(500);
-                            continue;
+                            if (InfoStore.CanRead)
+                            {
+                                info = InfoStore.ReadLast();
+                            }
+                            else
+                            {
+                                await Task.Delay(500);
+                                continue;
+                            }
                         }
+                        if (DownlaodedSet.Contains(info.Value))
+                            continue;
+                        downSize++;
                         list.Add(info);
                         if (list.Count < downSize)
                         {
@@ -71,16 +83,16 @@ namespace DhtCrawler
                                      result.Peers.Add(point);
                                  }
                              }
-                             return result.Peers.Where(point => point.Address.IsPublic() && !badAddress.Contains(point.ToInt64())).Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
-                         });
-                        Parallel.ForEach(uniqueItems, new ParallelOptions() { MaxDegreeOfParallelism = 16, TaskScheduler = TaskScheduler.Current }, item =>
+                             return result.Peers.Where(point => point.Address.IsPublic() && !BadAddress.Contains(point.ToInt64())).Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
+                         }).OrderBy(it => it.Peer);
+                        Parallel.ForEach(uniqueItems, new ParallelOptions() { MaxDegreeOfParallelism = 32, TaskScheduler = TaskScheduler.Current }, item =>
                              {
-                                 if (downlaodedSet.Contains(item.Value))
+                                 if (DownlaodedSet.Contains(item.Value))
                                      return;
                                  var longPeer = item.Peer.ToInt64();
                                  try
                                  {
-                                     if (badAddress.Contains(longPeer))
+                                     if (BadAddress.Contains(longPeer))
                                      {
                                          return;
                                      }
@@ -90,10 +102,10 @@ namespace DhtCrawler
                                          var meta = client.GetMetaData(new Tancoder.Torrent.InfoHash(item.Bytes));
                                          if (meta == null)
                                          {
-                                             badAddress.Add(longPeer);
+                                             BadAddress.Add(longPeer);
                                              return;
                                          }
-                                         downlaodedSet.Add(item.Value);
+                                         DownlaodedSet.Add(item.Value);
                                          var torrent = ParseBitTorrent(meta);
                                          torrent.InfoHash = item.Value;
                                          Console.WriteLine($"download {item.Value} success");
@@ -102,7 +114,7 @@ namespace DhtCrawler
                                  }
                                  catch (SocketException ex)
                                  {
-                                     badAddress.Add(longPeer);
+                                     BadAddress.Add(longPeer);
                                      log.Error("下载失败", ex);
                                  }
                                  catch (Exception ex)
@@ -122,7 +134,7 @@ namespace DhtCrawler
             {
                 while (true)
                 {
-                    watchLog.Info($"收到消息数：{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待下载InfoHash数：{downLoadQueue.Count}");
+                    watchLog.Info($"收到消息数：{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待下载InfoHash数：{DownLoadQueue.Count}");
                     ThreadPool.GetAvailableThreads(out var workThreadNum, out var ioThreadNum);
                     watchLog.Info($"工作线程数：{workThreadNum},IO线程数:{ioThreadNum}");
                     await Task.Delay(60 * 1000);
@@ -140,20 +152,20 @@ namespace DhtCrawler
             XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
             foreach (var file in Directory.GetFiles("torrent"))
             {
-                downlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
+                DownlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
             }
         }
 
         private static async Task DownloadBitTorrent(InfoHash infoItem)
         {
-            if (downlaodedSet.Contains(infoItem.Value))
+            if (DownlaodedSet.Contains(infoItem.Value))
                 return;
             foreach (var peer in infoItem.Peers)
             {
                 try
                 {
                     var longPeer = peer.ToInt64();
-                    if (badAddress.Contains(longPeer))
+                    if (BadAddress.Contains(longPeer))
                     {
                         continue;
                     }
@@ -163,10 +175,10 @@ namespace DhtCrawler
                         var meta = await client.GetMetaDataAsync(new Tancoder.Torrent.InfoHash(infoItem.Bytes));
                         if (meta == null)
                         {
-                            badAddress.Add(longPeer);
+                            BadAddress.Add(longPeer);
                             continue;
                         }
-                        downlaodedSet.Add(infoItem.Value);
+                        DownlaodedSet.Add(infoItem.Value);
                         var torrent = ParseBitTorrent(meta);
                         torrent.InfoHash = infoItem.Value;
                         Console.WriteLine($"download {infoItem.Value} success");
@@ -183,13 +195,20 @@ namespace DhtCrawler
 
         private static async Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
         {
-            infoHash.IsDown = downlaodedSet.Contains(infoHash.Value);
+            infoHash.IsDown = DownlaodedSet.Contains(infoHash.Value);
             await File.AppendAllTextAsync(Path.Combine("info", $"hash{Thread.CurrentThread.ManagedThreadId}.txt"), infoHash.Value + Environment.NewLine);
         }
 
         private static Task DhtClient_OnFindPeer(InfoHash arg)
         {
-            downLoadQueue.Push(arg);
+            if (DownLoadQueue.Count > 30 * 1024)
+            {
+                InfoStore.Add(arg);
+            }
+            else
+            {
+                DownLoadQueue.Push(arg);
+            }
             Console.WriteLine($"get {arg.Value} peers success");
             return Task.CompletedTask;
         }
