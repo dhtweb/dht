@@ -57,7 +57,6 @@ namespace DhtCrawler.DHT.Message
 
         private static void ClearExpireMessage()
         {
-            log.Info($"开始清理过期的命令ID,清理前可用命令ID{Bucket.Count}");
             foreach (var item in MappingInfo)
             {
                 var tuple = item.Value;
@@ -67,7 +66,7 @@ namespace DhtCrawler.DHT.Message
                     Bucket.Add(item.Key);
                 }
             }
-            log.Info($"清理过期的命令ID结束,清理后可用命令ID{Bucket.Count}");
+            log.Info($"清理过期的命令ID,清理后可用命令ID数：{Bucket.Count}");
         }
 
         public static bool RegisterMessage(DhtMessage message)

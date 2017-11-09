@@ -67,7 +67,6 @@ namespace DhtCrawler
                         }
                         if (DownlaodedSet.Contains(info.Value))
                             continue;
-                        downSize++;
                         list.Add(info);
                         if (list.Count < downSize)
                         {
@@ -203,7 +202,7 @@ namespace DhtCrawler
         {
             if (DownlaodedSet.Contains(arg.Value))
                 return Task.CompletedTask;
-            if (DownLoadQueue.Count > 30 * 1024)
+            if (DownLoadQueue.Count > 1)
             {
                 InfoStore.Add(arg);
             }
