@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading;
 
-namespace DhtCrawler.Extension
+namespace DhtCrawler.Common.Extension
 {
     public static class ReadWriteLockExtend
     {

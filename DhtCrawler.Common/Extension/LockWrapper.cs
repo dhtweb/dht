@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace DhtCrawler.Extension
+namespace DhtCrawler.Common.Extension
 {
     public class LockWrapper : IDisposable
     {

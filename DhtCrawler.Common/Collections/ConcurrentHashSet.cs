@@ -2,33 +2,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
-using DhtCrawler.Extension;
+using DhtCrawler.Common.Compare;
+using DhtCrawler.Common.Extension;
 
-namespace DhtCrawler.Collections
+namespace DhtCrawler.Common.Collections
 {
     public class ConcurrentHashSet<T> : ISet<T>
     {
-        private class WrapperComparer<T> : IEqualityComparer<T>
-        {
-
-            private readonly Func<T, T, bool> _compareFunc;
-            private readonly Func<T, int> _hashFunc;
-            public WrapperComparer(Func<T, T, bool> compareFunc, Func<T, int> hashFunc)
-            {
-                this._compareFunc = compareFunc;
-                this._hashFunc = hashFunc;
-            }
-
-            public bool Equals(T x, T y)
-            {
-                return _compareFunc(x, y);
-            }
-
-            public int GetHashCode(T obj)
-            {
-                return _hashFunc(obj);
-            }
-        }
         private readonly ReaderWriterLockSlim rwLockSlim;
         private readonly HashSet<T> hashSet;
         public ConcurrentHashSet()
@@ -40,7 +20,7 @@ namespace DhtCrawler.Collections
         public ConcurrentHashSet(Func<T, T, bool> compare, Func<T, int> hash)
         {
             rwLockSlim = new ReaderWriterLockSlim();
-            hashSet = new HashSet<T>(new WrapperComparer<T>(compare, hash));
+            hashSet = new HashSet<T>(new WrapperEqualityComparer<T>(compare, hash));
         }
 
         public IEnumerator<T> GetEnumerator()

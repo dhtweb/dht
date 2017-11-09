@@ -11,12 +11,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using BitTorrent.Listeners;
 using DhtCrawler.BitTorrent;
-using DhtCrawler.Collections;
 using DhtCrawler.Utils;
 using log4net;
 using log4net.Config;
 using Tancoder.Torrent.BEncoding;
 using DhtCrawler.Common;
+using DhtCrawler.Common.Collections;
+using DhtCrawler.Common.Compare;
 using DhtCrawler.Store;
 using BitTorrentClient = BitTorrent.Listeners.BitTorrentClient;
 
@@ -30,6 +31,7 @@ namespace DhtCrawler
         private static readonly StoreManager<InfoHash> InfoStore = new StoreManager<InfoHash>("infohash.store");
         private static readonly ILog log = LogManager.GetLogger(typeof(Program));
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
+        private const int DownMetaMaxSize = 1024 * 30;
         static void Main(string[] args)
         {
             Init();
@@ -49,6 +51,7 @@ namespace DhtCrawler
             {
                 var downSize = 256;
                 var list = new List<InfoHash>(downSize);
+                var pointComparer = new WrapperComparer<IPEndPoint>((x, y) => x.ToInt64().CompareTo(y.ToInt64()));
                 while (true)
                 {
                     try
@@ -83,7 +86,7 @@ namespace DhtCrawler
                                  }
                              }
                              return result.Peers.Where(point => point.Address.IsPublic() && !BadAddress.Contains(point.ToInt64())).Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
-                         }).OrderBy(it => it.Peer);
+                         }).OrderBy(it => it.Peer, pointComparer);
                         Parallel.ForEach(uniqueItems, new ParallelOptions() { MaxDegreeOfParallelism = 32, TaskScheduler = TaskScheduler.Current }, item =>
                              {
                                  if (DownlaodedSet.Contains(item.Value))
@@ -202,7 +205,7 @@ namespace DhtCrawler
         {
             if (DownlaodedSet.Contains(arg.Value))
                 return Task.CompletedTask;
-            if (DownLoadQueue.Count > 1)
+            if (DownLoadQueue.Count > DownMetaMaxSize)
             {
                 InfoStore.Add(arg);
             }
