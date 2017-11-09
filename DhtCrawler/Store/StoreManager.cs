@@ -5,12 +5,13 @@ namespace DhtCrawler.Store
 {
     public class StoreManager<T> : IDisposable where T : IStoreEntity, new()
     {
-        private const uint DataByteSize = 4;
-        private const uint IndexByteSize = 8;
-        private BinaryWriter writer;
-        private BinaryReader reader;
-        private long readIndex;
-        private long writeIndex;
+        private const uint IntSize = 4;
+        private const uint LongSize = 8;
+        private readonly BinaryWriter writer;
+        private readonly BinaryReader reader;
+        private long _readIndex;
+        private long _writeIndex;
+        private long _count;
         public StoreManager(string filePath)
         {
             var fileStream = new FileStream(filePath, FileMode.OpenOrCreate);
@@ -18,14 +19,16 @@ namespace DhtCrawler.Store
             reader = new BinaryReader(fileStream);
             if (fileStream.Length <= 0)
             {
-                readIndex = writeIndex = 16;
-                writer.Write(readIndex);
-                writer.Write(writeIndex);
+                _readIndex = _writeIndex = 24;
+                writer.Write(_count);
+                writer.Write(_readIndex);
+                writer.Write(_writeIndex);
             }
             else
             {
-                readIndex = reader.ReadInt64();
-                writeIndex = reader.ReadInt64();
+                _count = reader.ReadInt64();
+                _readIndex = reader.ReadInt64();
+                _writeIndex = reader.ReadInt64();
             }
         }
 
@@ -33,11 +36,23 @@ namespace DhtCrawler.Store
         private void SetIndex(long wIndex, long rIndex)
         {
             writer.BaseStream.Seek(0, SeekOrigin.Begin);
-            writer.Write(wIndex);
+            writer.Write(_count);
             writer.Write(rIndex);
-            this.writeIndex = wIndex;
-            this.readIndex = rIndex;
+            writer.Write(wIndex);
+            this._writeIndex = wIndex;
+            this._readIndex = rIndex;
             writer.Flush();
+        }
+
+        public long Count
+        {
+            get
+            {
+                lock (this)
+                {
+                    return _count;
+                }
+            }
         }
 
         public long Position
@@ -51,19 +66,20 @@ namespace DhtCrawler.Store
             }
         }
 
-        public bool CanRead => this.writeIndex != 16;
+        public bool CanRead => this._writeIndex != 24;
 
         public void Add(IStoreEntity item)
         {
             var byteArray = item.ToBytes();
             lock (this)
             {
-                writer.BaseStream.Seek(writeIndex, SeekOrigin.Begin);
-                writer.Write(readIndex);
+                _count++;
+                writer.BaseStream.Seek(_writeIndex, SeekOrigin.Begin);
+                writer.Write(_readIndex);
                 writer.Write(byteArray.Length);
                 writer.Write(byteArray);
                 #region 设置文件头
-                long wIndex = Position, rIndex = wIndex - IndexByteSize - DataByteSize - byteArray.Length;
+                long wIndex = Position, rIndex = wIndex - LongSize - IntSize - byteArray.Length;
                 SetIndex(wIndex, rIndex);
                 #endregion
             }
@@ -76,7 +92,8 @@ namespace DhtCrawler.Store
             {
                 if (!CanRead)
                     return default(T);
-                reader.BaseStream.Seek(readIndex, SeekOrigin.Begin);
+                _count--;
+                reader.BaseStream.Seek(_readIndex, SeekOrigin.Begin);
                 var preReadIndex = reader.ReadInt64();
                 var length = reader.ReadInt32();
                 var byteArray = new byte[length];
@@ -88,7 +105,7 @@ namespace DhtCrawler.Store
 
                 #region 设置文件头
 
-                long rIndex = preReadIndex, wIndex = Position - IndexByteSize - DataByteSize - byteArray.Length;
+                long rIndex = preReadIndex, wIndex = Position - LongSize - IntSize - byteArray.Length;
                 SetIndex(wIndex, rIndex);
 
                 #endregion

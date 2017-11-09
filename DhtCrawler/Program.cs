@@ -134,7 +134,7 @@ namespace DhtCrawler
             {
                 while (true)
                 {
-                    watchLog.Info($"收到消息数：{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待下载InfoHash数：{DownLoadQueue.Count}");
+                    watchLog.Info($"收到消息数：{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待下载InfoHash数：{DownLoadQueue.Count},堆积的infoHash数：{InfoStore.Count}");
                     ThreadPool.GetAvailableThreads(out var workThreadNum, out var ioThreadNum);
                     watchLog.Info($"工作线程数：{workThreadNum},IO线程数:{ioThreadNum}");
                     await Task.Delay(60 * 1000);
@@ -201,6 +201,8 @@ namespace DhtCrawler
 
         private static Task DhtClient_OnFindPeer(InfoHash arg)
         {
+            if (DownlaodedSet.Contains(arg.Value))
+                return Task.CompletedTask;
             if (DownLoadQueue.Count > 30 * 1024)
             {
                 InfoStore.Add(arg);
