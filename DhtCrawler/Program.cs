@@ -156,7 +156,7 @@ namespace DhtCrawler
                         await Task.Delay(1000);
                         continue;
                     }
-                    await File.WriteAllTextAsync(Path.Combine("info", "hash.txt"), info + Environment.NewLine);
+                    await File.AppendAllTextAsync(Path.Combine("info", "hash.txt"), info + Environment.NewLine);
                 }
             }, TaskCreationOptions.LongRunning);
             locker.WaitOne();
