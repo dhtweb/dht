@@ -11,7 +11,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DhtCrawler.Test", "DhtCrawl
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DhtCrawler.Common", "DhtCrawler.Common\DhtCrawler.Common.csproj", "{8C7D7FB7-70D8-46F1-A6E0-87EF9F815EDC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DhtCrawler.Web", "DhtCrawler.Web\DhtCrawler.Web.csproj", "{E9352619-9DCA-4CCE-99F0-7AC8D072BD59}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DhtCrawler.Web", "DhtCrawler.Web\DhtCrawler.Web.csproj", "{E9352619-9DCA-4CCE-99F0-7AC8D072BD59}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DhtCrawler.Service", "DhtCrawler.Service\DhtCrawler.Service.csproj", "{756154DD-7422-4DDC-83D6-F19340C59F52}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{E9352619-9DCA-4CCE-99F0-7AC8D072BD59}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E9352619-9DCA-4CCE-99F0-7AC8D072BD59}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E9352619-9DCA-4CCE-99F0-7AC8D072BD59}.Release|Any CPU.Build.0 = Release|Any CPU
+		{756154DD-7422-4DDC-83D6-F19340C59F52}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{756154DD-7422-4DDC-83D6-F19340C59F52}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{756154DD-7422-4DDC-83D6-F19340C59F52}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{756154DD-7422-4DDC-83D6-F19340C59F52}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
