@@ -4,7 +4,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Threading;
@@ -17,7 +16,6 @@ using log4net.Config;
 using Tancoder.Torrent.BEncoding;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
-using DhtCrawler.Common.Compare;
 using DhtCrawler.Store;
 using BitTorrentClient = BitTorrent.Listeners.BitTorrentClient;
 
@@ -25,6 +23,7 @@ namespace DhtCrawler
 {
     class Program
     {
+        private static readonly ConcurrentQueue<string> InfoHashQueue = new ConcurrentQueue<string>();
         private static readonly ConcurrentStack<InfoHash> DownLoadQueue = new ConcurrentStack<InfoHash>();
         private static readonly ConcurrentHashSet<string> DownlaodedSet = new ConcurrentHashSet<string>();
         private static readonly ConcurrentHashSet<long> BadAddress = new ConcurrentHashSet<long>();
@@ -51,30 +50,38 @@ namespace DhtCrawler
             {
                 var downSize = 256;
                 var list = new List<InfoHash>(downSize);
-                var pointComparer = new WrapperComparer<IPEndPoint>((x, y) => x.ToInt64().CompareTo(y.ToInt64()));
+                var parallel = new ParallelOptions() { MaxDegreeOfParallelism = 8, TaskScheduler = TaskScheduler.Current };
                 while (true)
                 {
                     try
                     {
-                        if (!DownLoadQueue.TryPop(out InfoHash info))
+
+                        while (true)
                         {
-                            if (InfoStore.CanRead)
+                            if (!DownLoadQueue.TryPop(out var info))
                             {
-                                info = InfoStore.ReadLast();
+                                if (InfoStore.CanRead)
+                                {
+                                    info = InfoStore.ReadLast();
+                                }
                             }
-                            else
-                            {
-                                await Task.Delay(500);
+                            if (info == null)
+                                break;
+                            if (DownlaodedSet.Contains(info.Value))
                                 continue;
+                            list.Add(info);
+                            if (list.Count > downSize)
+                            {
+                                break;
                             }
                         }
-                        if (DownlaodedSet.Contains(info.Value))
-                            continue;
-                        list.Add(info);
-                        if (list.Count < downSize)
+                        if (list.Count <= 0)
                         {
+                            await Task.Delay(500);
                             continue;
                         }
+
+                        var rand = new Random();
                         var uniqueItems = list.GroupBy(l => l.Value).SelectMany(gl =>
                          {
                              var result = gl.First();
@@ -86,8 +93,8 @@ namespace DhtCrawler
                                  }
                              }
                              return result.Peers.Where(point => point.Address.IsPublic() && !BadAddress.Contains(point.ToInt64())).Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
-                         }).OrderBy(it => it.Peer, pointComparer);
-                        Parallel.ForEach(uniqueItems, new ParallelOptions() { MaxDegreeOfParallelism = 32, TaskScheduler = TaskScheduler.Current }, item =>
+                         }).OrderBy(it => it.Bytes[rand.Next(it.Bytes.Length)]);
+                        Parallel.ForEach(uniqueItems, parallel, item =>
                              {
                                  if (DownlaodedSet.Contains(item.Value))
                                      return;
@@ -136,10 +143,20 @@ namespace DhtCrawler
             {
                 while (true)
                 {
-                    watchLog.Info($"收到消息数：{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待下载InfoHash数：{DownLoadQueue.Count},堆积的infoHash数：{InfoStore.Count}");
-                    ThreadPool.GetAvailableThreads(out var workThreadNum, out var ioThreadNum);
-                    watchLog.Info($"工作线程数：{workThreadNum},IO线程数:{ioThreadNum}");
+                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count}");
                     await Task.Delay(60 * 1000);
+                }
+            }, TaskCreationOptions.LongRunning);
+            Task.Factory.StartNew(async () =>
+            {
+                while (true)
+                {
+                    if (!InfoHashQueue.TryDequeue(out var info))
+                    {
+                        await Task.Delay(1000);
+                        continue;
+                    }
+                    await File.WriteAllTextAsync(Path.Combine("info", "hash.txt"), info + Environment.NewLine);
                 }
             }, TaskCreationOptions.LongRunning);
             locker.WaitOne();
@@ -195,10 +212,11 @@ namespace DhtCrawler
             }
         }
 
-        private static async Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
+        private static Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
         {
             infoHash.IsDown = DownlaodedSet.Contains(infoHash.Value);
-            await File.AppendAllTextAsync(Path.Combine("info", $"hash{Thread.CurrentThread.ManagedThreadId}.txt"), infoHash.Value + Environment.NewLine);
+            InfoHashQueue.Enqueue(infoHash.Value);
+            return Task.CompletedTask;
         }
 
         private static Task DhtClient_OnFindPeer(InfoHash arg)

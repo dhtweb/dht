@@ -2,7 +2,10 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Reflection;
+using System.Threading;
+using DhtCrawler.Common.Compare;
 using DhtCrawler.Utils;
 using log4net;
 
@@ -12,14 +15,22 @@ namespace DhtCrawler.DHT.Message
     {
         private class MapInfo
         {
-            public CommandType Type { get; set; }
             public byte[] InfoHash { get; set; }
             public DateTime LastTime { get; set; }
+        }
+
+        private class IdMapInfo
+        {
+            public TransactionId TransactionId { get; set; }
+            public int Count { get; set; }
         }
 
         private static readonly ILog log = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         private static readonly BlockingCollection<TransactionId> Bucket = new BlockingCollection<TransactionId>();
         private static readonly ConcurrentDictionary<TransactionId, MapInfo> MappingInfo = new ConcurrentDictionary<TransactionId, MapInfo>();
+
+        private static readonly IEqualityComparer<byte[]> ByteArrayComparer = new WrapperEqualityComparer<byte[]>((x, y) => x.Length == y.Length && x.SequenceEqual(y), x => x.Sum(b => b));
+        private static readonly ConcurrentDictionary<byte[], IdMapInfo> IdMappingInfo = new ConcurrentDictionary<byte[], IdMapInfo>(ByteArrayComparer);
         private static readonly IDictionary<CommandType, TransactionId> TypeMapTransactionId;
         private static readonly IDictionary<TransactionId, CommandType> TransactionIdMapType;
         static MessageMap()
@@ -57,13 +68,20 @@ namespace DhtCrawler.DHT.Message
 
         private static void ClearExpireMessage()
         {
+            var removeItems = new HashSet<byte[]>(ByteArrayComparer);
             foreach (var item in MappingInfo)
             {
                 var tuple = item.Value;
                 if ((DateTime.Now - tuple.LastTime).TotalSeconds > 60)
                 {
                     MappingInfo.TryRemove(item.Key, out var rm);
+                    removeItems.Add(rm.InfoHash);
                     Bucket.Add(item.Key);
+                }
+                foreach (var mapInfo in IdMappingInfo)
+                {
+                    if (mapInfo.Value.Count <= 0 || removeItems.Contains(mapInfo.Key))
+                        IdMappingInfo.TryRemove(mapInfo.Key, out var rm);
                 }
             }
             log.Info($"清理过期的命令ID,清理后可用命令ID数：{Bucket.Count}");
@@ -86,28 +104,44 @@ namespace DhtCrawler.DHT.Message
                     return false;
             }
             TransactionId messageId;
-            var start = DateTime.Now;
-            while (!Bucket.TryTake(out messageId, 1000))
+            var infoHash = message.Get<byte[]>("info_hash");
+            if (IdMappingInfo.TryGetValue(infoHash, out var idMap))
             {
-                lock (Bucket)
+                lock (idMap)
                 {
-                    if (Bucket.TryTake(out messageId))
-                        break;
-                    if ((DateTime.Now - start).TotalSeconds > 10)//10秒内获取不到就丢弃
-                    {
-                        return false;
-                    }
-                    ClearExpireMessage();
+                    idMap.Count++;
+                }
+                messageId = idMap.TransactionId;
+                if (MappingInfo.TryGetValue(messageId, out var info))
+                {
+                    info.LastTime = DateTime.Now;
                 }
             }
-            if (!MappingInfo.TryAdd(messageId, new MapInfo()
+            else
             {
-                Type = CommandType.Get_Peers,
-                LastTime = DateTime.Now,
-                InfoHash = message.Get<byte[]>("info_hash")
-            }))
-            {
-                return false;
+                var start = DateTime.Now;
+                while (!Bucket.TryTake(out messageId, 1000))
+                {
+                    lock (Bucket)
+                    {
+                        if (Bucket.TryTake(out messageId))
+                            break;
+                        if ((DateTime.Now - start).TotalSeconds > 10)//10秒内获取不到就丢弃
+                        {
+                            return false;
+                        }
+                        ClearExpireMessage();
+                    }
+                }
+                if (!MappingInfo.TryAdd(messageId, new MapInfo()
+                {
+                    LastTime = DateTime.Now,
+                    InfoHash = infoHash
+                }))
+                {
+                    return false;
+                }
+                IdMappingInfo.TryAdd(infoHash, new IdMapInfo() { Count = 1, TransactionId = messageId });
             }
             message.MessageId = messageId;
             return true;
@@ -121,13 +155,33 @@ namespace DhtCrawler.DHT.Message
                 return true;
             }
             message.CommandType = CommandType.Get_Peers;
-            if (MappingInfo.TryRemove(message.MessageId, out var obj))
-                Bucket.Add(message.MessageId);
-            if (obj?.InfoHash == null)
+            if (MappingInfo.TryGetValue(message.MessageId, out var mapInfo))
+            {
+                var rmFlag = false;
+                if (IdMappingInfo.TryGetValue(mapInfo.InfoHash, out var idMap))
+                {
+                    lock (idMap)
+                    {
+                        idMap.Count--;
+                    }
+                    var count = 0;
+                    if (Interlocked.CompareExchange(ref count, 0, idMap.Count) == 0)
+                    {
+                        rmFlag = true;
+                        IdMappingInfo.TryRemove(mapInfo.InfoHash, out var rm);
+                    }
+                }
+                if (idMap == null || rmFlag)
+                {
+                    if (MappingInfo.TryRemove(message.MessageId, out var obj))
+                        Bucket.Add(message.MessageId);
+                }
+            }
+            if (mapInfo?.InfoHash == null)
             {
                 return false;
             }
-            message.Data.Add("info_hash", obj.InfoHash);
+            message.Data.Add("info_hash", mapInfo.InfoHash);
             return true;
         }
     }

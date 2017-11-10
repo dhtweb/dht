@@ -25,11 +25,7 @@ namespace DhtCrawler.DHT.Message
             if (!(obj is TransactionId) && !(obj is byte[]))
                 return false;
             var it = (TransactionId)obj;
-            if (_bytes.Length != it._bytes.Length)
-            {
-                return false;
-            }
-            return !_bytes.Where((t, i) => t != it._bytes[i]).Any();
+            return _bytes.Length == it._bytes.Length && _bytes.SequenceEqual(it._bytes);
         }
 
         public override int GetHashCode()

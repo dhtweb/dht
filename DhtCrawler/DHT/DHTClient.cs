@@ -433,7 +433,7 @@ namespace DhtCrawler.DHT
         {
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, 1).Select(i => ProcessMsgData())));
+            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, 2).Select(i => ProcessMsgData())));
             Task.Run(() => _tasks.Add(LoopFindNodes()));
             Task.Run(() => _tasks.Add(LoopSendMsg()));
             _logger.Info("starting");
