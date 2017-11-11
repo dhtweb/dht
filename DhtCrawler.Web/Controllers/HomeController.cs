@@ -1,15 +1,24 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using DhtCrawler.Web.Models;
 using DhtCrawler.Common;
+using DhtCrawler.Service;
+using DhtCrawler.Service.Model;
 
 namespace DhtCrawler.Web.Controllers
 {
     public class HomeController : Controller
     {
+        private InfoHashRepository _infoHashRepository;
+
+        public HomeController(InfoHashRepository infoHashRepository)
+        {
+            this._infoHashRepository = infoHashRepository;
+        }
         public IActionResult Index()
         {
             return View();
@@ -24,7 +33,6 @@ namespace DhtCrawler.Web.Controllers
 
         public async Task<IActionResult> Contact()
         {
-            ViewData["Message"] = "Your contact page.";
             var files = Directory.GetFiles("info");
             var set = new Dictionary<string, int>();
             foreach (var file in files)
@@ -41,6 +49,10 @@ namespace DhtCrawler.Web.Controllers
                         set[line] = 1;
                     }
                 }
+            }
+            foreach (var kv in set)
+            {
+                await _infoHashRepository.InsertOrUpdate(new InfoHashModel() { CreateTime = DateTime.Now, DownNum = kv.Value, InfoHash = kv.Key });
             }
             return Content(set.ToJson());
             //return View();

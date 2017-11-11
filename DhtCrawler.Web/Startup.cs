@@ -1,11 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using DhtCrawler.Service;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MongoDB.Driver;
 
 namespace DhtCrawler.Web
 {
@@ -22,6 +20,18 @@ namespace DhtCrawler.Web
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddMvc();
+            services.AddSingleton(provider =>
+            {
+                var serverUrl = Configuration.GetValue<string>("mongodb.server");
+                var port = Configuration.GetValue<int>("mongodb.port");
+                var client = new MongoClient(new MongoClientSettings() { Server = new MongoServerAddress(serverUrl, port) });
+                return client.GetDatabase("dht");
+            });
+            services.AddSingleton(provider =>
+            {
+                var database = provider.GetService<IMongoDatabase>();
+                return new InfoHashRepository(database);
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

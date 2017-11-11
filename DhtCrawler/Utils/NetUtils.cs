@@ -11,7 +11,7 @@ namespace DhtCrawler.Utils
         {
             if (bytes == null || bytes.Length != 4)
                 throw new ArgumentException();
-            return (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+            return ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]);
         }
 
         public static long ToInt64(byte[] array)
@@ -38,7 +38,7 @@ namespace DhtCrawler.Utils
         public static long ToInt64(this IPEndPoint endPoint)
         {
             long ipNum = endPoint.Address.ToInt64();
-            return ipNum << 2 | endPoint.Port;
+            return ipNum << 2 | (long)endPoint.Port;
         }
 
         public static long ToInt64(this IPAddress address)
@@ -51,15 +51,6 @@ namespace DhtCrawler.Utils
 
         static NetUtils()
         {
-            //private static readonly long LocalIp = IPAddress.Parse("127.0.0.1").ToInt64();
-            //private static readonly long BroadcastIp = IPAddress.Parse("255.255.255.255").ToInt64();
-            //ReserveIpRange.Add(10, new Tuple<long, long>(IPAddress.Parse("10.0.0.0").ToInt64(), IPAddress.Parse("10.255.255.255").ToInt64()));
-            //ReserveIpRange.Add(100, new Tuple<long, long>(IPAddress.Parse("100.64.0.0").ToInt64(), IPAddress.Parse("100.127.255.255").ToInt64()));
-            //ReserveIpRange.Add(169, new Tuple<long, long>(IPAddress.Parse("169.254.0.0").ToInt64(), IPAddress.Parse("169.254.255.255").ToInt64()));
-            //ReserveIpRange.Add(172, new Tuple<long, long>(IPAddress.Parse("172.16.0.0").ToInt64(), IPAddress.Parse("172.31.255.255").ToInt64()));
-            //ReserveIpRange.Add(192, new Tuple<long, long>(IPAddress.Parse("192.168.0.0").ToInt64(), IPAddress.Parse("192.168.255.255").ToInt64()));
-            //ReserveIpRange.Add(224, new Tuple<long, long>(IPAddress.Parse("224.0.0.0").ToInt64(), IPAddress.Parse("239.255.255.255").ToInt64()));
-            //ReserveIpRange.Add(239, new Tuple<long, long>(IPAddress.Parse("10.0.0.0").ToInt64(), IPAddress.Parse("10.255.255.255").ToInt64()));
             var ipInfos = new[]
             {
                 "0.0.0.0/8",
@@ -127,13 +118,10 @@ namespace DhtCrawler.Utils
             return new Tuple<long, long>(ToInt64(startArray), ToInt64(endArray));
         }
 
-
-
         public static bool IsPublic(this IPAddress address)
         {
             var ipNumber = address.ToInt64();
             return ReserveIpRange.All(range => range.Item1 > ipNumber || range.Item2 < ipNumber);
-            //return ipNumber != 0 && ipNumber != LocalIp && ipNumber != BroadcastIp;//0.0.0.0 127.0.0.1 255.255.255.255
         }
     }
 }

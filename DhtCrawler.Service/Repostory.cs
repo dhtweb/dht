@@ -1,12 +1,14 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using DhtCrawler.Service.Model;
 using MongoDB.Driver;
 
 namespace DhtCrawler.Service
 {
-    public abstract class BaseRepository<T>
+    public abstract class BaseRepository<T> where T : BaseModel<string>
     {
-        private IMongoCollection<T> _collection;
+        protected IMongoCollection<T> _collection;
 
         protected abstract string CollectionName { get; }
 
@@ -24,6 +26,5 @@ namespace DhtCrawler.Service
         {
             await _collection.InsertManyAsync(list);
         }
-
     }
 }

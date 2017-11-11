@@ -52,6 +52,7 @@ namespace DhtCrawler.DHT
         private readonly IList<Task> _tasks;
         private readonly IRateLimit _sendRateLimit;
         private readonly IRateLimit _receveRateLimit;
+        private readonly int _processThreadNum;
         private volatile bool running = false;
 
         private byte[] GetNeighborNodeId(byte[] targetId)
@@ -76,12 +77,12 @@ namespace DhtCrawler.DHT
         public int ResponseMessageCount => _responseMessageQueue.Count;
         public int FindNodeCount => _nodeQueue.Count;
 
-        public DhtClient() : this(DhtConfig.Default)
+        public DhtClient() : this(new DhtConfig())
         {
 
         }
 
-        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 20, int sendRate = 100, int receiveRate = 100) : this(new DhtConfig() { Port = port, NodeQueueMaxSize = nodeQueueSize, ReceiveQueueMaxSize = receiveQueueSize, SendQueueMaxSize = sendQueueSize, SendRateLimit = sendRate, ReceiveRateLimit = receiveRate })
+        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 20, int sendRate = 100, int receiveRate = 100, int threadNum = 1) : this(new DhtConfig() { Port = port, NodeQueueMaxSize = nodeQueueSize, ReceiveQueueMaxSize = receiveQueueSize, SendQueueMaxSize = sendQueueSize, SendRateLimit = sendRate, ReceiveRateLimit = receiveRate, ProcessThreadNum = threadNum })
         {
 
         }
@@ -102,6 +103,7 @@ namespace DhtCrawler.DHT
 
             _sendRateLimit = new TokenBucketLimit(config.SendRateLimit * 1024, 1, TimeUnit.Second);
             _receveRateLimit = new TokenBucketLimit(config.ReceiveRateLimit * 1024, 1, TimeUnit.Second);
+            _processThreadNum = config.ProcessThreadNum;
             _tasks = new List<Task>();
         }
 
@@ -433,7 +435,7 @@ namespace DhtCrawler.DHT
         {
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, 2).Select(i => ProcessMsgData())));
+            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, _processThreadNum).Select(i => ProcessMsgData())));
             Task.Run(() => _tasks.Add(LoopFindNodes()));
             Task.Run(() => _tasks.Add(LoopSendMsg()));
             _logger.Info("starting");

@@ -4,5 +4,6 @@
   "ReceiveQueueMaxSize": 20480,
   "SendQueueMaxSize": 20480,
   "SendRateLimit": 150,
-  "ReceiveRateLimit": 150
+  "ReceiveRateLimit": 150,
+  "ProcessThreadNum": 1
 }

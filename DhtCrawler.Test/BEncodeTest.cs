@@ -16,7 +16,7 @@ namespace DhtCrawler.Test
         static void EncodeTest()
         {
             var str =
-                "64-31-BA-04-64-32-3A-69-64-32-30-3A-CD-E3-77-4B-B7-3A-98-7A-3A-C9-33-BB-E0-68-66-A0-F7-F9-0A-58-36-3A-74-61-72-67-65-74-32-30-3A-81-0C-B9-91-16-DF-BB-43-D4-11-CE-91-F6-02-A7-C7-BC-83-96-35-65-31-3A-71-39-3A-66-69-6E-64-5F-6E-6F-64-65-31-3A-74-32-3A-00-00-31-3A-79-31-3A-71-65".Split('-');
+                "64-31-3A-65-6C-69-32-30-33-65-31-34-3A-45-72-72-6F-72-20-50-72-6F-74-6F-63-6F-6C-65-31-3A-74".Split('-');
             var bytes = new List<byte>();
             foreach (var s in str)
             {
@@ -61,7 +61,7 @@ namespace DhtCrawler.Test
         [Fact]
         static void Test()
         {
-            var lines = File.ReadAllLines(@"E:\code\DhtCrawler\DhtCrawler\torrent\FD1A5EB1254BADC3313C571152B0258D1B56E5BA");
+            var lines = File.ReadAllLines(@"E:\Code\dotnetcore\dht\DhtCrawler\bin\Release\PublishOutput\torrent\B2960BC78CBBE627E43DCE0562C0DB6552F190A7");
             foreach (var line in lines)
             {
                 if (!line.StartsWith("files"))

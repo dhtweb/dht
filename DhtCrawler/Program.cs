@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using BitTorrent.Listeners;
@@ -35,7 +36,7 @@ namespace DhtCrawler
         {
             Init();
             var locker = new ManualResetEvent(false);
-            var config = File.Exists("dhtconfig.json") ? File.ReadAllText("dhtconfig.json").ToObject<DhtConfig>() : DhtConfig.Default;
+            var config = File.Exists("dhtconfig.json") ? File.ReadAllText("dhtconfig.json").ToObject<DhtConfig>() : new DhtConfig();
             var dhtClient = new DhtClient(config);
             dhtClient.OnFindPeer += DhtClient_OnFindPeer;
             dhtClient.OnReceiveInfoHash += DhtClient_OnReceiveInfoHash;
@@ -118,7 +119,10 @@ namespace DhtCrawler
                                          var torrent = ParseBitTorrent(meta);
                                          torrent.InfoHash = item.Value;
                                          Console.WriteLine($"download {item.Value} success");
-                                         File.WriteAllText(Path.Combine("torrent", item.Value + ".json"), torrent.ToJson());
+                                         lock (item.Value)
+                                         {
+                                             File.WriteAllText(Path.Combine("torrent", item.Value + ".json"), torrent.ToJson());
+                                         }
                                      }
                                  }
                                  catch (SocketException ex)
@@ -249,16 +253,49 @@ namespace DhtCrawler
             if (metaData.ContainsKey("files"))
             {
                 var files = (BEncodedList)metaData["files"];
-                torrent.Files = new TorrentFile[files.Count];
+                torrent.Files = new List<TorrentFile>();
                 for (int j = 0; j < files.Count; j++)
                 {
                     var file = (BEncodedDictionary)files[j];
-                    var item = new TorrentFile
+                    var filePaths = ((BEncodedList)file["path"]).Select(path => ((BEncodedString)path).Text).ToArray();
+                    var fileSize = ((BEncodedNumber)file["length"]).Number;
+                    if (filePaths.Length > 1)
                     {
-                        FileSize = ((BEncodedNumber)file["length"]).Number,
-                        Name = string.Join('/', ((BEncodedList)file["path"]).Select(path => ((BEncodedString)path).Text))
-                    };
-                    torrent.Files[j] = item;
+                        var directory = torrent.Files.FirstOrDefault(f => f.Name == filePaths[0]);
+                        if (directory == null)
+                        {
+                            directory = new TorrentFile() { Name = filePaths[0], Files = new List<TorrentFile>() };
+                            torrent.Files.Add(directory);
+                        }
+                        for (int i = 1, l = filePaths.Length - 1; i < filePaths.Length; i++)
+                        {
+                            var path = filePaths[i];
+                            if (i == l)
+                            {
+                                var fileItem = new TorrentFile() { Name = path, FileSize = fileSize };
+                                directory.Files.Add(fileItem);
+                            }
+                            else
+                            {
+                                var newDirectory = directory.Files.FirstOrDefault(f => f.Name == path);
+                                if (newDirectory == null)
+                                {
+                                    newDirectory = new TorrentFile() { Name = path, Files = new List<TorrentFile>() };
+                                    directory.Files.Add(newDirectory);
+                                }
+                                directory = newDirectory;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var item = new TorrentFile
+                        {
+                            FileSize = fileSize,
+                            Name = filePaths[0]
+                        };
+                        torrent.Files.Add(item);
+                    }
                 }
             }
             return torrent;

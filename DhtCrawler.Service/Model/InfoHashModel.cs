@@ -1,10 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace DhtCrawler.Service.Model
 {
-    public class InfoHashModel
+    public class InfoHashModel : BaseModel<string>
     {
         /// <summary>
         /// InfoHash
@@ -18,8 +17,12 @@ namespace DhtCrawler.Service.Model
         /// </summary>
         public uint FileSize { get; set; }
         public int DownNum { get; set; }
-        public DateTime CreateTime { get; set; }
-        public DateTime UpdateTime { get; set; }
         public IList<TorrentFileModel> Files { get; set; }
+        public bool IsDown { get; set; }
+        public override string Id
+        {
+            get => InfoHash;
+            set => InfoHash = value;
+        }
     }
 }

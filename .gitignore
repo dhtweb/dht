@@ -10,6 +10,7 @@
 bin/
 obj/
 log/
+info/
 torrent/
 Properties/
 /.vs
