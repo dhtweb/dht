@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using BitTorrent.Listeners;
@@ -78,10 +77,9 @@ namespace DhtCrawler
                         }
                         if (list.Count <= 0)
                         {
-                            await Task.Delay(500);
+                            await Task.Delay(1000);
                             continue;
                         }
-
                         var rand = new Random();
                         var uniqueItems = list.GroupBy(l => l.Value).SelectMany(gl =>
                          {
@@ -136,7 +134,6 @@ namespace DhtCrawler
                                  }
                              });
                         list.Clear();
-                        await Task.Delay(1000);
                     }
                     catch (Exception ex)
                     {

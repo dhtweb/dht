@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
-using System.Threading;
 using DhtCrawler.Common.Compare;
 using DhtCrawler.Utils;
 using log4net;
@@ -24,7 +23,7 @@ namespace DhtCrawler.DHT.Message
             public TransactionId TransactionId { get; set; }
             public int Count { get; set; }
         }
-
+        private static readonly object SyncRoot = new object();
         private static readonly ILog log = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         private static readonly BlockingCollection<TransactionId> Bucket = new BlockingCollection<TransactionId>();
         private static readonly ConcurrentDictionary<TransactionId, MapInfo> MappingInfo = new ConcurrentDictionary<TransactionId, MapInfo>();
@@ -105,24 +104,21 @@ namespace DhtCrawler.DHT.Message
             }
             TransactionId messageId;
             var infoHash = message.Get<byte[]>("info_hash");
-            if (IdMappingInfo.TryGetValue(infoHash, out var idMap))
+            lock (SyncRoot)
             {
-                lock (idMap)
+                if (IdMappingInfo.TryGetValue(infoHash, out var idMap))
                 {
                     idMap.Count++;
+                    messageId = idMap.TransactionId;
+                    if (MappingInfo.TryGetValue(messageId, out var info))
+                    {
+                        info.LastTime = DateTime.Now;
+                    }
                 }
-                messageId = idMap.TransactionId;
-                if (MappingInfo.TryGetValue(messageId, out var info))
+                else
                 {
-                    info.LastTime = DateTime.Now;
-                }
-            }
-            else
-            {
-                var start = DateTime.Now;
-                while (!Bucket.TryTake(out messageId, 1000))
-                {
-                    lock (Bucket)
+                    var start = DateTime.Now;
+                    while (!Bucket.TryTake(out messageId, 1000))
                     {
                         if (Bucket.TryTake(out messageId))
                             break;
@@ -132,16 +128,16 @@ namespace DhtCrawler.DHT.Message
                         }
                         ClearExpireMessage();
                     }
+                    if (!MappingInfo.TryAdd(messageId, new MapInfo()
+                    {
+                        LastTime = DateTime.Now,
+                        InfoHash = infoHash
+                    }))
+                    {
+                        return false;
+                    }
+                    IdMappingInfo.TryAdd(infoHash, new IdMapInfo() { Count = 1, TransactionId = messageId });
                 }
-                if (!MappingInfo.TryAdd(messageId, new MapInfo()
-                {
-                    LastTime = DateTime.Now,
-                    InfoHash = infoHash
-                }))
-                {
-                    return false;
-                }
-                IdMappingInfo.TryAdd(infoHash, new IdMapInfo() { Count = 1, TransactionId = messageId });
             }
             message.MessageId = messageId;
             return true;
@@ -155,26 +151,27 @@ namespace DhtCrawler.DHT.Message
                 return true;
             }
             message.CommandType = CommandType.Get_Peers;
-            if (MappingInfo.TryGetValue(message.MessageId, out var mapInfo))
+            MapInfo mapInfo;
+            lock (SyncRoot)
             {
-                var rmFlag = false;
-                if (IdMappingInfo.TryGetValue(mapInfo.InfoHash, out var idMap))
+                if (MappingInfo.TryGetValue(message.MessageId, out mapInfo))
                 {
-                    lock (idMap)
+
+                    if (IdMappingInfo.TryGetValue(mapInfo.InfoHash, out var idMap))
                     {
                         idMap.Count--;
+                        if (idMap.Count <= 0)
+                        {
+                            IdMappingInfo.TryRemove(mapInfo.InfoHash, out var rm);
+                            if (MappingInfo.TryRemove(message.MessageId, out var obj))
+                                Bucket.Add(message.MessageId);
+                        }
                     }
-                    var count = 0;
-                    if (Interlocked.CompareExchange(ref count, 0, idMap.Count) == 0)
+                    else
                     {
-                        rmFlag = true;
-                        IdMappingInfo.TryRemove(mapInfo.InfoHash, out var rm);
+                        if (MappingInfo.TryRemove(message.MessageId, out var obj))
+                            Bucket.Add(message.MessageId);
                     }
-                }
-                if (idMap == null || rmFlag)
-                {
-                    if (MappingInfo.TryRemove(message.MessageId, out var obj))
-                        Bucket.Add(message.MessageId);
                 }
             }
             if (mapInfo?.InfoHash == null)
