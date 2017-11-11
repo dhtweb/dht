@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27004.2006
+VisualStudioVersion = 15.0.27004.2005
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DhtCrawler", "DhtCrawler\DhtCrawler.csproj", "{F4BEA567-5453-40DB-BA9F-244E122052AE}"
 EndProject
@@ -13,9 +13,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DhtCrawler.Common", "DhtCra
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DhtCrawler.Web", "DhtCrawler.Web\DhtCrawler.Web.csproj", "{E9352619-9DCA-4CCE-99F0-7AC8D072BD59}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DhtCrawler.Service", "DhtCrawler.Service\DhtCrawler.Service.csproj", "{756154DD-7422-4DDC-83D6-F19340C59F52}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DhtCrawler.Service", "DhtCrawler.Service\DhtCrawler.Service.csproj", "{756154DD-7422-4DDC-83D6-F19340C59F52}"
 EndProject
 Global
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
@@ -51,5 +54,8 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {98FBCA21-44A4-429B-AC48-A803C40562D0}
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal

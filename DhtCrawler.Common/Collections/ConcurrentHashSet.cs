@@ -25,14 +25,12 @@ namespace DhtCrawler.Common.Collections
 
         public IEnumerator<T> GetEnumerator()
         {
-            try
+            using (rwLockSlim.EnterRead())
             {
-                rwLockSlim.EnterReadLock();
-                return hashSet.GetEnumerator();
-            }
-            finally
-            {
-                rwLockSlim.ExitReadLock();
+                foreach (var item in hashSet)
+                {
+                    yield return item;
+                }
             }
         }
 

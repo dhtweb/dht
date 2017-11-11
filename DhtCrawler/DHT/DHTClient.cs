@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using DhtCrawler.Common.RateLimit;
 using DhtCrawler.DHT.Message;
@@ -38,6 +39,7 @@ namespace DhtCrawler.DHT
         /// </summary>
         private static readonly TimeSpan EnqueueWaitTime = TimeSpan.FromSeconds(10);
         private readonly ILog _logger = LogManager.GetLogger(typeof(DhtClient));
+        private readonly ILog _dhtLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "dhtLogger");
 
         private readonly UdpClient _client;
         private readonly IPEndPoint _endPoint;
@@ -207,10 +209,13 @@ namespace DhtCrawler.DHT
 
         private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
         {
+            _dhtLog.Info("before require register info");
             if (!MessageMap.RequireRegisteredInfo(msg))
             {
+                _dhtLog.Info("end require register info");
                 return;
             }
+            _dhtLog.Info("end require register info");
             var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
             _kTable.AddOrUpdateNode(responseNode);
             object nodeInfo;
@@ -281,9 +286,11 @@ namespace DhtCrawler.DHT
                     switch (msg.MesageType)
                     {
                         case MessageType.Request:
+                            _dhtLog.Info("request handler");
                             await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
                             break;
                         case MessageType.Response:
+                            _dhtLog.Info("response handler");
                             await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
                             break;
                     }
@@ -325,10 +332,12 @@ namespace DhtCrawler.DHT
                 MesageType = MessageType.Request,
                 Data = new SortedDictionary<string, object>(data)
             };
+            _dhtLog.Info("before register info");
             if (!MessageMap.RegisterMessage(msg))
             {
                 return;
             }
+            _dhtLog.Info("end register info");
             msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
             MessageEnqueue(msg, node);
         }
@@ -351,6 +360,7 @@ namespace DhtCrawler.DHT
         {
             while (running)
             {
+                _dhtLog.Info("loop send msg");
                 var queue = _responseMessageQueue.Count <= 0 ? _sendMessageQueue : _responseMessageQueue;
                 if (!queue.TryTake(out DhtData dhtData))
                 {
@@ -401,6 +411,7 @@ namespace DhtCrawler.DHT
                 }
                 nodeSet.Clear();
                 await Task.Delay(5000);
+                _dhtLog.Info("loop find nodes");
             }
         }
 
@@ -435,9 +446,26 @@ namespace DhtCrawler.DHT
         {
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, _processThreadNum).Select(i => ProcessMsgData())));
-            Task.Run(() => _tasks.Add(LoopFindNodes()));
-            Task.Run(() => _tasks.Add(LoopSendMsg()));
+            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, _processThreadNum).Select(i =>
+            {
+                var local = i;
+                return ProcessMsgData().ContinueWith(
+                    t =>
+                    {
+                        Console.WriteLine("ProcessMsg {0} Over", local);
+                        _dhtLog.InfoFormat("ProcessMsg {0} Over", local);
+                    });
+            })));
+            Task.Run(() => _tasks.Add(LoopFindNodes().ContinueWith(t =>
+            {
+                Console.WriteLine("Loop FindNode Over");
+                _dhtLog.Info("Loop FindNode Over");
+            })));
+            Task.Run(() => _tasks.Add(LoopSendMsg().ContinueWith(t =>
+            {
+                Console.WriteLine("Loop SendMeg Over");
+                _dhtLog.Info("Loop SendMeg Over");
+            })));
             _logger.Info("starting");
         }
 

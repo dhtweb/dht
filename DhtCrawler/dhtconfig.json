@@ -1,5 +1,5 @@
 ﻿{
-  "Port": 53386,
+  "Port": 53388,
   "NodeQueueMaxSize": 10240,
   "ReceiveQueueMaxSize": 20480,
   "SendQueueMaxSize": 20480,

@@ -136,6 +136,7 @@ namespace DhtCrawler
                                  }
                              });
                         list.Clear();
+                        await Task.Delay(1000);
                     }
                     catch (Exception ex)
                     {
