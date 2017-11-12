@@ -446,16 +446,19 @@ namespace DhtCrawler.DHT
         {
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, _processThreadNum).Select(i =>
+            Task.Run(() =>
             {
-                var local = i;
-                return ProcessMsgData().ContinueWith(
-                    t =>
-                    {
-                        Console.WriteLine("ProcessMsg {0} Over", local);
-                        _dhtLog.InfoFormat("ProcessMsg {0} Over", local);
-                    });
-            })));
+                _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, _processThreadNum).Select(i =>
+                {
+                    var local = i;
+                    return ProcessMsgData().ContinueWith(
+                         t =>
+                         {
+                             Console.WriteLine("ProcessMsg {0} Over", local);
+                             _dhtLog.InfoFormat("ProcessMsg {0} Over", local);
+                         });
+                })));
+            });
             Task.Run(() => _tasks.Add(LoopFindNodes().ContinueWith(t =>
             {
                 Console.WriteLine("Loop FindNode Over");
