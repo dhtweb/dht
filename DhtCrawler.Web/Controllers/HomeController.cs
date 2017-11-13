@@ -2,10 +2,13 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using DhtCrawler.Web.Models;
 using DhtCrawler.Common;
+using DhtCrawler.Common.Mvc.Result;
 using DhtCrawler.Service;
 using DhtCrawler.Service.Model;
 
@@ -56,6 +59,27 @@ namespace DhtCrawler.Web.Controllers
             }
             return Content(set.ToJson());
             //return View();
+        }
+
+        public IActionResult DownTorrent()
+        {
+            //Response.ContentType = "application/octet-stream";
+            //Response.Headers["Content-Disposition"] = "attachment;filename=test.zip";
+            //var files = Directory.GetFiles(@"E:\Code\dotnetcore\dht\DhtCrawler\bin\Release\PublishOutput\torrent");
+            //using (var zip = new ZipArchive(Response.Body, ZipArchiveMode.Create))
+            //{
+            //    foreach (var filePath in files)
+            //    {
+            //        var file = zip.CreateEntry(Path.GetFileName(filePath));
+            //        using (var fileStream = file.Open())
+            //        {
+            //            var bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+            //            await fileStream.WriteAsync(bytes, 0, bytes.Length);
+            //            await fileStream.FlushAsync();
+            //        }
+            //    }
+            //}
+            return new ZipResult(@"E:\Code\dotnetcore\dht\DhtCrawler\bin\Release\PublishOutput\torrent", "torrent.zip");
         }
 
         public IActionResult Error()

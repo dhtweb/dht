@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using BitTorrent.Listeners;
@@ -23,7 +24,7 @@ namespace DhtCrawler
 {
     class Program
     {
-        private static readonly ConcurrentQueue<string> InfoHashQueue = new ConcurrentQueue<string>();
+        private static readonly BlockingCollection<string> InfoHashQueue = new BlockingCollection<string>();
         private static readonly ConcurrentStack<InfoHash> DownLoadQueue = new ConcurrentStack<InfoHash>();
         private static readonly ConcurrentHashSet<string> DownlaodedSet = new ConcurrentHashSet<string>();
         private static readonly ConcurrentHashSet<long> BadAddress = new ConcurrentHashSet<long>();
@@ -31,6 +32,9 @@ namespace DhtCrawler
         private static readonly ILog log = LogManager.GetLogger(typeof(Program));
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         private const int DownMetaMaxSize = 1024 * 30;
+        private const string TorrentPath = "torrent";
+        private const string InfoPath = "info";
+        private static readonly string DownloadInfoPath = Path.Combine(TorrentPath, "downloaded.txt");
         static void Main(string[] args)
         {
             Init();
@@ -50,7 +54,7 @@ namespace DhtCrawler
             {
                 var downSize = 256;
                 var list = new List<InfoHash>(downSize);
-                var parallel = new ParallelOptions() { MaxDegreeOfParallelism = 8, TaskScheduler = TaskScheduler.Current };
+                var parallel = new ParallelOptions() { MaxDegreeOfParallelism = 16, TaskScheduler = TaskScheduler.Current };
                 while (true)
                 {
                     try
@@ -117,9 +121,9 @@ namespace DhtCrawler
                                          var torrent = ParseBitTorrent(meta);
                                          torrent.InfoHash = item.Value;
                                          Console.WriteLine($"download {item.Value} success");
-                                         lock (item.Value)
+                                         lock (DownLoadQueue)
                                          {
-                                             File.WriteAllText(Path.Combine("torrent", item.Value + ".json"), torrent.ToJson());
+                                             File.WriteAllText(Path.Combine(TorrentPath, item.Value + ".json"), torrent.ToJson());
                                          }
                                      }
                                  }
@@ -153,12 +157,39 @@ namespace DhtCrawler
             {
                 while (true)
                 {
-                    if (!InfoHashQueue.TryDequeue(out var info))
+                    var count = 0;
+                    var content = new StringBuilder();
+                    while (InfoHashQueue.TryTake(out var info) && count < 1000)
+                    {
+                        content.Append(info).Append(Environment.NewLine);
+                        count++;
+                    }
+                    if (count > 0)
+                    {
+                        await File.AppendAllTextAsync(Path.Combine(InfoPath, DateTime.Now.ToString("yyyy-MM-dd") + ".txt"), content.ToString());
+                    }
+                    else
                     {
                         await Task.Delay(1000);
-                        continue;
                     }
-                    await File.AppendAllTextAsync(Path.Combine("info", "hash.txt"), info + Environment.NewLine);
+                }
+            }, TaskCreationOptions.LongRunning);
+            Task.Factory.StartNew(async () =>
+            {
+                while (true)
+                {
+                    var directory = new DirectoryInfo(TorrentPath);
+                    var files = directory.GetFiles("*.json");
+                    foreach (var fg in files.GroupBy(f => f.LastWriteTime.Date))
+                    {
+                        var subdirectory = directory.CreateSubdirectory(fg.Key.ToString("yyyy-MM-dd"));
+                        foreach (var fileInfo in fg)
+                        {
+                            fileInfo.MoveTo(Path.Combine(subdirectory.FullName, fileInfo.Name));
+                            await File.AppendAllTextAsync(DownloadInfoPath, Path.GetFileNameWithoutExtension(fileInfo.Name) + Environment.NewLine);
+                        }
+                    }
+                    await Task.Delay(TimeSpan.FromHours(1));
                 }
             }, TaskCreationOptions.LongRunning);
             locker.WaitOne();
@@ -166,14 +197,29 @@ namespace DhtCrawler
 
         private static void Init()
         {
+            Directory.CreateDirectory(TorrentPath);
+            Directory.CreateDirectory(InfoPath);
             AppDomain.CurrentDomain.UnhandledException += (sender, e) => { watchLog.Error(e.ExceptionObject); };
-            Directory.CreateDirectory("torrent");
-            Directory.CreateDirectory("info");
             var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
             XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
-            foreach (var file in Directory.GetFiles("torrent"))
+            var queue = new Queue<string>(new[] { TorrentPath });
+            while (queue.Count > 0)
             {
-                DownlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
+                var dir = queue.Dequeue();
+                foreach (var directory in Directory.GetDirectories(dir))
+                {
+                    queue.Enqueue(directory);
+                }
+                foreach (var file in Directory.GetFiles(dir))
+                {
+                    DownlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
+                }
+            }
+            if (!File.Exists(DownloadInfoPath))
+                return;
+            foreach (var line in File.ReadAllLines(DownloadInfoPath))
+            {
+                DownlaodedSet.Add(line);
             }
         }
 
@@ -217,7 +263,7 @@ namespace DhtCrawler
         private static Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
         {
             infoHash.IsDown = DownlaodedSet.Contains(infoHash.Value);
-            InfoHashQueue.Enqueue(infoHash.Value);
+            InfoHashQueue.Add(infoHash.Value);
             return Task.CompletedTask;
         }
 
