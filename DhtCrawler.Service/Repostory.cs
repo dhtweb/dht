@@ -5,7 +5,7 @@ using MongoDB.Driver;
 
 namespace DhtCrawler.Service
 {
-    public abstract class BaseRepository<T> where T : BaseModel<string>
+    public abstract class BaseRepository<T, TId> where T : BaseModel<TId>
     {
         protected IMongoCollection<T> _collection;
 
@@ -26,9 +26,9 @@ namespace DhtCrawler.Service
             await _collection.InsertManyAsync(list);
         }
 
-        public async Task<bool> Exists(T item)
+        public async Task<bool> Exists(TId key)
         {
-            return await _collection.CountAsync(it => it.Id == item.Id, new CountOptions() { Limit = 1 }) > 0;
+            return await _collection.CountAsync(it => it.Id.Equals(key), new CountOptions() { Limit = 1 }) > 0;
         }
     }
 }

@@ -247,6 +247,8 @@ namespace DhtCrawler.DHT
                     }
                     if (msg.Data.TryGetValue("nodes", out nodeInfo))
                     {
+                        if (!(nodeInfo is byte[]))
+                            return;
                         nodes = DhtNode.ParseNode((byte[])nodeInfo);
                         foreach (var node in nodes)
                         {
