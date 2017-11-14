@@ -9,7 +9,7 @@ namespace DhtCrawler.Web.Controllers
         {
             if (System.IO.File.Exists(path))
             {
-                return File(path, "application/octet-stream");
+                return File(System.IO.File.OpenRead(path), "application/octet-stream");
             }
             return Content("");
         }
