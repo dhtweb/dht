@@ -1,4 +1,6 @@
-﻿namespace DhtCrawler.Service.Model
+﻿using System.Collections.Generic;
+
+namespace DhtCrawler.Service.Model
 {
     public class TorrentFileModel
     {
@@ -7,5 +9,6 @@
         /// 相关联的文件数量（单位kb）
         /// </summary>
         public uint FileSize { get; set; }
+        public IList<TorrentFileModel> ChildFiles { get; set; }
     }
 }

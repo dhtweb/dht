@@ -268,50 +268,53 @@ namespace DhtCrawler.DHT
 
         private async Task ProcessMsgData()
         {
-            while (running)
-            {
-                if (!_recvMessageQueue.TryTake(out DhtData dhtData))
-                {
-                    await Task.Delay(1000);
-                    continue;
-                }
-                try
-                {
-                    var dic = (Dictionary<string, object>)BEncoder.Decode(dhtData.Data);
-                    var msg = new DhtMessage(dic);
-                    switch (msg.MesageType)
-                    {
-                        case MessageType.Request:
-                            await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
-                            break;
-                        case MessageType.Response:
-                            await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
-                            break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error($"ErrorData:{BitConverter.ToString(dhtData.Data)}", ex);
-                    var response = new DhtMessage
-                    {
-                        MesageType = MessageType.Exception,
-                        MessageId = new byte[] { 0, 0 }
-                    };
-                    if (ex is DecodeException)
-                    {
-                        response.Errors.Add(203);
-                        response.Errors.Add("Error Protocol");
-                    }
-                    else
-                    {
-                        response.Errors.Add(202);
-                        response.Errors.Add("Server Error:" + ex.Message);
-                    }
-                    dhtData.Data = response.BEncodeBytes();
-                    _sendMessageQueue.TryAdd(dhtData);
+            await Task.Factory.StartNew(async () =>
+             {
+                 while (running)
+                 {
+                     if (!_recvMessageQueue.TryTake(out DhtData dhtData))
+                     {
+                         await Task.Delay(1000);
+                         continue;
+                     }
+                     try
+                     {
+                         var dic = (Dictionary<string, object>)BEncoder.Decode(dhtData.Data);
+                         var msg = new DhtMessage(dic);
+                         switch (msg.MesageType)
+                         {
+                             case MessageType.Request:
+                                 await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
+                                 break;
+                             case MessageType.Response:
+                                 await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
+                                 break;
+                         }
+                     }
+                     catch (Exception ex)
+                     {
+                         _logger.Error($"ErrorData:{BitConverter.ToString(dhtData.Data)}", ex);
+                         var response = new DhtMessage
+                         {
+                             MesageType = MessageType.Exception,
+                             MessageId = new byte[] { 0, 0 }
+                         };
+                         if (ex is DecodeException)
+                         {
+                             response.Errors.Add(203);
+                             response.Errors.Add("Error Protocol");
+                         }
+                         else
+                         {
+                             response.Errors.Add(202);
+                             response.Errors.Add("Server Error:" + ex.Message);
+                         }
+                         dhtData.Data = response.BEncodeBytes();
+                         _sendMessageQueue.TryAdd(dhtData);
 
-                }
-            }
+                     }
+                 }
+             }, TaskCreationOptions.LongRunning);
         }
 
         #endregion
@@ -350,59 +353,65 @@ namespace DhtCrawler.DHT
 
         private async Task LoopSendMsg()
         {
-            while (running)
+            await Task.Factory.StartNew(async () =>
             {
-                var queue = _responseMessageQueue.Count <= 0 ? _sendMessageQueue : _responseMessageQueue;
-                if (!queue.TryTake(out DhtData dhtData))
+                while (running)
                 {
-                    await Task.Delay(1000);
-                    continue;
-                }
-                try
-                {
-                    while (!_sendRateLimit.Require(dhtData.Data.Length, out var waitTime))
+                    var queue = _responseMessageQueue.Count <= 0 ? _sendMessageQueue : _responseMessageQueue;
+                    if (!queue.TryTake(out DhtData dhtData))
                     {
-                        await Task.Delay(waitTime);
+                        await Task.Delay(1000);
+                        continue;
                     }
-                    await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.RemoteEndPoint);
+                    try
+                    {
+                        while (!_sendRateLimit.Require(dhtData.Data.Length, out var waitTime))
+                        {
+                            await Task.Delay(waitTime);
+                        }
+                        await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.RemoteEndPoint);
+                    }
+                    catch (SocketException)
+                    {
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex);
+                    }
                 }
-                catch (SocketException)
-                {
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex);
-                }
-            }
+            }, TaskCreationOptions.LongRunning);
         }
 
         private async Task LoopFindNodes()
         {
-            int limitNode = 1024 * 10;
-            var nodeSet = new HashSet<DhtNode>();
-            while (running)
+            await Task.Factory.StartNew(async () =>
             {
-                if (_nodeQueue.Count <= 0)
+                int limitNode = 1024 * 10;
+                var nodeSet = new HashSet<DhtNode>();
+                while (running)
                 {
-                    foreach (var dhtNode in BootstrapNodes.Union(_kTable))
+                    if (_nodeQueue.Count <= 0)
                     {
-                        if (!running)
-                            return;
-                        if (!_nodeQueue.TryAdd(dhtNode))
-                            break;
+                        foreach (var dhtNode in BootstrapNodes.Union(_kTable))
+                        {
+                            if (!running)
+                                return;
+                            if (!_nodeQueue.TryAdd(dhtNode))
+                                break;
+                        }
                     }
+                    while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
+                    {
+                        nodeSet.Add(node);
+                    }
+                    foreach (var node in nodeSet)
+                    {
+                        FindNode(node);
+                    }
+                    nodeSet.Clear();
+                    await Task.Delay(5000);
                 }
-                while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
-                {
-                    nodeSet.Add(node);
-                }
-                foreach (var node in nodeSet)
-                {
-                    FindNode(node);
-                }
-                nodeSet.Clear();
-                await Task.Delay(5000);
-            }
+            }, TaskCreationOptions.LongRunning);
         }
 
         #endregion
@@ -436,26 +445,26 @@ namespace DhtCrawler.DHT
         {
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            Task.Run(() =>
+            foreach (var task in Enumerable.Repeat(0, _processThreadNum).Select(i =>
             {
-                _tasks.Add(Task.WhenAll(Enumerable.Repeat(0, _processThreadNum).Select(i =>
-                {
-                    var local = i;
-                    return ProcessMsgData().ContinueWith(
-                         t =>
-                         {
-                             _logger.InfoFormat("ProcessMsg {0} Over", local);
-                         });
-                })));
-            });
-            Task.Run(() => _tasks.Add(LoopFindNodes().ContinueWith(t =>
+                var local = i;
+                return ProcessMsgData().ContinueWith(
+                    t =>
+                    {
+                        _logger.InfoFormat("ProcessMsg {0} Over", local);
+                    });
+            }))
+            {
+                _tasks.Add(task);
+            }
+            _tasks.Add(LoopFindNodes().ContinueWith(t =>
             {
                 _logger.Info("Loop FindNode Over");
-            })));
-            Task.Run(() => _tasks.Add(LoopSendMsg().ContinueWith(t =>
+            }));
+            _tasks.Add(LoopSendMsg().ContinueWith(t =>
             {
                 _logger.Info("Loop SendMeg Over");
-            })));
+            }));
             _logger.Info("starting");
         }
 

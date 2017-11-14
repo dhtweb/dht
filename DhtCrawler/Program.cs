@@ -18,20 +18,18 @@ using Tancoder.Torrent.BEncoding;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
 using DhtCrawler.Store;
-using BitTorrentClient = BitTorrent.Listeners.BitTorrentClient;
 
 namespace DhtCrawler
 {
     class Program
     {
-        private static readonly BlockingCollection<string> InfoHashQueue = new BlockingCollection<string>();
-        private static readonly ConcurrentStack<InfoHash> DownLoadQueue = new ConcurrentStack<InfoHash>();
+        private static readonly ConcurrentQueue<string> InfoHashQueue = new ConcurrentQueue<string>();
+        private static readonly BlockingCollection<InfoHash> DownLoadQueue = new BlockingCollection<InfoHash>(1024);
         private static readonly ConcurrentHashSet<string> DownlaodedSet = new ConcurrentHashSet<string>();
         private static readonly ConcurrentHashSet<long> BadAddress = new ConcurrentHashSet<long>();
         private static readonly StoreManager<InfoHash> InfoStore = new StoreManager<InfoHash>("infohash.store");
         private static readonly ILog log = LogManager.GetLogger(typeof(Program));
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
-        private const int DownMetaMaxSize = 1024 * 30;
         private const string TorrentPath = "torrent";
         private const string InfoPath = "info";
         private static readonly string DownloadInfoPath = Path.Combine(TorrentPath, "downloaded.txt");
@@ -62,7 +60,7 @@ namespace DhtCrawler
 
                         while (true)
                         {
-                            if (!DownLoadQueue.TryPop(out var info))
+                            if (!DownLoadQueue.TryTake(out var info))
                             {
                                 if (InfoStore.CanRead)
                                 {
@@ -159,7 +157,7 @@ namespace DhtCrawler
                 {
                     var count = 0;
                     var content = new StringBuilder();
-                    while (InfoHashQueue.TryTake(out var info) && count < 1000)
+                    while (InfoHashQueue.TryDequeue(out var info) && count < 1000)
                     {
                         content.Append(info).Append(Environment.NewLine);
                         count++;
@@ -223,47 +221,10 @@ namespace DhtCrawler
             }
         }
 
-        private static async Task DownloadBitTorrent(InfoHash infoItem)
-        {
-            if (DownlaodedSet.Contains(infoItem.Value))
-                return;
-            foreach (var peer in infoItem.Peers)
-            {
-                try
-                {
-                    var longPeer = peer.ToInt64();
-                    if (BadAddress.Contains(longPeer))
-                    {
-                        continue;
-                    }
-                    Console.WriteLine($"downloading {infoItem.Value} from {peer}");
-                    using (var client = new BitTorrentClient(peer))
-                    {
-                        var meta = await client.GetMetaDataAsync(new Tancoder.Torrent.InfoHash(infoItem.Bytes));
-                        if (meta == null)
-                        {
-                            BadAddress.Add(longPeer);
-                            continue;
-                        }
-                        DownlaodedSet.Add(infoItem.Value);
-                        var torrent = ParseBitTorrent(meta);
-                        torrent.InfoHash = infoItem.Value;
-                        Console.WriteLine($"download {infoItem.Value} success");
-                        await File.WriteAllTextAsync(Path.Combine("torrent", infoItem.Value + ".json"), torrent.ToJson());
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    log.Error("下载失败", ex);
-                }
-            }
-        }
-
         private static Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
         {
             infoHash.IsDown = DownlaodedSet.Contains(infoHash.Value);
-            InfoHashQueue.Add(infoHash.Value);
+            InfoHashQueue.Enqueue(infoHash.Value);
             return Task.CompletedTask;
         }
 
@@ -271,14 +232,8 @@ namespace DhtCrawler
         {
             if (DownlaodedSet.Contains(arg.Value))
                 return Task.CompletedTask;
-            if (DownLoadQueue.Count > DownMetaMaxSize)
-            {
+            if (!DownLoadQueue.TryAdd(arg))
                 InfoStore.Add(arg);
-            }
-            else
-            {
-                DownLoadQueue.Push(arg);
-            }
             Console.WriteLine($"get {arg.Value} peers success");
             return Task.CompletedTask;
         }
@@ -345,5 +300,33 @@ namespace DhtCrawler
             return torrent;
         }
 
+        private static void test()
+        {
+            var files = Directory.GetFiles(TorrentPath).Where(f => !f.EndsWith(".json"));
+            foreach (var file in files)
+            {
+                var lines = File.ReadAllLines(file);
+                var dic = new BEncodedDictionary();
+                foreach (var line in lines)
+                {
+                    var infos = line.Split('\t');
+                    if (infos[0] == "name")
+                    {
+                        dic.Add("name", new BEncodedString(infos[1]));
+                    }
+                    else if (infos[0] == "files")
+                    {
+                        var data = Encoding.UTF8.GetBytes(infos[1]);
+                        dic.Add("files", BEncodedValue.Decode(data));
+                    }
+                    else if (infos[0] == "length")
+                    {
+                        dic.Add("length", new BEncodedNumber(long.Parse(infos[1])));
+                    }
+                }
+                var torrent = ParseBitTorrent(dic);
+                File.WriteAllText(file + ".json", torrent.ToJson());
+            }
+        }
     }
 }

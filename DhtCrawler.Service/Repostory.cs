@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using DhtCrawler.Service.Model;
 using MongoDB.Driver;
@@ -25,6 +24,11 @@ namespace DhtCrawler.Service
         public async Task Add(IList<T> list)
         {
             await _collection.InsertManyAsync(list);
+        }
+
+        public async Task<bool> Exists(T item)
+        {
+            return await _collection.CountAsync(it => it.Id == item.Id, new CountOptions() { Limit = 1 }) > 0;
         }
     }
 }

@@ -8,12 +8,12 @@ namespace DhtCrawler.Service.Model
         /// <summary>
         /// InfoHash
         /// </summary>
-        [BsonId]
+        [BsonIgnore]
         public string InfoHash { get; set; }
         public string Name { get; set; }
         public int FileNum { get; set; }
         /// <summary>
-        /// 相关联的文件数量（单位kb）
+        /// 相关联的文件大小（单位kb）
         /// </summary>
         public uint FileSize { get; set; }
         public int DownNum { get; set; }

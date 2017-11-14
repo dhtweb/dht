@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DhtCrawler.Common\DhtCrawler.Common.csproj" />
     <ProjectReference Include="..\DhtCrawler.Service\DhtCrawler.Service.csproj" />
+    <ProjectReference Include="..\DhtCrawler.Common.Web\DhtCrawler.Common.Web.csproj" />
   </ItemGroup>
 
 </Project>
