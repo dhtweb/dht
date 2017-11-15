@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using MongoDB.Driver;
+using Npgsql;
 
 namespace DhtCrawler.Web
 {
@@ -20,17 +20,10 @@ namespace DhtCrawler.Web
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddMvc();
-            services.AddSingleton(provider =>
+            services.AddTransient(provider =>
             {
-                var serverUrl = Configuration.GetValue<string>("mongodb.server");
-                var port = Configuration.GetValue<int>("mongodb.port");
-                var client = new MongoClient(new MongoClientSettings() { Server = new MongoServerAddress(serverUrl, port) });
-                return client.GetDatabase("dht");
-            });
-            services.AddSingleton(provider =>
-            {
-                var database = provider.GetService<IMongoDatabase>();
-                return new InfoHashRepository(database);
+                var connection = new NpgsqlConnection("Host=127.0.0.1;Username=zk;Database=dht;Port=5432");
+                return new InfoHashRepository(connection);
             });
         }
 

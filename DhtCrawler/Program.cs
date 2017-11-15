@@ -185,7 +185,13 @@ namespace DhtCrawler
                             var subdirectory = directory.CreateSubdirectory(fg.Key.ToString("yyyy-MM-dd"));
                             foreach (var fileInfo in fg)
                             {
-                                fileInfo.MoveTo(Path.Combine(subdirectory.FullName, fileInfo.Name));
+                                var target = Path.Combine(subdirectory.FullName, fileInfo.Name);
+                                if (File.Exists(target))
+                                {
+                                    fileInfo.Delete();
+                                    continue;
+                                }
+                                fileInfo.MoveTo(target);
                                 await File.AppendAllTextAsync(DownloadInfoPath, Path.GetFileNameWithoutExtension(fileInfo.Name) + Environment.NewLine);
                             }
                         }

@@ -7,12 +7,10 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using DhtCrawler.Web.Models;
-using DhtCrawler.Common;
 using DhtCrawler.Common.Web.Mvc.Result;
 using DhtCrawler.Service;
 using DhtCrawler.Service.Model;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Razor.Language.Extensions;
 
 namespace DhtCrawler.Web.Controllers
 {
@@ -39,18 +37,26 @@ namespace DhtCrawler.Web.Controllers
         public async Task Contact()
         {
             Response.ContentType = "text/plain";
-            var files = Directory.GetFiles(@"J:\down\info");
+            var files = Directory.GetFiles(@"E:\code\DhtCrawler\DhtCrawler\bin\Release\PublishOutput\info");
             foreach (var file in files)
             {
-                var dicInfo = await System.IO.File.ReadAllTextAsync(file, Encoding.UTF8);
-                var set = dicInfo.ToObject<Dictionary<string, int>>();
+                var dicInfo = await System.IO.File.ReadAllLinesAsync(file, Encoding.UTF8);
+                var set = new Dictionary<string, int>();
+                foreach (var info in dicInfo)
+                {
+                    if (!set.ContainsKey(info))
+                    {
+                        set[info] = 0;
+                    }
+                    set[info]++;
+                }
                 var taskList = new List<Task>();
                 var items = new BlockingCollection<KeyValuePair<string, int>>();
                 foreach (var kv in set)
                 {
                     items.Add(kv);
                 }
-                for (int i = 0; i < 10; i++)
+                for (int i = 0; i < 1; i++)
                 {
                     await Response.WriteAsync(file + Environment.NewLine);
                     taskList.Add(Task.Run(async () =>
