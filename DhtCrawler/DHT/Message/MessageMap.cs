@@ -25,13 +25,13 @@ namespace DhtCrawler.DHT.Message
         }
         private static readonly object SyncRoot = new object();
         private static readonly ILog log = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
-        private static readonly BlockingCollection<TransactionId> Bucket = new BlockingCollection<TransactionId>();
-        private static readonly ConcurrentDictionary<TransactionId, MapInfo> MappingInfo = new ConcurrentDictionary<TransactionId, MapInfo>();
-
         private static readonly IEqualityComparer<byte[]> ByteArrayComparer = new WrapperEqualityComparer<byte[]>((x, y) => x.Length == y.Length && x.SequenceEqual(y), x => x.Sum(b => b));
-        private static readonly ConcurrentDictionary<byte[], IdMapInfo> IdMappingInfo = new ConcurrentDictionary<byte[], IdMapInfo>(ByteArrayComparer);
         private static readonly IDictionary<CommandType, TransactionId> TypeMapTransactionId;
         private static readonly IDictionary<TransactionId, CommandType> TransactionIdMapType;
+
+        private static readonly BlockingCollection<TransactionId> Bucket = new BlockingCollection<TransactionId>();
+        private static readonly ConcurrentDictionary<TransactionId, MapInfo> MappingInfo = new ConcurrentDictionary<TransactionId, MapInfo>();
+        private static readonly ConcurrentDictionary<byte[], IdMapInfo> IdMappingInfo = new ConcurrentDictionary<byte[], IdMapInfo>(ByteArrayComparer);
         static MessageMap()
         {
             TypeMapTransactionId = new ReadOnlyDictionary<CommandType, TransactionId>(new Dictionary<CommandType, TransactionId>(3)
@@ -67,23 +67,25 @@ namespace DhtCrawler.DHT.Message
 
         private static void ClearExpireMessage()
         {
+            var startTime = DateTime.Now;
             var removeItems = new HashSet<byte[]>(ByteArrayComparer);
-            foreach (var item in MappingInfo)
+            var snapshotMapInfo = MappingInfo.ToArray();
+            foreach (var item in snapshotMapInfo)
             {
                 var tuple = item.Value;
-                if ((DateTime.Now - tuple.LastTime).TotalSeconds > 60)
-                {
-                    MappingInfo.TryRemove(item.Key, out var rm);
-                    removeItems.Add(rm.InfoHash);
-                    Bucket.Add(item.Key);
-                }
-                foreach (var mapInfo in IdMappingInfo)
-                {
-                    if (mapInfo.Value.Count <= 0 || removeItems.Contains(mapInfo.Key))
-                        IdMappingInfo.TryRemove(mapInfo.Key, out var rm);
-                }
+                if (!((DateTime.Now - tuple.LastTime).TotalSeconds > 60))
+                    continue;
+                MappingInfo.TryRemove(item.Key, out var rm);
+                removeItems.Add(rm.InfoHash);
+                Bucket.Add(item.Key);
             }
-            log.Info($"清理过期的命令ID,清理后可用命令ID数：{Bucket.Count}");
+            var snapshotIdInfo = IdMappingInfo.ToArray();
+            foreach (var mapInfo in snapshotIdInfo)
+            {
+                if (mapInfo.Value.Count <= 0 || removeItems.Contains(mapInfo.Key))
+                    IdMappingInfo.TryRemove(mapInfo.Key, out var rm);
+            }
+            log.Info($"清理过期的命令ID,清理后可用命令ID数:{Bucket.Count},用时:{(DateTime.Now - startTime).TotalSeconds}");
         }
 
         public static bool RegisterMessage(DhtMessage message)
@@ -120,8 +122,6 @@ namespace DhtCrawler.DHT.Message
                     var start = DateTime.Now;
                     while (!Bucket.TryTake(out messageId, 1000))
                     {
-                        if (Bucket.TryTake(out messageId))
-                            break;
                         if ((DateTime.Now - start).TotalSeconds > 10)//10秒内获取不到就丢弃
                         {
                             return false;

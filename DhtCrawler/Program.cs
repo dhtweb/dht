@@ -77,9 +77,9 @@ namespace DhtCrawler
                                 break;
                             }
                         }
+                        //await Task.Delay(1000);
                         if (list.Count <= 0)
                         {
-                            await Task.Delay(1000);
                             continue;
                         }
                         var rand = new Random();
@@ -176,18 +176,25 @@ namespace DhtCrawler
             {
                 while (true)
                 {
-                    var directory = new DirectoryInfo(TorrentPath);
-                    var files = directory.GetFiles("*.json");
-                    foreach (var fg in files.GroupBy(f => f.LastWriteTime.Date))
+                    try
                     {
-                        var subdirectory = directory.CreateSubdirectory(fg.Key.ToString("yyyy-MM-dd"));
-                        foreach (var fileInfo in fg)
+                        var directory = new DirectoryInfo(TorrentPath);
+                        var files = directory.GetFiles("*.json");
+                        foreach (var fg in files.GroupBy(f => f.LastWriteTime.Date))
                         {
-                            fileInfo.MoveTo(Path.Combine(subdirectory.FullName, fileInfo.Name));
-                            await File.AppendAllTextAsync(DownloadInfoPath, Path.GetFileNameWithoutExtension(fileInfo.Name) + Environment.NewLine);
+                            var subdirectory = directory.CreateSubdirectory(fg.Key.ToString("yyyy-MM-dd"));
+                            foreach (var fileInfo in fg)
+                            {
+                                fileInfo.MoveTo(Path.Combine(subdirectory.FullName, fileInfo.Name));
+                                await File.AppendAllTextAsync(DownloadInfoPath, Path.GetFileNameWithoutExtension(fileInfo.Name) + Environment.NewLine);
+                            }
                         }
+                        await Task.Delay(TimeSpan.FromHours(1));
                     }
-                    await Task.Delay(TimeSpan.FromHours(1));
+                    catch (Exception ex)
+                    {
+                        log.Error("move file error", ex);
+                    }
                 }
             }, TaskCreationOptions.LongRunning);
             locker.WaitOne();
