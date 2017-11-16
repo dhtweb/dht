@@ -34,11 +34,11 @@
 // A DEPENDENCY ON SYSTEM.WEB WHICH IS NOT ALWAYS AVAILABLE.
 
 using System;
-using System.Text;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 
-namespace Tancoder.Torrent
+namespace BitTorrent.Source
 {
     static class UriHelper
     {

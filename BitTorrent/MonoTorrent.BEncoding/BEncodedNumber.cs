@@ -27,13 +27,9 @@
 //
 
 
-
 using System;
-using System.IO;
-using System.Text;
-using System.Collections.Generic;
 
-namespace Tancoder.Torrent.BEncoding
+namespace BitTorrent.MonoTorrent.BEncoding
 {
     /// <summary>
     /// Class representing a BEncoded number
@@ -46,8 +42,8 @@ namespace Tancoder.Torrent.BEncoding
         /// </summary>
         public long Number
         {
-            get { return number; }
-            set { number = value; }
+            get => number;
+            set => number = value;
         }
         internal long number;
         #endregion

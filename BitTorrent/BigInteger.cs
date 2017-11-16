@@ -37,9 +37,8 @@
 //
 
 using System;
-using System.Security.Cryptography;
 
-namespace Tancoder.Torrent.Dht
+namespace BitTorrent
 {
 
     public class BigInteger

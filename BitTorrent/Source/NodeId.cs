@@ -30,11 +30,9 @@
 
 
 using System;
-using System.Collections.Generic;
-using System.Text;
-using Tancoder.Torrent.BEncoding;
+using BitTorrent.MonoTorrent.BEncoding;
 
-namespace Tancoder.Torrent.Dht
+namespace BitTorrent.Source
 {
     public class NodeId : IEquatable<NodeId>, IComparable<NodeId>, IComparable
     {
@@ -43,10 +41,7 @@ namespace Tancoder.Torrent.Dht
         BigInteger value;
         private byte[] bytes;
 
-        public byte[] Bytes
-        {
-            get { return bytes; }
-        }
+        public byte[] Bytes => bytes;
 
         public NodeId(byte[] value)
             : this(new BigInteger(value))

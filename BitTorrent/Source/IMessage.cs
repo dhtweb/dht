@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace Tancoder.Torrent.Client.Messages
+namespace BitTorrent.Source
 {
     interface IMessage
     {

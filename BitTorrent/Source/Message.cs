@@ -27,13 +27,11 @@
 //
 
 
-
 using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Net;
+using BitTorrent.Exceptions;
 
-namespace Tancoder.Torrent.Client.Messages
+namespace BitTorrent.Source
 {
     public abstract class Message : IMessage
     {

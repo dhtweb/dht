@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Tancoder.Torrent.Client.Messages;
+﻿using BitTorrent.Source;
 
-namespace Tancoder.Torrent.Messages
+namespace BitTorrent.Messages
 {
     public abstract class WireMessage : Message
     {

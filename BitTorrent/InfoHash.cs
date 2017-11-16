@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Tancoder.Torrent.Common;
-using System.Web;
+using BitTorrent.Source;
 
-namespace Tancoder.Torrent
+namespace BitTorrent
 {
     public class InfoHash : IEquatable <InfoHash>
     {
@@ -20,10 +19,7 @@ namespace Tancoder.Torrent
 
         byte[] hash;
 
-        public byte[] Hash
-        {
-            get { return hash; }
-        }
+        public byte[] Hash => hash;
 
         public InfoHash(byte[] infoHash)
         {

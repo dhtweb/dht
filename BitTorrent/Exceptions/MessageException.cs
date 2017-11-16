@@ -1,8 +1,7 @@
 using System;
-using System.Text;
-using Tancoder.Torrent.Common;
+using BitTorrent.Source;
 
-namespace Tancoder.Torrent.Client
+namespace BitTorrent.Exceptions
 {
     public class MessageException : TorrentException
     {

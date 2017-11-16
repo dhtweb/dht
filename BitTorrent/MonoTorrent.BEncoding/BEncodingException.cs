@@ -27,12 +27,10 @@
 //
 
 
-
 using System;
-using System.Text;
 using System.Runtime.Serialization;
 
-namespace Tancoder.Torrent.BEncoding
+namespace BitTorrent.MonoTorrent.BEncoding
 {
     [Serializable]
     public class BEncodingException : Exception

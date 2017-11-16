@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using DhtCrawler.Common;
@@ -38,7 +39,7 @@ namespace DhtCrawler.Web.Controllers
         public async Task Contact()
         {
             Response.ContentType = "text/plain";
-            var queue = new Queue<string>(new[] { @"G:\torrent\torrent" });
+            var queue = new Queue<string>(new[] { @"E:\Code\dotnetcore\dht\DhtCrawler\torrent" });
             while (queue.Count > 0)
             {
                 var dir = queue.Dequeue();
@@ -47,7 +48,7 @@ namespace DhtCrawler.Web.Controllers
                 {
                     queue.Enqueue(dirPath);
                 }
-                var files = Directory.GetFiles(dir);
+                var files = Directory.GetFiles(dir, "*.json");
                 foreach (var file in files)
                 {
                     var dicInfo = await System.IO.File.ReadAllTextAsync(file, Encoding.UTF8);
@@ -55,7 +56,44 @@ namespace DhtCrawler.Web.Controllers
                     {
                         var model = dicInfo.ToObject<InfoHashModel>();
                         model.IsDown = true;
-                        Console.WriteLine(file);
+                        if (model.Files != null && model.Files.Any(f => f.Name.IndexOf('/') > -1))
+                        {
+                            var metaFiles = model.Files;
+                            model.Files = new List<TorrentFileModel>();
+                            foreach (var metaFile in metaFiles)
+                            {
+                                var paths = metaFile.Name.Split('/');
+                                if (paths.Length <= 1)
+                                {
+                                    model.Files.Add(metaFile);
+                                }
+                                else
+                                {
+                                    var rootFiles = model.Files;
+                                    for (var i = 0; i < paths.Length; i++)
+                                    {
+                                        var path = paths[i];
+                                        var parent = rootFiles.FirstOrDefault(f => f.Name == path);
+                                        if (parent == null)
+                                        {
+                                            parent = new TorrentFileModel() { Name = path, Files = new List<TorrentFileModel>() };
+                                            rootFiles.Add(parent);
+                                        }
+                                        if (i == paths.Length - 1)
+                                        {
+                                            parent.Files = null;
+                                            parent.FileSize = metaFile.FileSize;
+                                        }
+                                        rootFiles = parent.Files;
+                                    }
+                                }
+                            }
+
+                        }
+                        if (string.IsNullOrWhiteSpace(model.InfoHash))
+                        {
+                            model.InfoHash = Path.GetFileNameWithoutExtension(file);
+                        }
                         await Response.WriteAsync(model.InfoHash + Environment.NewLine);
                         await _infoHashRepository.InsertOrUpdate(model);
                         //System.IO.File.Move(file, @"G:\torrent\" + Path.GetFileName(file));
@@ -81,10 +119,9 @@ namespace DhtCrawler.Web.Controllers
                     //    await Response.WriteAsync(info.Value + ",");
                     //}
                 }
-
             }
-
         }
+
 
         public IActionResult DownTorrent()
         {

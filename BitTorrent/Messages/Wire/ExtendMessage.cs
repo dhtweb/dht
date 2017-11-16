@@ -1,12 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Tancoder.Torrent.BEncoding;
+using BitTorrent.MonoTorrent.BEncoding;
 
-namespace Tancoder.Torrent.Messages.Wire
+namespace BitTorrent.Messages.Wire
 {
     public abstract class ExtendMessage : WireMessage
     {
@@ -18,13 +14,8 @@ namespace Tancoder.Torrent.Messages.Wire
             MessageID = ExtendID;
             Parameters = new BEncodedDictionary();
         }
-        public override int ByteLength
-        {
-            get
-            {
-                return Parameters.LengthInBytes() + sizeof(byte) + sizeof(byte) + sizeof(int);
-            }
-        }
+        public override int ByteLength => Parameters.LengthInBytes() + sizeof(byte) + sizeof(byte) + sizeof(int);
+
         public override void Decode(byte[] buffer, int offset, int length)
         {
             base.Decode(buffer, offset, length);

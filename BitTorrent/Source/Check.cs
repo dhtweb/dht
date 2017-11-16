@@ -1,6 +1,6 @@
 using System;
 
-namespace Tancoder.Torrent
+namespace BitTorrent.Source
 {
     public static class Check
     {

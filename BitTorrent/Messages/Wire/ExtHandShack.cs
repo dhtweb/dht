@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Tancoder.Torrent.BEncoding;
+﻿using BitTorrent.MonoTorrent.BEncoding;
 
-namespace Tancoder.Torrent.Messages.Wire
+namespace BitTorrent.Messages.Wire
 {
     public class ExtHandShack : ExtendMessage
     {
@@ -16,10 +11,7 @@ namespace Tancoder.Torrent.Messages.Wire
 
         public bool SupportUtMetadata
         {
-            get
-            {
-                return ((BEncodedDictionary)Parameters[MethodKey]).Keys.Contains(UtMetadataKey);
-            }
+            get => ((BEncodedDictionary)Parameters[MethodKey]).Keys.Contains(UtMetadataKey);
             set
             {
                 if (value)
@@ -30,34 +22,16 @@ namespace Tancoder.Torrent.Messages.Wire
         }
         public byte UtMetadata
         {
-            get
-            {
-                return (byte)((BEncodedNumber)((BEncodedDictionary)Parameters[MethodKey])[UtMetadataKey]).Number;
-            }
-            set
-            {
-                ((BEncodedDictionary)Parameters[MethodKey])[UtMetadataKey] = new BEncodedNumber(value);
-            }
+            get => (byte)((BEncodedNumber)((BEncodedDictionary)Parameters[MethodKey])[UtMetadataKey]).Number;
+            set => ((BEncodedDictionary)Parameters[MethodKey])[UtMetadataKey] = new BEncodedNumber(value);
         }
         public long MetadataSize
         {
-            get
-            {
-                return ((BEncodedNumber)Parameters[MetadataSizeKey]).Number;
-            }
-            set
-            {
-                Parameters[MetadataSizeKey] = new BEncodedNumber(value);
-            }
+            get => ((BEncodedNumber)Parameters[MetadataSizeKey]).Number;
+            set => Parameters[MetadataSizeKey] = new BEncodedNumber(value);
         }
 
-        public bool CanGetMetadate
-        {
-            get
-            {
-                return Parameters.Keys.Contains(MetadataSizeKey) && SupportUtMetadata;
-            }
-        }
+        public bool CanGetMetadate => Parameters.Keys.Contains(MetadataSizeKey) && SupportUtMetadata;
 
         public ExtHandShack()
             : base()

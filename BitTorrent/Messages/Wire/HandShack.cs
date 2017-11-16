@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Tancoder.Torrent.Dht;
-using Tancoder.Torrent.Messages;
+﻿using BitTorrent.Source;
 
-namespace Tancoder.Torrent.Messages.Wire
+namespace BitTorrent.Messages.Wire
 {
     public class HandShack : WireMessage
     {
@@ -16,13 +10,7 @@ namespace Tancoder.Torrent.Messages.Wire
         public bool SupportExtend { get; set; }
         public NodeId PeerId { get; set; }
         public InfoHash InfoHash { get; set; }
-        public override int ByteLength
-        {
-            get
-            {
-                return 1 + Length + Reserved.Length + 20 + 20;
-            }
-        }
+        public override int ByteLength => 1 + Length + Reserved.Length + 20 + 20;
 
         public override int OnMessageLength(byte[] pstrlen)
         {

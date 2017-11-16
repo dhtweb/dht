@@ -27,12 +27,9 @@
 //
 
 
-
 using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace Tancoder.Torrent.Common
+namespace BitTorrent.Source
 {
     [Serializable]
     public class TorrentException : Exception

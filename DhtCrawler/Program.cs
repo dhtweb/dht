@@ -10,11 +10,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using BitTorrent.Listeners;
+using BitTorrent.MonoTorrent.BEncoding;
 using DhtCrawler.BitTorrent;
 using DhtCrawler.Utils;
 using log4net;
 using log4net.Config;
-using Tancoder.Torrent.BEncoding;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
 using DhtCrawler.Store;
@@ -109,7 +109,7 @@ namespace DhtCrawler
                                      Console.WriteLine($"downloading {item.Value} from {item.Peer}");
                                      using (var client = new WireClient(item.Peer))
                                      {
-                                         var meta = client.GetMetaData(new Tancoder.Torrent.InfoHash(item.Bytes));
+                                         var meta = client.GetMetaData(new global::BitTorrent.InfoHash(item.Bytes));
                                          if (meta == null)
                                          {
                                              BadAddress.Add(longPeer);
@@ -269,7 +269,7 @@ namespace DhtCrawler
                 for (int j = 0; j < files.Count; j++)
                 {
                     var file = (BEncodedDictionary)files[j];
-                    var filePaths = ((BEncodedList)file["path"]).Select(path => ((BEncodedString)path).Text).ToArray();
+                    var filePaths = file.ContainsKey("path.utf-8") ? ((BEncodedList)file["path.utf-8"]).Select(path => ((BEncodedString)path).Text).ToArray() : ((BEncodedList)file["path"]).Select(path => Encoding.ASCII.GetString(((BEncodedString)path).TextBytes)).ToArray();
                     var fileSize = ((BEncodedNumber)file["length"]).Number;
                     if (filePaths.Length > 1)
                     {

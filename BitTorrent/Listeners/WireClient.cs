@@ -6,10 +6,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using Tancoder.Torrent;
-using Tancoder.Torrent.BEncoding;
-using Tancoder.Torrent.Messages;
-using Tancoder.Torrent.Messages.Wire;
+using BitTorrent.Messages;
+using BitTorrent.Messages.Wire;
+using BitTorrent.MonoTorrent.BEncoding;
 
 namespace BitTorrent.Listeners
 {

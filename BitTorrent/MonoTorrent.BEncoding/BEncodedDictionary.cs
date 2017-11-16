@@ -27,13 +27,11 @@
 //
 
 
-
 using System;
-using System.IO;
 using System.Collections.Generic;
-using System.Text;
+using System.IO;
 
-namespace Tancoder.Torrent.BEncoding
+namespace BitTorrent.MonoTorrent.BEncoding
 {
     /// <summary>
     /// Class representing a BEncoded Dictionary
@@ -275,10 +273,7 @@ namespace Tancoder.Torrent.BEncoding
             this.dictionary.CopyTo(array, arrayIndex);
         }
 
-        public int Count
-        {
-            get { return this.dictionary.Count; }
-        }
+        public int Count => this.dictionary.Count;
 
         //public int IndexOf(KeyValuePair<BEncodedString, IBEncodedValue> item)
         //{
@@ -290,10 +285,7 @@ namespace Tancoder.Torrent.BEncoding
         //    this.dictionary.Insert(index, item);
         //}
 
-        public bool IsReadOnly
-        {
-            get { return false; }
-        }
+        public bool IsReadOnly => false;
 
         public bool Remove(BEncodedString key)
         {
@@ -317,8 +309,8 @@ namespace Tancoder.Torrent.BEncoding
 
         public BEncodedValue this[BEncodedString key]
         {
-            get { return this.dictionary[key]; }
-            set { this.dictionary[key] = value; }
+            get => this.dictionary[key];
+            set => this.dictionary[key] = value;
         }
 
         //public KeyValuePair<BEncodedString, IBEncodedValue> this[int index]
@@ -327,15 +319,9 @@ namespace Tancoder.Torrent.BEncoding
         //    set { this.dictionary[index] = value; }
         //}
 
-        public ICollection<BEncodedString> Keys
-        {
-            get { return this.dictionary.Keys; }
-        }
+        public ICollection<BEncodedString> Keys => this.dictionary.Keys;
 
-        public ICollection<BEncodedValue> Values
-        {
-            get { return this.dictionary.Values; }
-        }
+        public ICollection<BEncodedValue> Values => this.dictionary.Values;
 
         public IEnumerator<KeyValuePair<BEncodedString, BEncodedValue>> GetEnumerator()
         {

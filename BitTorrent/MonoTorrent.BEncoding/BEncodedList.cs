@@ -27,13 +27,10 @@
 //
 
 
-
 using System;
 using System.Collections.Generic;
-using System.Text;
-using System.IO;
 
-namespace Tancoder.Torrent.BEncoding
+namespace BitTorrent.MonoTorrent.BEncoding
 {
     /// <summary>
     /// Class representing a BEncoded list
@@ -199,10 +196,7 @@ namespace Tancoder.Torrent.BEncoding
             this.list.CopyTo(array, arrayIndex);
         }
 
-        public int Count
-        {
-            get { return this.list.Count; }
-        }
+        public int Count => this.list.Count;
 
         public int IndexOf(BEncodedValue item)
         {
@@ -214,10 +208,7 @@ namespace Tancoder.Torrent.BEncoding
             this.list.Insert(index, item);
         }
 
-        public bool IsReadOnly
-        {
-            get { return false; }
-        }
+        public bool IsReadOnly => false;
 
         public bool Remove(BEncodedValue item)
         {
@@ -231,8 +222,8 @@ namespace Tancoder.Torrent.BEncoding
 
         public BEncodedValue this[int index]
         {
-            get { return this.list[index]; }
-            set { this.list[index] = value; }
+            get => this.list[index];
+            set => this.list[index] = value;
         }
 
         public IEnumerator<BEncodedValue> GetEnumerator()

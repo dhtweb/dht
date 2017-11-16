@@ -27,12 +27,10 @@
 //
 
 
-
 using System;
 using System.IO;
-using System.Text;
 
-namespace Tancoder.Torrent.BEncoding
+namespace BitTorrent.MonoTorrent.BEncoding
 {
     /// <summary>
     /// Base interface for all BEncoded values.

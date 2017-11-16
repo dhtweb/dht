@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Tancoder.Torrent.BEncoding;
+﻿using BitTorrent.MonoTorrent.BEncoding;
 
-namespace Tancoder.Torrent.Messages.Wire
+namespace BitTorrent.Messages.Wire
 {
     public class ExtQueryPiece : ExtendMessage
     {
@@ -14,8 +9,8 @@ namespace Tancoder.Torrent.Messages.Wire
         static readonly byte MsgType = 0;
         public int PieceID
         {
-            get { return (int)((BEncodedNumber)Parameters[PieceKey]).Number; }
-            set { Parameters[PieceKey] = new BEncodedNumber(value); }
+            get => (int)((BEncodedNumber)Parameters[PieceKey]).Number;
+            set => Parameters[PieceKey] = new BEncodedNumber(value);
         }
 
         public ExtQueryPiece()

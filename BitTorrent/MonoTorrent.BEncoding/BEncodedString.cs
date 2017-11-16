@@ -27,15 +27,11 @@
 //
 
 
-
 using System;
-using System.IO;
-using System.Collections;
 using System.Text;
-using Tancoder.Torrent.Common;
-using Tancoder.Torrent.Client.Messages;
+using BitTorrent.Source;
 
-namespace Tancoder.Torrent.BEncoding
+namespace BitTorrent.MonoTorrent.BEncoding
 {
     /// <summary>
     /// Class representing a BEncoded string
@@ -49,17 +45,15 @@ namespace Tancoder.Torrent.BEncoding
         /// </summary>
         public string Text
         {
-            get { return Encoding.UTF8.GetString(textBytes); }
-            set { textBytes = Encoding.UTF8.GetBytes(value); }
+            get => Encoding.UTF8.GetString(textBytes);
+            set => textBytes = Encoding.UTF8.GetBytes(value);
         }
 
         /// <summary>
         /// The underlying byte[] associated with this BEncodedString
         /// </summary>
-        public byte[] TextBytes
-        {
-            get { return this.textBytes; }
-        }
+        public byte[] TextBytes => this.textBytes;
+
         private byte[] textBytes;
         #endregion
 
@@ -166,10 +160,7 @@ namespace Tancoder.Torrent.BEncoding
 
 
         #region Helper Methods
-        public string Hex
-        {
-            get { return BitConverter.ToString(TextBytes); }
-        }
+        public string Hex => BitConverter.ToString(TextBytes);
 
         public override int LengthInBytes()
         {
