@@ -1,10 +1,10 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using DhtCrawler.Common;
 using Microsoft.AspNetCore.Mvc;
 using DhtCrawler.Web.Models;
 using DhtCrawler.Common.Web.Mvc.Result;
@@ -22,8 +22,9 @@ namespace DhtCrawler.Web.Controllers
         {
             this._infoHashRepository = infoHashRepository;
         }
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
+            ViewBag.TorrentNum = await _infoHashRepository.GetTorrentNum();
             return View();
         }
 
@@ -37,41 +38,52 @@ namespace DhtCrawler.Web.Controllers
         public async Task Contact()
         {
             Response.ContentType = "text/plain";
-            var files = Directory.GetFiles(@"E:\code\DhtCrawler\DhtCrawler\bin\Release\PublishOutput\info");
-            foreach (var file in files)
+            var queue = new Queue<string>(new[] { @"G:\torrent\torrent" });
+            while (queue.Count > 0)
             {
-                var dicInfo = await System.IO.File.ReadAllLinesAsync(file, Encoding.UTF8);
-                var set = new Dictionary<string, int>();
-                foreach (var info in dicInfo)
+                var dir = queue.Dequeue();
+                var dirs = Directory.GetDirectories(dir);
+                foreach (var dirPath in dirs)
                 {
-                    if (!set.ContainsKey(info))
+                    queue.Enqueue(dirPath);
+                }
+                var files = Directory.GetFiles(dir);
+                foreach (var file in files)
+                {
+                    var dicInfo = await System.IO.File.ReadAllTextAsync(file, Encoding.UTF8);
+                    try
                     {
-                        set[info] = 0;
+                        var model = dicInfo.ToObject<InfoHashModel>();
+                        model.IsDown = true;
+                        Console.WriteLine(file);
+                        await Response.WriteAsync(model.InfoHash + Environment.NewLine);
+                        await _infoHashRepository.InsertOrUpdate(model);
+                        //System.IO.File.Move(file, @"G:\torrent\" + Path.GetFileName(file));
+                        System.IO.File.Delete(file);
                     }
-                    set[info]++;
-                }
-                var taskList = new List<Task>();
-                var items = new BlockingCollection<KeyValuePair<string, int>>();
-                foreach (var kv in set)
-                {
-                    items.Add(kv);
-                }
-                for (int i = 0; i < 1; i++)
-                {
-                    await Response.WriteAsync(file + Environment.NewLine);
-                    taskList.Add(Task.Run(async () =>
+                    catch (Exception ex)
                     {
-                        while (true)
-                        {
-                            if (!items.TryTake(out var info))
-                                return;
-                            await _infoHashRepository.InsertOrUpdate(new InfoHashModel() { CreateTime = DateTime.Now, DownNum = info.Value, InfoHash = info.Key });
-                            await Response.WriteAsync(info.Value + Environment.NewLine);
-                        }
-                    }));
+                        await Response.WriteAsync(dicInfo + Environment.NewLine);
+                    }
+                    //foreach (var info in dicInfo)
+                    //{
+                    //    if (!set.ContainsKey(info))
+                    //    {
+                    //        set[info] = 0;
+                    //    }
+                    //    set[info]++;
+                    //}
+                    //foreach (var info in set)
+                    //{
+                    //    if (info.Value <= 1)
+                    //        continue;
+                    //    await _infoHashRepository.InsertOrUpdate(new InfoHashModel() { CreateTime = DateTime.Now, DownNum = info.Value, InfoHash = info.Key });
+                    //    await Response.WriteAsync(info.Value + ",");
+                    //}
                 }
-                await Task.WhenAll(taskList);
+
             }
+
         }
 
         public IActionResult DownTorrent()
