@@ -40,13 +40,13 @@ namespace BitTorrent.Listeners
             EndPoint = endpoint;
         }
 
-        public BEncodedDictionary GetMetaData(InfoHash hash)
+        public BEncodedDictionary GetMetaData(InfoHash hash, out byte[] rawBytes)
         {
+            rawBytes = null;
             WireMessage message;
             ExtHandShack exths;
             long metadataSize;
             int piecesNum;
-            byte[] metadata;
             byte ut_metadata;
 
             try
@@ -96,21 +96,21 @@ namespace BitTorrent.Listeners
                 }
                 //等待pieces接收完毕
                 rtask.Wait();
-                metadata = rtask.Result;
+                rawBytes = rtask.Result;
 
-                if (metadata == null)
+                if (rawBytes == null)
                     return null;
 
                 //检查hash值是否正确
                 var sha1 = new System.Security.Cryptography.SHA1CryptoServiceProvider();
-                byte[] infohash = sha1.ComputeHash(metadata);
+                byte[] infohash = sha1.ComputeHash(rawBytes);
                 if (!infohash.SequenceEqual(hash.Hash))
                 {
                     Trace.WriteLine(EndPoint, "Hash Wrong");
                     return null;
                 }
 
-                return BEncodedDictionary.DecodeTorrent(metadata);
+                return BEncodedDictionary.DecodeTorrent(rawBytes);
             }
             catch (AggregateException ex)
             {
@@ -118,8 +118,7 @@ namespace BitTorrent.Listeners
             }
             finally
             {
-                if (client != null)
-                    client.Close();
+                client?.Close();
             }
         }
 

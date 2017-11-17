@@ -109,7 +109,7 @@ namespace DhtCrawler
                                      Console.WriteLine($"downloading {item.Value} from {item.Peer}");
                                      using (var client = new WireClient(item.Peer))
                                      {
-                                         var meta = client.GetMetaData(new global::BitTorrent.InfoHash(item.Bytes));
+                                         var meta = client.GetMetaData(new global::BitTorrent.InfoHash(item.Bytes), out var rawBytes);
                                          if (meta == null)
                                          {
                                              BadAddress.Add(longPeer);
@@ -121,6 +121,7 @@ namespace DhtCrawler
                                          Console.WriteLine($"download {item.Value} success");
                                          lock (DownLoadQueue)
                                          {
+                                             File.WriteAllBytes(Path.Combine(TorrentPath, item.Value + ".bin"), rawBytes);
                                              File.WriteAllText(Path.Combine(TorrentPath, item.Value + ".json"), torrent.ToJson());
                                          }
                                      }
@@ -254,7 +255,11 @@ namespace DhtCrawler
         private static Torrent ParseBitTorrent(BEncodedDictionary metaData)
         {
             var torrent = new Torrent();
-            if (metaData.ContainsKey("name"))
+            if (metaData.ContainsKey("name.utf-8"))
+            {
+                torrent.Name = ((BEncodedString)metaData["name.utf-8"]).Text;
+            }
+            else if (metaData.ContainsKey("name"))
             {
                 torrent.Name = ((BEncodedString)metaData["name"]).Text;
             }
@@ -269,7 +274,7 @@ namespace DhtCrawler
                 for (int j = 0; j < files.Count; j++)
                 {
                     var file = (BEncodedDictionary)files[j];
-                    var filePaths = file.ContainsKey("path.utf-8") ? ((BEncodedList)file["path.utf-8"]).Select(path => ((BEncodedString)path).Text).ToArray() : ((BEncodedList)file["path"]).Select(path => Encoding.ASCII.GetString(((BEncodedString)path).TextBytes)).ToArray();
+                    var filePaths = file.ContainsKey("path.utf-8") ? ((BEncodedList)file["path.utf-8"]).Select(path => ((BEncodedString)path).Text).ToArray() : ((BEncodedList)file["path"]).Select(path => ((BEncodedString)path).Text).ToArray();
                     var fileSize = ((BEncodedNumber)file["length"]).Number;
                     if (filePaths.Length > 1)
                     {
