@@ -47,6 +47,8 @@ namespace DhtCrawler.Web
                 routes.MapRoute(
                     name: "default",
                     template: "{controller=Home}/{action=Index}/{id?}");
+                routes.MapRoute("list", "list/{keyword}/{index}", new { controller = "list", action = "index", keyword = "", index = 1 }, new { index = "\\d+" });
+                routes.MapRoute("detail", "infohash/{hash}.html", new { controller = "list", action = "detail" }, new { hash = "^[A-Za-z0-9]{40}$" });
             });
         }
     }

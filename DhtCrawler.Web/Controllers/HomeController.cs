@@ -29,13 +29,6 @@ namespace DhtCrawler.Web.Controllers
             return View();
         }
 
-        public IActionResult About()
-        {
-            ViewData["Message"] = "Your application description page.";
-
-            return View();
-        }
-
         public async Task Contact()
         {
             Response.ContentType = "text/plain";
@@ -103,21 +96,6 @@ namespace DhtCrawler.Web.Controllers
                     {
                         await Response.WriteAsync(dicInfo + Environment.NewLine);
                     }
-                    //foreach (var info in dicInfo)
-                    //{
-                    //    if (!set.ContainsKey(info))
-                    //    {
-                    //        set[info] = 0;
-                    //    }
-                    //    set[info]++;
-                    //}
-                    //foreach (var info in set)
-                    //{
-                    //    if (info.Value <= 1)
-                    //        continue;
-                    //    await _infoHashRepository.InsertOrUpdate(new InfoHashModel() { CreateTime = DateTime.Now, DownNum = info.Value, InfoHash = info.Key });
-                    //    await Response.WriteAsync(info.Value + ",");
-                    //}
                 }
             }
         }

@@ -34,8 +34,34 @@ namespace DhtCrawler.Service.Model
                 return _fileSize == 0 ? (_fileSize = Files?.Sum(f => f.FileSize) ?? 0) : _fileSize;
             }
         }
+
+        public string ShowFileSize
+        {
+            get
+            {
+                const int kbSize = 1024;
+                const int mbSize = kbSize * 1024;
+                const int gbSize = mbSize * 1024;
+                var size = FileSize * 1.0;
+                if (size < kbSize)//1K
+                {
+                    return size + "B";
+                }
+                if (size < mbSize)//小于1M
+                {
+                    return (size / kbSize).ToString("F") + "KB";
+                }
+                if (size < gbSize)//小于1G
+                {
+                    return (size / mbSize).ToString("F") + "MB";
+                }
+                return (size / gbSize).ToString("F") + "GB";
+            }
+        }
+
         public int DownNum { get; set; }
         public IList<TorrentFileModel> Files { get; set; }
         public bool IsDown { get; set; }
+        public bool IsDanger { get; set; }
     }
 }

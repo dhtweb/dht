@@ -1,91 +1,43 @@
 ﻿@{
-    Layout = "";
+    Layout = "_Layout";
+    ViewBag.Title = "磁力云 - DHT磁力链接搜索引擎";
+    ViewBag.KeyWord = "磁力链接,磁力搜索,BT搜索,BT种子,BT种子搜索,种子搜索,高清BT,迅雷BT搜索,高清BT种子,bt种子搜索器";
+    ViewBag.Description = "磁力云是一个DHT磁力链接搜索引擎，专注于提供磁力链接和BT种子文件搜索服务,你可以在这里搜索电影、美剧、综艺、软件、动漫、教程、游戏等BT资源和磁力链接。";
 }
-
-
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="utf-8">
-    <title>磁力云 - DHT磁力链接搜索引擎</title>
-    <meta name="keywords" content="磁力链接,磁力搜索,BT搜索,BT种子,BT种子搜索,种子搜索,高清BT,迅雷BT搜索,高清BT种子,bt种子搜索器" />
-    <meta name="description" content="磁力云是一个DHT磁力链接搜索引擎，专注于提供磁力链接和BT种子文件搜索服务,你可以在这里搜索电影、美剧、综艺、软件、动漫、教程、游戏等BT资源和磁力链接。" />
-    <meta http-eqbtv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="applicable-device" content="pc,mobile">
-
-    <link rel="stylesheet" href="http://cdn.bootcss.com/bootstrap/3.2.0/css/bootstrap.min.css" media="screen">
-    <link rel="stylesheet" href="~/css/reset.min.css">
-    <link rel="stylesheet" href="http://cdn.bootcss.com/font-awesome/3.2.1/css/font-awesome.min.css">
+@section Header{
     <link rel="stylesheet" href="~/css/grumble.css">
-    <link rel="stylesheet" href="~/css/theme.css">
-
-    <!--[if IE 7]>
-        <link rel="stylesheet" href="http://cdn.bootcss.com/font-awesome/3.2.1/css/font-awesome-ie7.min.css">
-    <![endif]-->
-    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
-    <!--[if lt IE 9]>
-      <script src="https://cdn.bootcss.com/html5shiv/r29/html5.min.js"></script>
-      <script src="https://cdn.bootcss.com/respond.js/1.4.2/respond.min.js"></script>
-    <![endif]-->
-
-    <link rel="shortcut icon" href="/static/img/favicon.png">
-</head>
-<body>
-    <div id="wrap" class="new-home">
-        <div class="container" id="main">
-
-            <!--[if lte IE 9]>
-              <div id="warning_info" class="alert alert-dismissable alert-info">
-              <button data-dismiss="alert" class="close" type="button">×</button>
-              <strong>您正在使用低版本浏览器，</strong> 显示效果可能有差异。建议您升级到
-              <a href="http://rj.baidu.com/soft/detail/14744.html" target="_blank" rel="nofollow">Chrome</a>
-              或：
-              <a href="http://www.firefox.com.cn/‎" target="_blank" rel="nofollow">Firefox</a> /
-              <a href="http://browser.qq.com/" target="_blank" rel="nofollow">QQ浏览器</a> /
-              <a href="http://chrome.360.cn/" target="_blank" rel="nofollow">360极速</a> /
-              <a href="http://www.liebao.cn/" target="_blank" rel="nofollow">猎豹</a> /
-              <a href="http://windows.microsoft.com/en-us/internet-explorer/download-ie" target="_blank" rel="nofollow">IE 10</a>
-              </div>
-              <![endif]-->
-            <!-- <script src="~/js/domaina.js"></script> -->
-
-            <div class="index-search clearfix">
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="col-md-10 col-md-offset-1">
-                            <div class="page-header">
-                                <a href="/"><h1 class="main-logo hidden-xs"><img src="/images/mainlogo.png" alt="磁力云" title="磁力云 - DHT磁力链接搜索引擎" /></h1></a>
-                                <span class="visible-xs"><h2>磁力云</h2>专业的磁力链接搜索引擎</span>
-                            </div>
-
-                            <div class="search-box index-search-box">
-                                <form class="search_form" role="form" method="get" action="/search" name="search">
-                                    <div class="input-group">
-                                        <input name="" type="hidden" value="baidu" />
-                                        <input type="text" class="form-control sinput search new-input" name="kw" id="search" baiduSug="1" placeholder="从 @ViewBag.TorrentNum 个磁力链接资源中搜索">
-                                        <span class="input-group-btn">
-                                            <button type="submit" class="btn btn-primary">搜 索</button>
-                                        </span>
-                                    </div>
-                                </form>
-                            </div>
-                            <div class="hot-tags-index newhot">
-                                <ul class="hot-tags list-inline">
-                                    <li class="hot-item newhot"><a href="#">热门搜索</a>：</li>
-                                </ul>
-                            </div>
-
-                        </div>
-                    </div>
+}
+<div class="index-search clearfix">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="col-md-10 col-md-offset-1">
+                <div class="page-header">
+                    <a href="/"><h1 class="main-logo hidden-xs"><img src="/images/mainlogo.png" alt="磁力云" title="磁力云 - DHT磁力链接搜索引擎" /></h1></a>
+                    <span class="visible-xs"><h2>磁力云</h2>专业的磁力链接搜索引擎</span>
                 </div>
+
+                <div class="search-box index-search-box">
+                    <form class="search_form" role="form" method="get" action="/search" name="search">
+                        <div class="input-group">
+                            <input name="" type="hidden" value="baidu" />
+                            <input type="text" class="form-control sinput search new-input" name="kw" id="search" baiduSug="1" placeholder="从 @ViewBag.TorrentNum 个磁力链接资源中搜索">
+                            <span class="input-group-btn">
+                                <button type="submit" class="btn btn-primary">搜 索</button>
+                            </span>
+                        </div>
+                    </form>
+                </div>
+                <div class="hot-tags-index newhot">
+                    <ul class="hot-tags list-inline">
+                        <li class="hot-item newhot"><a href="#">热门搜索</a>：</li>
+                    </ul>
+                </div>
+
             </div>
-            <div class="push"><!-- not put anything here --></div>
-
-
-
         </div>
     </div>
+</div>
+@section Footer{
     <div id="new-footer" class="bt-footer">
         <div id="bottom-footer" class="container">
             <div class="pull-left">
@@ -111,13 +63,8 @@
             </div>
         </div>
     </div>
-
-
-    <script src="http://cdn.bootcss.com/jquery/1.10.2/jquery.min.js"></script>
-    <script src="http://cdn.bootcss.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
-    <script src="~/js/reset.js"></script>
-    <script src="~/js/random.js"></script>
     <script src="~/js/jquery.grumble.min.js"></script>
+    <script src="~/js/random.js"></script>
     <script>
         $('.pull-right').grumble(
             {
@@ -130,6 +77,4 @@
             }
         );
     </script>
-    <!-- 广告位：bt通用移动端 -->
-</body>
-</html>
+}
