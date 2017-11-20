@@ -122,6 +122,10 @@ namespace DhtCrawler.Service
             return await Connection.QuerySingleAsync<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
         }
 
+        public IEnumerable<InfoHashModel> GetAllInfoHashModels(DateTime? start = null)
+        {
+            return start.HasValue ? Connection.Query<InfoHashModel>("SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE AND createtime>@start", new { start = start.Value }) : Connection.Query<InfoHashModel>("SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE");
+        }
         private class InfoHashParamter : SqlMapper.IDynamicParameters
         {
             private List<DbParameter> _parameters;

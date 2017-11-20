@@ -16,34 +16,7 @@
 
 
 @section PagerHeader{
-    <div class="navbar navbar-default navbar-fixed-top">
-        <div class="container">
-            <div class="navbar-header">
-                <a href="/" class="navbar-brand"><i class="icon-magnet"></i> 磁力云</a>
-                <button class="navbar-toggle" type="button" data-toggle="collapse" data-target="#navbar-main">
-                    <span class="sr-only">导 航</span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                </button>
-            </div>
-            <div class="navbar-collapse collapse" id="navbar-main">
-                <ul class="nav navbar-nav">
-                    <li><a href="/" id="themes">首 页</a></li>
-                    <li><a href="/">最新入库</a></li>
-                    <li><a href="/">搜索排行</a></li>
-                    @*<li class="dropdown">
-                            <a class="dropdown-toggle" data-toggle="dropdown" href="/search/%E5%A4%A7%E9%B1%BC%E6%B5%B7%E6%A3%A0_ctime_1.html#" id="download">工 具 <span class="caret"></span></a>
-                            <ul class="dropdown-menu" aria-labelledby="download">
-                                <li><a href="/bt2mag.php">BT转磁力链接</a></li>
-                                <li class="divider"></li>
-                                <li><a href="/mag2bt.php">磁力链接转BT</a></li>
-                            </ul>
-                        </li>*@
-                </ul>
-            </div>
-        </div>
-    </div>
+    @Html.Partial("_DefaultHeader")
 }
 
 
@@ -55,9 +28,8 @@
                 <h1 class="minlogo"><img src="/static/ui/images/toplogo.png" alt="" title="磁力云 - 专业的DHT磁力链接搜索引擎"></h1>
             </div>
             <div class="search-box col-md-5">
-                <form class="search_form" action="/s.php" role="form" method="get" id="topsearch" name="search">
+                <form class="search_form" action="/list" role="form" method="get" id="topsearch" name="search">
                     <div class="input-group">
-                        <input name="" type="hidden" value="baidu">
                         <input type="text" class="form-control sinput search" name="kw" value="@ViewBag.SearchKey" baidusug="1" id="search" placeholder="立即搜索磁力资源..." autocomplete="off">
                         <span class="input-group-btn">
                             <button type="submit" class="btn btn-primary">搜 索</button>
@@ -76,10 +48,11 @@
 </div>
 <div class="search-list col-md-12">
     <ul class="media-list media-list-set">
-        <li class="media">
-            <div class="media-body">
-                @foreach (var item in Model.List)
-                {
+        @foreach (var item in Model.List)
+        {
+            <li class="media">
+                <div class="media-body">
+
                     <h4><a class="title" target="_blank" href="@Url.RouteUrl("detail", new { hash = item.InfoHash })">@item.Name</a></h4>
                     <div class="media-more">
                         <cite>创建日期：</cite><span class="label label-success">@item.CreateTime.ToShortDateString()</span>&nbsp;&nbsp;&nbsp;
@@ -88,9 +61,9 @@
                         <cite>访问热度：</cite><span class="label label-primary">@item.DownNum</span>&nbsp;&nbsp;&nbsp;
                         <span class="media-down"><a href="http://www.lixianhezi.com/yun/" title="磁力云" style="color: red"><i class="icon-download"></i> 网盘播放</a></span>
                     </div>
-                }
-            </div>
-        </li>
+                </div>
+            </li>
+        }
     </ul>
 </div>
 
@@ -135,4 +108,15 @@
             </div>
         </div>
     </div>
+    <script type="text/javascript">
+        $(function () {
+            $("#topsearch").submit(function () {
+                var key = $.trim($("#search").val());
+                if (key.length > 0) {
+                    window.location.href = $("#topsearch").attr("action") + "/" + key;
+                }
+                return false;
+            });
+        })
+    </script>
 }

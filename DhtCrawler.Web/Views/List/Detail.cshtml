@@ -12,27 +12,10 @@
     <div class="row-fluid tor-magnet">
         <textarea id="magnetLink" name="magnetLink" class="magnet-link" onClick="jQuery(this).select();" readonly>magnet:?xt=urn:btih:@Model.InfoHash</textarea>
         <div class="tor-button hidden-xs">
-
             <a id="AndroidPlayNow" href="http://www.lixianhezi.com/yun/" target="_blank" class="btn btn-default btn-detail" title="在线观看"><i class="icon-play icon-white"></i> 在线观看</a>
-
             <a id="playNow" href="http://www.lixianhezi.com/yun/" target="_blank" class="btn btn-danger btn-detail" title="@Model.Name"><i class="icon-play icon-white"></i> 网盘播放</a>
-
             <a id="copyToClipboard" data-clipboard-target="magnetLink" class="copy-button btn btn-primary btn-detail"><i class="icon-share icon-white"></i> 复制磁力链接</a>
-            <script src="/static/ui/plugin/ZeroClipboard.min.js"></script>
-            <script language="JavaScript">
-                var clip = new ZeroClipboard(document.getElementById("copyToClipboard"), {
-                    moviePath: "/static/ui/plugin/ZeroClipboard.swf" //swf文件地址，如果和html同目录则不用设置
-                });
-                clip.on('load', function (client) {
-                    // alert( "swf文件加载完成" );
-                });
-                clip.on('complete', function (client, args) {
-                    alert("复制成功！可粘贴到迅雷等软件中下载。");
-                });
-            </script>
-
-            <a id="magnetDownload" href="http://ggo.la/bWFnbmV0Oj94dD11cm46YnRpaDozNTMzRTBFQTRDMjYxNTVEQTlFNDdDNDcyOThDQzY1NTg0QUQ0MEY2" target="_blank" class="btn btn-success btn-detail" title="使用迅雷、旋风、电驴等BT软件下载"><i class="icon-magnet icon-white"></i> 在迅雷/旋风/bitcomet中打开</a>
-
+            <a id="magnetDownload" href="magnet:?xt=urn:btih:664E109ACB3057FC1188F3CBE3CA2514CA05228D" class="btn btn-success btn-detail" title="使用迅雷、旋风、电驴等BT软件下载"><i class="icon-magnet icon-white"></i> 在迅雷/旋风/bitcomet中打开</a>
             <a id="QRCodeButton" class="btn btn-info btn-detail" data-toggle="modal" data-target="#QRModal" title="扫描二维码 @Model.Name"><i class="icon-qrcode"></i> 扫描二维码/手机迅雷</a>
             <!-- Modal -->
             <div class="modal fade" id="QRModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
@@ -42,8 +25,7 @@
                             <button type="button" class="close" data-dismiss="modal" aria-hidden="true">  &times;</button>
                             <h4 class="modal-title" id="myModalLabel">手机迅雷/磁力下载等APP中打开</h4>
                         </div>
-                        <div class="modal-body">
-                            <img src="http://qr.liantu.com/api.php?bg=f3f3f3&fg=54B4EB&gc=222222&el=l&w=200&m=10&text=magnet:?xt=urn:btih:@Model.InfoHash" />
+                        <div id="infoHashQrcode" class="modal-body">
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-primary" data-dismiss="modal">关 闭</button>
@@ -51,7 +33,6 @@
                     </div><!-- /.modal-content -->
                 </div><!-- /.modal -->
             </div>
-
         </div>
         <div class="tor-button visible-xs">
             <a id="magnetDownload" href="magnet:?xt=urn:btih:@Model.InfoHash" class="btn btn-success btn-detail" title="Download"><i class="icon-magnet icon-white"></i> 磁力链接</a>
@@ -59,7 +40,6 @@
         </div>
     </div>
     <div class="row-fluid tor-ad">
-
     </div>
     <div class="row-fluid tor-detail table-responsive">
         <table class="table detail table-hover">
@@ -110,10 +90,47 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><i class="icon-film"></i> @Model.Name</td>
-                        <td style="text-align:right">@Model.ShowFileSize</td>
-                    </tr>
+                    @if (Model.Files == null || Model.Files.Count <= 0)
+                    {
+                        <tr>
+                            <td><i class="icon-film"></i> @Model.Name</td>
+                            <td style="text-align:right">@Model.ShowFileSize</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        var listBuilder = new System.Text.StringBuilder();
+                        var queue = new Queue<DhtCrawler.Service.Model.TorrentFileModel>();
+                        foreach (var topFile in Model.Files)
+                        {
+                            var level = 0;
+                            queue.Enqueue(topFile);
+                            do
+                            {
+                                var left = 30 * level;
+                                var file = queue.Dequeue();
+                                if (file.Files == null || file.Files.Count <= 0)
+                                {
+                                    if (file.Name.StartsWith("_____padding_file"))
+                                    {
+                                        continue;
+                                    }
+                                    listBuilder.AppendFormat("<tr><td {2}><i class='icon-film'></i>{0}</td><td style='text-align:right'>{1}</td></tr>", file.Name, file.ShowFileSize, left > 0 ? $"style='padding-left:{left}px'" : "");
+                                }
+                                else
+                                {
+                                    listBuilder.AppendFormat("<tr><td {1}><i class='icon-folder-open'></i>{0}</td><td></td></tr>", file.Name, left > 0 ? $"style='padding-left:{left}px'" : "");
+                                    foreach (var item in file.Files)
+                                    {
+                                        queue.Enqueue(item);
+                                    }
+                                    level++;
+                                }
+                            }
+                            while (queue.Count > 0);
+                        }
+                        @Html.Raw(listBuilder.ToString())
+                    }
                 </tbody>
             </table>
         </div>
@@ -122,3 +139,18 @@
         </div>
     </div>
 </div>
+@section Footer{
+    <script type="text/javascript" src="~/lib/ZeroClipboard/ZeroClipboard.min.js"></script>
+    <script type="text/javascript" src="~/lib/jquery-qrcode/jquery.qrcode.min.js"></script>
+    <script type="text/javascript">
+        $(function () {
+            $("#infoHashQrcode").qrcode({
+                width: 200, height: 200, text: $("#magnetLink").val()
+            });
+            var clip = new ZeroClipboard(document.getElementById("copyToClipboard"));
+            clip.on('aftercopy', function (client, args) {
+                alert("复制成功！可粘贴到迅雷等软件中下载。");
+            });
+        });
+    </script>
+}

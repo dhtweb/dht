@@ -11,6 +11,7 @@ bin/
 obj/
 log/
 info/
+Index/
 torrent/
 Properties/
 /.vs

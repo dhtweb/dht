@@ -5,6 +5,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Jieba.NETCore" Version="1.0.8" />
+    <PackageReference Include="Lucene.Net" Version="4.8.0-beta00005" />
     <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
   </ItemGroup>
 

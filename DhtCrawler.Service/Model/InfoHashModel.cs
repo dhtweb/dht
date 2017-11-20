@@ -9,17 +9,24 @@ namespace DhtCrawler.Service.Model
         public override ulong Id { get; set; }
         public string InfoHash { get; set; }
         public string Name { get; set; }
+
+        private int _fileNum;
         [JsonIgnore]
         public int FileNum
         {
             get
             {
+                if (_fileNum > 0)
+                {
+                    return _fileNum;
+                }
                 if (Files == null || Files.Count <= 0)
                 {
-                    return IsDown ? 1 : 0;
+                    return 1;
                 }
-                return Files.Sum(f => f.FileNum);
+                return (_fileNum = Files.Sum(f => f.FileNum));
             }
+            set => _fileNum = value;
         }
 
         private long _fileSize;
@@ -35,27 +42,25 @@ namespace DhtCrawler.Service.Model
             }
         }
 
+        [JsonIgnore]
         public string ShowFileSize
         {
             get
             {
-                const int kbSize = 1024;
-                const int mbSize = kbSize * 1024;
-                const int gbSize = mbSize * 1024;
                 var size = FileSize * 1.0;
-                if (size < kbSize)//1K
+                if (size < TorrentFileModel.KbSize)//1K
                 {
                     return size + "B";
                 }
-                if (size < mbSize)//小于1M
+                if (size < TorrentFileModel.MbSize)//小于1M
                 {
-                    return (size / kbSize).ToString("F") + "KB";
+                    return (size / TorrentFileModel.KbSize).ToString("F") + "KB";
                 }
-                if (size < gbSize)//小于1G
+                if (size < TorrentFileModel.GbSize)//小于1G
                 {
-                    return (size / mbSize).ToString("F") + "MB";
+                    return (size / TorrentFileModel.MbSize).ToString("F") + "MB";
                 }
-                return (size / gbSize).ToString("F") + "GB";
+                return (size / TorrentFileModel.GbSize).ToString("F") + "GB";
             }
         }
 

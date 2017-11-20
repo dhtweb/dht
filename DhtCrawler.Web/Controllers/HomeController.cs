@@ -29,10 +29,15 @@ namespace DhtCrawler.Web.Controllers
             return View();
         }
 
-        public async Task Contact()
+        public async Task Contact(string sourcePath)
         {
             Response.ContentType = "text/plain";
-            var queue = new Queue<string>(new[] { @"E:\Code\dotnetcore\dht\DhtCrawler\torrent" });
+            if (sourcePath == null || !Directory.Exists(sourcePath))
+            {
+                await Response.WriteAsync("");
+                return;
+            }
+            var queue = new Queue<string>(new[] { sourcePath });
             while (queue.Count > 0)
             {
                 var dir = queue.Dequeue();
@@ -48,6 +53,7 @@ namespace DhtCrawler.Web.Controllers
                     try
                     {
                         var model = dicInfo.ToObject<InfoHashModel>();
+                        model.CreateTime = System.IO.File.GetLastWriteTime(file);
                         model.IsDown = true;
                         if (model.Files != null && model.Files.Any(f => f.Name.IndexOf('/') > -1))
                         {

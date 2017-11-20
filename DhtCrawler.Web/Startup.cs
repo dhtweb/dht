@@ -1,4 +1,5 @@
 ﻿using DhtCrawler.Service;
+using DhtCrawler.Service.Index;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -22,8 +23,13 @@ namespace DhtCrawler.Web
             services.AddMvc();
             services.AddTransient(provider =>
             {
-                var connection = new NpgsqlConnection("Host=127.0.0.1;Username=zk;Database=dht;Port=5432");
+                var connection = new NpgsqlConnection(Configuration["postgresql.url"]);
                 return new InfoHashRepository(connection);
+            });
+            services.AddTransient(provider =>
+            {
+                var infoHashRepo = provider.GetService<InfoHashRepository>();
+                return new IndexSearchService(Configuration["index.dir"], infoHashRepo);
             });
         }
 
