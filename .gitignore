@@ -11,7 +11,7 @@ bin/
 obj/
 log/
 info/
-Index/
+DhtCrawler.Web/Index/
 torrent/
 Properties/
 /.vs
@@ -24,4 +24,4 @@ Properties/
 /dotnet171111(2).etl
 /dotnet171111(1).vspx
 /dotnet1.psess
-/dotnet.psess
+*.psess
