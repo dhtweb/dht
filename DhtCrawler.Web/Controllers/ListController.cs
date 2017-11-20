@@ -17,18 +17,11 @@ namespace DhtCrawler.Web.Controllers
             _indexSearchService = indexSearchService;
         }
 
-        public async Task<IActionResult> Index(string keyword, int index = 1)
-        {
-            ViewBag.SearchKey = keyword;
-            var result = await _infoHashRepository.GetInfoHashList(index, 20);
-            return View(new PageModel<InfoHashModel>() { PageIndex = index, PageSize = 20, Total = (int)result.Count, List = result.List });
-        }
-
-        public IActionResult Search(string keyword, int index = 1)
+        public IActionResult Index(string keyword, int index = 1)
         {
             ViewBag.SearchKey = keyword;
             var list = _indexSearchService.GetList(index, 20, out int count, keyword);
-            return View("Index", new PageModel<InfoHashModel>() { PageIndex = index, PageSize = 20, Total = count, List = list });
+            return View(new PageModel<InfoHashModel>() { PageIndex = index, PageSize = 20, Total = count, List = list });
         }
 
         public async Task<IActionResult> Detail(string hash)

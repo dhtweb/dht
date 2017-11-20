@@ -6,9 +6,11 @@ using DhtCrawler.Common.Index.Analyzer;
 using DhtCrawler.Service.Model;
 using JiebaNet.Segmenter;
 using Lucene.Net.Analysis;
+using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
+using Lucene.Net.Util;
 
 namespace DhtCrawler.Service.Index
 {
@@ -77,7 +79,7 @@ namespace DhtCrawler.Service.Index
 
         protected override IEnumerable<InfoHashModel> GetAllModels()
         {
-            return _infoHashRepository.GetAllInfoHashModels();
+            return _infoHashRepository.GetAllFullInfoHashModels();
         }
 
         protected override Term GetTargetTerm(InfoHashModel model)
@@ -94,11 +96,11 @@ namespace DhtCrawler.Service.Index
                 //关键字搜索
                 {
                     var splitKey = SplitString(keyword);
+                    Console.WriteLine(string.Join(",", splitKey));
                     foreach (var key in splitKey)
                     {
                         query.Add(new TermQuery(new Term("Name", key)), Occur.SHOULD);
                         query.Add(new TermQuery(new Term("Files", key)), Occur.SHOULD);
-                        // { new[] { new Term("Name", key), new Term("Files", key) } }
                     }
                 }
                 if (query.Clauses.Count <= 0)

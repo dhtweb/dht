@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using JiebaNet.Segmenter;
@@ -25,9 +26,7 @@ namespace DhtCrawler.Common.Index.Analyzer
             termAtt = AddAttribute<ICharTermAttribute>();
             offsetAtt = AddAttribute<IOffsetAttribute>();
             typeAtt = AddAttribute<ITypeAttribute>();
-
-            var text = input.ReadToEnd();
-            tokens = segmenter.Tokenize(text, TokenizerMode.Search).ToList();
+            ResetTextReader(input);
         }
 
         public sealed override bool IncrementToken()
@@ -45,6 +44,13 @@ namespace DhtCrawler.Common.Index.Analyzer
 
             End();
             return false;
+        }
+
+        public void ResetTextReader(TextReader reader)
+        {
+            var text = reader.ReadToEnd();
+            tokens = segmenter.Tokenize(text, TokenizerMode.Search).ToList();
+            position = -1;
         }
     }
 }

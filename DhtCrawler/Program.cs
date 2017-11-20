@@ -255,13 +255,18 @@ namespace DhtCrawler
         private static Torrent ParseBitTorrent(BEncodedDictionary metaData)
         {
             var torrent = new Torrent();
+            var encoding = Encoding.UTF8;
+            if (metaData.ContainsKey("encoding"))
+            {
+                encoding = Encoding.GetEncoding(((BEncodedString)metaData["encoding"]).Text);
+            }
             if (metaData.ContainsKey("name.utf-8"))
             {
                 torrent.Name = ((BEncodedString)metaData["name.utf-8"]).Text;
             }
             else if (metaData.ContainsKey("name"))
             {
-                torrent.Name = ((BEncodedString)metaData["name"]).Text;
+                torrent.Name = encoding.GetString(((BEncodedString)metaData["name"]).TextBytes);
             }
             if (metaData.ContainsKey("length"))
             {
@@ -274,7 +279,7 @@ namespace DhtCrawler
                 for (int j = 0; j < files.Count; j++)
                 {
                     var file = (BEncodedDictionary)files[j];
-                    var filePaths = file.ContainsKey("path.utf-8") ? ((BEncodedList)file["path.utf-8"]).Select(path => ((BEncodedString)path).Text).ToArray() : ((BEncodedList)file["path"]).Select(path => ((BEncodedString)path).Text).ToArray();
+                    var filePaths = file.ContainsKey("path.utf-8") ? ((BEncodedList)file["path.utf-8"]).Select(path => ((BEncodedString)path).Text).ToArray() : ((BEncodedList)file["path"]).Select(path => encoding.GetString(((BEncodedString)path).TextBytes)).ToArray();
                     var fileSize = ((BEncodedNumber)file["length"]).Number;
                     if (filePaths.Length > 1)
                     {
@@ -320,31 +325,10 @@ namespace DhtCrawler
 
         private static void test()
         {
-            var files = Directory.GetFiles(TorrentPath).Where(f => !f.EndsWith(".json"));
-            foreach (var file in files)
-            {
-                var lines = File.ReadAllLines(file);
-                var dic = new BEncodedDictionary();
-                foreach (var line in lines)
-                {
-                    var infos = line.Split('\t');
-                    if (infos[0] == "name")
-                    {
-                        dic.Add("name", new BEncodedString(infos[1]));
-                    }
-                    else if (infos[0] == "files")
-                    {
-                        var data = Encoding.UTF8.GetBytes(infos[1]);
-                        dic.Add("files", BEncodedValue.Decode(data));
-                    }
-                    else if (infos[0] == "length")
-                    {
-                        dic.Add("length", new BEncodedNumber(long.Parse(infos[1])));
-                    }
-                }
-                var torrent = ParseBitTorrent(dic);
-                File.WriteAllText(file + ".json", torrent.ToJson());
-            }
+            var lines = File.OpenRead(@"H:\精英部队2.[中字.1024分辨率].torrent");
+            var dic = BEncodedDictionary.DecodeTorrent(lines);
+            var torrent = ParseBitTorrent(dic);
+            Console.WriteLine(torrent.ToJson());
         }
     }
 }

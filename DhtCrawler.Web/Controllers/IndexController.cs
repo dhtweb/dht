@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Web.Model;
 using DhtCrawler.Service;
@@ -20,7 +21,7 @@ namespace DhtCrawler.Web.Controllers
         {
             _indexSearchService.ReBuildIndex(it =>
             {
-                var data = Encoding.UTF8.GetBytes(it.InfoHash);
+                var data = Encoding.UTF8.GetBytes(it.InfoHash + Environment.NewLine);
                 Response.Body.Write(data, 0, data.Length);
             });
             return new EmptyResult();
