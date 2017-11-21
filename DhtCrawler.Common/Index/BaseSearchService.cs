@@ -29,7 +29,7 @@ namespace DhtCrawler.Common.Index
         }
 
         protected abstract string IndexDir { get; }
-        protected virtual int BatchCommitNum => 1000;
+        protected virtual int BatchCommitNum => 10000;
         protected abstract Lucene.Net.Analysis.Analyzer KeyWordAnalyzer { get; }
 
         /// <summary>

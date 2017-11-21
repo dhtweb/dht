@@ -17,7 +17,9 @@ using log4net;
 using log4net.Config;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
+using DhtCrawler.Configuration;
 using DhtCrawler.Store;
+using Newtonsoft.Json.Linq;
 
 namespace DhtCrawler
 {
@@ -37,8 +39,18 @@ namespace DhtCrawler
         {
             Init();
             var locker = new ManualResetEvent(false);
-            var config = File.Exists("dhtconfig.json") ? File.ReadAllText("dhtconfig.json").ToObject<DhtConfig>() : new DhtConfig();
-            var dhtClient = new DhtClient(config);
+            var dhtSection = ConfigurationManager.Default.GetSection("DhtConfig");
+            var dhtConfig = new DhtConfig()
+            {
+                NodeQueueMaxSize = dhtSection.GetInt("NodeQueueMaxSize", 10240),
+                Port = (ushort)dhtSection.GetInt("Port"),
+                ProcessThreadNum = dhtSection.GetInt("ProcessThreadNum", 1),
+                SendQueueMaxSize = dhtSection.GetInt("SendQueueMaxSize", 20480),
+                SendRateLimit = dhtSection.GetInt("SendRateLimit", 150),
+                ReceiveRateLimit = dhtSection.GetInt("ReceiveRateLimit", 150),
+                ReceiveQueueMaxSize = dhtSection.GetInt("ReceiveRateLimit", 20480)
+            };
+            var dhtClient = new DhtClient(dhtConfig);
             dhtClient.OnFindPeer += DhtClient_OnFindPeer;
             dhtClient.OnReceiveInfoHash += DhtClient_OnReceiveInfoHash;
             dhtClient.Run();
@@ -48,11 +60,11 @@ namespace DhtCrawler
                 locker.Set();
                 e.Cancel = true;
             };
-            Task.Factory.StartNew(async () =>
+            Task.Factory.StartNew(() =>
             {
-                var downSize = 256;
+                int downSize = ConfigurationManager.Default.GetInt("BatchDownSize", 256), paralleDownSize = ConfigurationManager.Default.GetInt("MaxDownThreadNum", 16);
                 var list = new List<InfoHash>(downSize);
-                var parallel = new ParallelOptions() { MaxDegreeOfParallelism = 16, TaskScheduler = TaskScheduler.Current };
+                var parallel = new ParallelOptions() { MaxDegreeOfParallelism = paralleDownSize, TaskScheduler = TaskScheduler.Current };
                 while (true)
                 {
                     try
@@ -323,14 +335,6 @@ namespace DhtCrawler
                 }
             }
             return torrent;
-        }
-
-        private static void test()
-        {
-            var lines = File.OpenRead(@"H:\精英部队2.[中字.1024分辨率].torrent");
-            var dic = BEncodedDictionary.DecodeTorrent(lines);
-            var torrent = ParseBitTorrent(dic);
-            Console.WriteLine(torrent.ToJson());
         }
     }
 }

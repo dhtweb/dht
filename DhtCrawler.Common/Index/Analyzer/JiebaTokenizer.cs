@@ -36,7 +36,8 @@ namespace DhtCrawler.Common.Index.Analyzer
             if (position < tokens.Count)
             {
                 var token = tokens[position];
-                termAtt.Append(token.Word);
+                var chars = token.Word.ToCharArray();
+                termAtt.CopyBuffer(chars, 0, chars.Length);
                 offsetAtt.SetOffset(token.StartIndex, token.EndIndex);
                 typeAtt.Type = "Jieba";
                 return true;

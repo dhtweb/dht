@@ -268,9 +268,9 @@ namespace DhtCrawler.DHT
             }
         }
 
-        private async Task ProcessMsgData()
+        private Task ProcessMsgData()
         {
-            await Task.Factory.StartNew(async () =>
+            return Task.Factory.StartNew(async () =>
              {
                  while (running)
                  {
@@ -353,9 +353,9 @@ namespace DhtCrawler.DHT
             }
         }
 
-        private async Task LoopSendMsg()
+        private Task LoopSendMsg()
         {
-            await Task.Factory.StartNew(async () =>
+            return Task.Factory.StartNew(async () =>
             {
                 while (running)
                 {
@@ -384,9 +384,9 @@ namespace DhtCrawler.DHT
             }, TaskCreationOptions.LongRunning);
         }
 
-        private async Task LoopFindNodes()
+        private Task LoopFindNodes()
         {
-            await Task.Factory.StartNew(async () =>
+            return Task.Factory.StartNew(async () =>
             {
                 int limitNode = 1024 * 10;
                 var nodeSet = new HashSet<DhtNode>();

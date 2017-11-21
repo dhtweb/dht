@@ -17,7 +17,7 @@ namespace DhtCrawler.Web.Controllers
             _indexSearchService = indexSearchService;
         }
 
-        public IActionResult Index(string keyword, int index = 1)
+        public IActionResult List(string keyword, int index = 1)
         {
             ViewBag.SearchKey = keyword;
             var list = _indexSearchService.GetList(index, 20, out int count, keyword);
@@ -29,7 +29,7 @@ namespace DhtCrawler.Web.Controllers
             var item = await _infoHashRepository.GetInfoHashDetail(hash);
             if (item == null)
             {
-                return RedirectToAction("index");
+                return RedirectToAction("List");
             }
             return View(item);
         }

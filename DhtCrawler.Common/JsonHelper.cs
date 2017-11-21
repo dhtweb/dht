@@ -10,7 +10,7 @@ namespace DhtCrawler.Common
             return JsonConvert.SerializeObject(obj, DefaultSetting);
         }
 
-        public static T ToObject<T>(this string json)
+        public static T ToObjectFromJson<T>(this string json)
         {
             return string.IsNullOrWhiteSpace(json) ? default(T) : JsonConvert.DeserializeObject<T>(json);
         }

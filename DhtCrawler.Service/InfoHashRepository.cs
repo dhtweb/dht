@@ -26,7 +26,7 @@ namespace DhtCrawler.Service
             {
                 if (value == null || !(value is string))
                     return null;
-                return ((string)value).ToObject<IList<TorrentFileModel>>();
+                return ((string)value).ToObjectFromJson<IList<TorrentFileModel>>();
             }
         }
         static InfoHashRepository()

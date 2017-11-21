@@ -1,0 +1,13 @@
+﻿{
+  "DhtConfig": {
+    "Port": 53388,
+    "NodeQueueMaxSize": 10240,
+    "ReceiveQueueMaxSize": 20480,
+    "SendQueueMaxSize": 20480,
+    "SendRateLimit": 150,
+    "ReceiveRateLimit": 150,
+    "ProcessThreadNum": 1
+  },
+  "BatchDownSize": 512,
+  "MaxDownThreadNum": 32
+}

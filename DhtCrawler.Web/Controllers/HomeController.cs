@@ -52,7 +52,7 @@ namespace DhtCrawler.Web.Controllers
                     var dicInfo = await System.IO.File.ReadAllTextAsync(file, Encoding.UTF8);
                     try
                     {
-                        var model = dicInfo.ToObject<InfoHashModel>();
+                        var model = dicInfo.ToObjectFromJson<InfoHashModel>();
                         model.CreateTime = System.IO.File.GetLastWriteTime(file);
                         model.IsDown = true;
                         if (model.Files != null && model.Files.Any(f => f.Name.IndexOf('/') > -1))
