@@ -17,10 +17,9 @@
                 </div>
 
                 <div class="search-box index-search-box">
-                    <form class="search_form" role="form" method="get" action="/search" name="search">
+                    <form id="search_form" class="search_form" role="form" method="get" action="~/list" name="search">
                         <div class="input-group">
-                            <input name="" type="hidden" value="baidu" />
-                            <input type="text" class="form-control sinput search new-input" name="kw" id="search" baiduSug="1" placeholder="从 @ViewBag.TorrentNum 个磁力链接资源中搜索">
+                            <input type="text" class="form-control sinput search new-input" name="kw" id="search" placeholder="从 @ViewBag.TorrentNum 个磁力链接资源中搜索">
                             <span class="input-group-btn">
                                 <button type="submit" class="btn btn-primary">搜 索</button>
                             </span>
@@ -76,5 +75,14 @@
                 type: 'alt-',
             }
         );
+        $(function () {
+            $("#search_form").submit(function() {
+                var key = $.trim($("#search").val());
+                if (key.length > 0) {
+                    window.location.href = $(this).attr("action") + "/" + key;
+                }
+                return false;
+            });
+        });
     </script>
 }

@@ -50,6 +50,7 @@ namespace DhtCrawler.Common.Index.Analyzer
         {
             var text = reader.ReadToEnd();
             tokens = segmenter.Tokenize(text, TokenizerMode.Search).ToList();
+            Console.WriteLine(string.Join(",", tokens));
             position = -1;
         }
     }

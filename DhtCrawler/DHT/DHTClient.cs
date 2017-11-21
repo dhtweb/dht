@@ -411,7 +411,7 @@ namespace DhtCrawler.DHT
                         FindNode(node);
                     }
                     nodeSet.Clear();
-                    await Task.Delay(5000);
+                    await Task.Delay(60 * 1000);
                 }
             }, TaskCreationOptions.LongRunning);
         }

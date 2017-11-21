@@ -6,11 +6,9 @@ using DhtCrawler.Common.Index.Analyzer;
 using DhtCrawler.Service.Model;
 using JiebaNet.Segmenter;
 using Lucene.Net.Analysis;
-using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
-using Lucene.Net.Util;
 
 namespace DhtCrawler.Service.Index
 {
@@ -26,7 +24,7 @@ namespace DhtCrawler.Service.Index
         private string[] SplitString(string keyword)
         {
             var seg = new JiebaSegmenter();
-            return seg.CutForSearch(keyword).ToArray();
+            return seg.CutForSearch(keyword).Select(w => w.ToLower()).ToArray();
         }
         protected override string IndexDir { get; }
 
@@ -63,12 +61,12 @@ namespace DhtCrawler.Service.Index
             return doc;
         }
 
-        protected override InfoHashModel GetModel(Document doc)
+        protected override InfoHashModel GetModel(Document doc, Query query)
         {
             var item = new InfoHashModel
             {
                 InfoHash = doc.Get("InfoHash"),
-                Name = doc.Get("Name"),
+                Name = SetHighKeyWord(doc.Get("Name"), "Name", query),//doc.Get("Name"),//
                 DownNum = doc.GetField("DownNum").GetInt32ValueOrDefault(),
                 FileNum = doc.GetField("FileNum").GetInt32ValueOrDefault(),
                 FileSize = doc.GetField("FileSize").GetInt64ValueOrDefault(),
@@ -92,21 +90,24 @@ namespace DhtCrawler.Service.Index
             return base.Search(index, size, out count, () =>
             {
                 var query = new BooleanQuery();//搜索条件
-                if (!string.IsNullOrEmpty(keyword))
-                //关键字搜索
+                if (!string.IsNullOrEmpty(keyword))//关键字搜索
                 {
                     var splitKey = SplitString(keyword);
                     Console.WriteLine(string.Join(",", splitKey));
-                    foreach (var key in splitKey)
+                    Term[] nameTerms = new Term[splitKey.Length], fileTerms = new Term[splitKey.Length];
+                    for (var i = 0; i < splitKey.Length; i++)
                     {
-                        query.Add(new TermQuery(new Term("Name", key)), Occur.SHOULD);
-                        query.Add(new TermQuery(new Term("Files", key)), Occur.SHOULD);
+                        var key = splitKey[i];
+                        nameTerms[i] = new Term("Name", key);
+                        fileTerms[i] = new Term("Name", key);
                     }
+                    query.Add(new MultiPhraseQuery() { nameTerms }, Occur.SHOULD);
+                    query.Add(new MultiPhraseQuery() { fileTerms }, Occur.SHOULD);
                 }
                 if (query.Clauses.Count <= 0)
                     query.Add(new MatchAllDocsQuery(), Occur.MUST);
                 return query;
-            }, () => new Sort(new SortField("CreateTime", SortFieldType.INT64, true)));
+            }, () => new Sort(SortField.FIELD_SCORE, new SortField("CreateTime", SortFieldType.INT64, true)));
         }
     }
 }

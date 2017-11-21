@@ -107,9 +107,51 @@ namespace DhtCrawler.Web.Controllers
         }
 
 
-        public IActionResult DownTorrent()
+        public async Task ImportInfo(string importPath)
         {
-            return new ZipResult(@"E:\Code\dotnetcore\dht\DhtCrawler\bin\Release\PublishOutput\torrent", "torrent.zip");
+            Response.ContentType = "text/plain";
+            if (!Directory.Exists(importPath))
+            {
+                await Response.WriteAsync("");
+                return;
+            }
+            var files = Directory.GetFiles(importPath, "*.txt");
+            var dic = new Dictionary<string, int>();
+            foreach (var filePath in files)
+            {
+                var reader = System.IO.File.OpenText(filePath);
+                do
+                {
+                    var line = await reader.ReadLineAsync();
+                    if (string.IsNullOrWhiteSpace(line))
+                        break;
+                    if (!dic.ContainsKey(line))
+                    {
+                        dic[line] = 0;
+                        await Response.WriteAsync(filePath + ":" + dic.Count.ToString() + Environment.NewLine);
+                    }
+                    dic[line]++;
+                } while (true);
+                var list = new LinkedList<InfoHashModel>();
+                foreach (var kv in dic)
+                {
+                    if (kv.Value <= 1)
+                        continue;
+                    await Response.WriteAsync(kv.Key + Environment.NewLine);
+                    list.AddLast(new InfoHashModel() { InfoHash = kv.Key, DownNum = kv.Value });
+                    if (list.Count > 1000)
+                    {
+                        await _infoHashRepository.InsertOrUpdate(list);
+                        list.Clear();
+                    }
+                }
+                if (list.Count > 0)
+                {
+                    await _infoHashRepository.InsertOrUpdate(list);
+                }
+                list.Clear();
+                dic.Clear();
+            }
         }
 
         public IActionResult Error()

@@ -93,6 +93,89 @@ namespace DhtCrawler.Service
             return await Connection.ExecuteAsync(string.Format("INSERT INTO t_infohash ({0}) VALUES ({1}) ON CONFLICT  (infohash) DO UPDATE SET {2}", string.Join(",", list.Select(l => l.ParameterName)), string.Join(",", list.Select(l => "@" + l.ParameterName)), updateSql.ToString().TrimEnd(',')), paramater) > 0;
         }
 
+        public async Task<bool> InsertOrUpdate(IEnumerable<InfoHashModel> models)
+        {
+            if (Connection.State != ConnectionState.Open)
+            {
+                Connection.Open();
+            }
+            var trans = Connection.BeginTransaction();
+            try
+            {
+                foreach (var model in models)
+                {
+                    var updateSql = new StringBuilder();
+                    var list = new List<DbParameter>
+                    {
+                        new NpgsqlParameter("updatetime", DateTime.Now),
+                        new NpgsqlParameter("infohash", model.InfoHash)
+                    };
+                    updateSql.Append("updatetime = @updatetime,");
+                    if (model.CreateTime != default(DateTime))
+                    {
+                        list.Add(new NpgsqlParameter("createtime", model.CreateTime));
+                        updateSql.Append("createtime = @createtime,");
+                    }
+                    if (model.IsDown)
+                    {
+                        list.Add(new NpgsqlParameter("isdown", model.IsDown));
+                        updateSql.Append("isdown = @isdown,");
+                    }
+                    if (model.IsDanger)
+                    {
+                        list.Add(new NpgsqlParameter("isdanger", model.IsDanger));
+                        updateSql.Append("isdanger = @isdanger,");
+                    }
+                    if (model.DownNum > 0)
+                    {
+                        list.Add(new NpgsqlParameter("downnum", model.DownNum));
+                        updateSql.Append("downnum = excluded.downnum +@downnum,");
+                    }
+                    if (model.FileNum > 0)
+                    {
+                        list.Add(new NpgsqlParameter("filenum", model.FileNum));
+                        updateSql.Append("filenum = @filenum,");
+                    }
+                    if (model.FileSize > 0)
+                    {
+                        list.Add(new NpgsqlParameter("filesize", model.FileSize));
+                        updateSql.Append("filesize = @filesize,");
+                    }
+                    if (model.Name != null)
+                    {
+                        list.Add(new NpgsqlParameter("name", model.Name));
+                        updateSql.Append("name = @name,");
+                    }
+                    if (model.Files != null && model.Files.Count > 0)
+                    {
+                        var param = new NpgsqlParameter("files", NpgsqlDbType.Jsonb) { Value = model.Files.ToJson() };
+                        list.Add(param);
+                        updateSql.Append("files = @files,");
+                    }
+                    var paramater = new InfoHashParamter(list);
+                    await Connection.ExecuteAsync(
+                        string.Format(
+                            "INSERT INTO t_infohash ({0}) VALUES ({1}) ON CONFLICT  (infohash) DO UPDATE SET {2}",
+                            string.Join(",", list.Select(l => l.ParameterName)),
+                            string.Join(",", list.Select(l => "@" + l.ParameterName)),
+                            updateSql.ToString().TrimEnd(',')), paramater, trans);
+                }
+                trans.Commit();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                trans.Rollback();
+                return false;
+            }
+            finally
+            {
+                trans.Dispose();
+            }
+
+        }
+
         public async Task<uint> GetTorrentNum()
         {
             return await Connection.ExecuteScalarAsync<uint>("select count(id) from t_infohash where isdown=@flag ", new { flag = true });

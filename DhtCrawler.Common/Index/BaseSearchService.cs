@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
+using Lucene.Net.Search.Highlight;
 using Lucene.Net.Store;
 using Directory = Lucene.Net.Store.Directory;
 
@@ -13,7 +14,22 @@ namespace DhtCrawler.Common.Index
 {
     public abstract class BaseSearchService<T> where T : class
     {
+        private static Directory GetIndexDirectory(string subIndex)
+        {
+            var directory = FSDirectory.Open(subIndex);
+            if (!DirectoryReader.IndexExists(directory))//判断是否存在索引文件夹
+            {
+                System.IO.Directory.CreateDirectory(subIndex);
+            }
+            if (IndexWriter.IsLocked(directory))//判断是否被锁定，如果锁定则解锁
+            {
+                IndexWriter.Unlock(directory);
+            }
+            return directory;
+        }
+
         protected abstract string IndexDir { get; }
+        protected virtual int BatchCommitNum => 1000;
         protected abstract Lucene.Net.Analysis.Analyzer KeyWordAnalyzer { get; }
 
         /// <summary>
@@ -27,8 +43,9 @@ namespace DhtCrawler.Common.Index
         /// 由lucence获取实际对象
         /// </summary>
         /// <param name="doc"></param>
+        /// <param name="query"></param>
         /// <returns></returns>
-        protected abstract T GetModel(Document doc);
+        protected abstract T GetModel(Document doc, Query query);
 
         /// <summary>
         /// 获取重建索引的所有数据
@@ -46,17 +63,17 @@ namespace DhtCrawler.Common.Index
         /// <summary>
         /// 设置关键词高亮
         /// </summary>
-        /// <param name="keyword"></param>
         /// <param name="content"></param>
+        /// <param name="field"></param>
+        /// <param name="query"></param>
         /// <returns></returns>
-        protected string SetHighKeyWord(string keyword, string content)
+        protected string SetHighKeyWord(string content, string field, Query query)
         {
             ////创建HTMLFormatter,参数为高亮单词的前后缀 
-            //var formatter = new PanGu.HighLight.SimpleHTMLFormatter("<font color='red'>", "</font>");
+            var formatter = new SimpleHTMLFormatter("<span class='highlight'>", "</span>");
             ////设置每个摘要段的字符数 
-            //var lighter = new PanGu.HighLight.Highlighter(formatter, new Segment()) { FragmentSize = 180 };//创建 Highlighter ，输入HTMLFormatter 和 盘古分词对象Semgent 
-            //return lighter.GetBestFragment(keyword, content);//获取最匹配的摘要段 
-            return content;
+            var lighter = new Highlighter(formatter, new QueryScorer(query));//创建 Highlighter ，输入HTMLFormatter 和 盘古分词对象Semgent 
+            return lighter.GetBestFragment(KeyWordAnalyzer.GetTokenStream(field, new StringReader(content)), content);
         }
 
         /// <summary>
@@ -75,7 +92,7 @@ namespace DhtCrawler.Common.Index
                     IndexWriter.Unlock(directory);
                 }
                 var list = GetAllModels();
-                if (!Enumerable.Any(list)) return;
+                int size = 0;
                 using (var writer = new IndexWriter(directory,
                     new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
                     {
@@ -89,8 +106,15 @@ namespace DhtCrawler.Common.Index
                         var doc = GetDocument(item);
                         writer.AddDocument(doc);
                         onBuild?.Invoke(item);
+                        size++;
+                        if (size >= BatchCommitNum)
+                        {
+                            writer.Commit();
+                            size = 0;
+                        }
                     }
-                    writer.Commit();
+                    if (size > 0)
+                        writer.Commit();
                 }
             }
         }
@@ -100,7 +124,6 @@ namespace DhtCrawler.Common.Index
             using (var directory = GetIndexDirectory(IndexDir)) // 取得索引存储的文件夹
             {
                 var list = GetAllModels();
-                if (!Enumerable.Any(list)) return;
                 var indexLocker = new object();
                 using (var parentWriter = new IndexWriter(directory,
                     new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer))) //创建索引写入者
@@ -145,20 +168,6 @@ namespace DhtCrawler.Common.Index
                     parentWriter.Commit();
                 }
             }
-        }
-
-        private static Directory GetIndexDirectory(string subIndex)
-        {
-            var directory = FSDirectory.Open(subIndex);
-            if (!DirectoryReader.IndexExists(directory))//判断是否存在索引文件夹
-            {
-                System.IO.Directory.CreateDirectory(subIndex);
-            }
-            if (IndexWriter.IsLocked(directory))//判断是否被锁定，如果锁定则解锁
-            {
-                IndexWriter.Unlock(directory);
-            }
-            return directory;
         }
 
         public void DeleteIndex(T model)
@@ -265,7 +274,7 @@ namespace DhtCrawler.Common.Index
                     {
                         var docNum = docs.ScoreDocs[i].Doc;
                         var doc = searcher.Doc(docNum);
-                        models.AddLast(GetModel(doc));
+                        models.AddLast(GetModel(doc, query));
                     }
                     return models.ToArray();
                 }
