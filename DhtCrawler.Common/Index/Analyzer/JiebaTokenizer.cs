@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using JiebaNet.Segmenter;
@@ -16,7 +15,7 @@ namespace DhtCrawler.Common.Index.Analyzer
         private IOffsetAttribute offsetAtt;
         private ITypeAttribute typeAtt;
 
-        private List<Token> tokens;
+        private IList<Token> tokens;
         private int position = -1;
 
 
@@ -50,8 +49,7 @@ namespace DhtCrawler.Common.Index.Analyzer
         public void ResetTextReader(TextReader reader)
         {
             var text = reader.ReadToEnd();
-            tokens = segmenter.Tokenize(text, TokenizerMode.Search).ToList();
-            Console.WriteLine(string.Join(",", tokens));
+            tokens = segmenter.Tokenize(text, TokenizerMode.Search).ToArray();
             position = -1;
         }
     }

@@ -2,7 +2,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
+using DhtCrawler.Common.Index.Analyzer;
+using DhtCrawler.Common.Index.Utils;
+using JiebaNet.Segmenter;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
@@ -43,9 +47,9 @@ namespace DhtCrawler.Common.Index
         /// 由lucence获取实际对象
         /// </summary>
         /// <param name="doc"></param>
-        /// <param name="query"></param>
+        /// <param name="keyWords"></param>
         /// <returns></returns>
-        protected abstract T GetModel(Document doc, Query query);
+        protected abstract T GetModel(Document doc, ISet<string> keyWords);
 
         /// <summary>
         /// 获取重建索引的所有数据
@@ -60,6 +64,12 @@ namespace DhtCrawler.Common.Index
         /// <returns></returns>
         protected abstract Term GetTargetTerm(T model);
 
+        protected virtual string[] SplitString(string keyword)
+        {
+            var seg = new JiebaSegmenter();
+            return seg.CutForSearch(keyword).Select(w => w.ToLower()).ToArray();
+        }
+
         /// <summary>
         /// 设置关键词高亮
         /// </summary>
@@ -69,11 +79,47 @@ namespace DhtCrawler.Common.Index
         /// <returns></returns>
         protected string SetHighKeyWord(string content, string field, Query query)
         {
-            ////创建HTMLFormatter,参数为高亮单词的前后缀 
             var formatter = new SimpleHTMLFormatter("<span class='highlight'>", "</span>");
-            ////设置每个摘要段的字符数 
-            var lighter = new Highlighter(formatter, new QueryScorer(query));//创建 Highlighter ，输入HTMLFormatter 和 盘古分词对象Semgent 
-            return lighter.GetBestFragment(KeyWordAnalyzer.GetTokenStream(field, new StringReader(content)), content);
+            var keywords = new HashSet<Term>();
+            query.ExtractTerms(keywords);
+            var lighter = new Highlighter(formatter, new QueryScorer(query));
+            return lighter.GetBestFragment(new JiebaMergeTokenizer(keywords.Select(k => k.Text()), new StringReader(content)), content);
+        }
+
+        /// <summary>
+        /// 设置关键词高亮
+        /// </summary>
+        /// <param name="content"></param>
+        /// <param name="keyWordSet"></param>
+        /// <returns></returns>
+        protected virtual string SetHighKeyWord(string content, ISet<string> keyWordSet)
+        {
+            if (keyWordSet == null || keyWordSet.Count <= 0)
+                return content;
+            const string preTag = "<span class='highlight'>", endTag = "</span>";
+            var newContent = new StringBuilder(content.Length);
+            var seg = new JiebaSegmenter();
+            int index = 0;
+            var contentWords = seg.Tokenize(content, TokenizerMode.Search).Where(t => keyWordSet.Contains(t.Word)).ToArray();
+            var resultToken = contentWords.MergeTokenList(keyWordSet);
+            Console.WriteLine(string.Join("/", contentWords.Select(t => t)));
+            Console.WriteLine(string.Join("/", keyWordSet.Select(t => t)));
+            Console.WriteLine(string.Join("/", resultToken.Select(t => t)));
+            foreach (var token in resultToken)
+            {
+                var tokenIndex = content.IndexOf(token.Word, index, StringComparison.OrdinalIgnoreCase);
+                var endIndex = tokenIndex + token.Word.Length;
+                newContent.Append(content.Substring(index, tokenIndex - index));
+                newContent.Append(preTag);
+                newContent.Append(token.Word);
+                newContent.Append(endTag);
+                index = Math.Max(index, endIndex);
+            }
+            if (index < content.Length - 1)
+            {
+                newContent.Append(content.Substring(index));
+            }
+            return newContent.ToString();
         }
 
         /// <summary>
@@ -270,11 +316,13 @@ namespace DhtCrawler.Common.Index
                     var docs = searcher.Search(query, null, end, sort);
                     total = docs.TotalHits;
                     var models = new LinkedList<T>();
+                    var keywords = new HashSet<Term>();
+                    query.ExtractTerms(keywords);
                     for (int i = start; i < total & i < end; i++)
                     {
                         var docNum = docs.ScoreDocs[i].Doc;
                         var doc = searcher.Doc(docNum);
-                        models.AddLast(GetModel(doc, query));
+                        models.AddLast(GetModel(doc, new HashSet<string>(keywords.Select(k => k.Text()), StringComparer.OrdinalIgnoreCase)));
                     }
                     return models.ToArray();
                 }

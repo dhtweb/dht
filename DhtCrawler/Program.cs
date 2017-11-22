@@ -306,7 +306,7 @@ namespace DhtCrawler
                         for (int i = 1, l = filePaths.Length - 1; i < filePaths.Length; i++)
                         {
                             var path = filePaths[i];
-                            if (i == l)
+                            if (i == l && (!path.StartsWith("_____padding_file_") && !path.EndsWith("或以上版本____")))
                             {
                                 var fileItem = new TorrentFile() { Name = path, FileSize = fileSize };
                                 directory.Files.Add(fileItem);
@@ -323,8 +323,10 @@ namespace DhtCrawler
                             }
                         }
                     }
-                    else
+                    else if (filePaths.Length == 1)
                     {
+                        if (filePaths[0].StartsWith("_____padding_file_") && filePaths[0].EndsWith("或以上版本____"))
+                            continue;
                         var item = new TorrentFile
                         {
                             FileSize = fileSize,

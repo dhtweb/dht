@@ -1,4 +1,5 @@
-﻿@model DhtCrawler.Service.Model.InfoHashModel
+﻿@using DhtCrawler.Service.Model
+@model DhtCrawler.Service.Model.InfoHashModel
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = string.Format("{0} 磁力链接_高清BT_迅雷种子下载 - BTSOSO磁力链接搜索引擎", Model.Name);
@@ -66,7 +67,12 @@
                 </tr>
                 <tr>
                     <td class="field col-md-1">关键词:</td>
-                    @*<td><a href="/search/DCOL_ctime_1.html" target="_blank">DCOL</a>&nbsp;&nbsp;&nbsp;<a href="/search/017レ捆人妻プされた鈴木心春_ctime_1.html" target="_blank">017レ捆人妻プされた鈴木心春</a>&nbsp;&nbsp;&nbsp;</td>*@
+                    <td>
+                        @foreach (var key in Model.KeyWords)
+                        {
+                            <a href="@Url.RouteUrl("list", new { keyword = key })" target="_blank">@key &nbsp;</a>
+                        }
+                    </td>
                 </tr>
                 <tr>
                     <td class="field col-md-1">分享:</td>
@@ -100,15 +106,16 @@
                     else
                     {
                         var listBuilder = new System.Text.StringBuilder();
-                        var queue = new Queue<DhtCrawler.Service.Model.TorrentFileModel>();
+                        var stack = new Stack<Tuple<TorrentFileModel, int>>();
                         foreach (var topFile in Model.Files)
                         {
-                            var level = 0;
-                            queue.Enqueue(topFile);
+
+                            stack.Push(new Tuple<TorrentFileModel, int>(topFile, 0));
                             do
                             {
-                                var left = 30 * level;
-                                var file = queue.Dequeue();
+                                var iItem = stack.Pop();
+                                var file = iItem.Item1;
+                                var left = 30 * iItem.Item2;
                                 if (file.Files == null || file.Files.Count <= 0)
                                 {
                                     if (file.Name.StartsWith("_____padding_file"))
@@ -120,14 +127,14 @@
                                 else
                                 {
                                     listBuilder.AppendFormat("<tr><td {1}><i class='icon-folder-open'></i>{0}</td><td></td></tr>", file.Name, left > 0 ? $"style='padding-left:{left}px'" : "");
-                                    foreach (var item in file.Files)
+                                    for (var i = file.Files.Count - 1; i >= 0; i--)
                                     {
-                                        queue.Enqueue(item);
+                                        var item = file.Files[i];
+                                        stack.Push(new Tuple<TorrentFileModel, int>(item, iItem.Item2 + 1));
                                     }
-                                    level++;
                                 }
                             }
-                            while (queue.Count > 0);
+                            while (stack.Count > 0);
                         }
                         @Html.Raw(listBuilder.ToString())
                     }

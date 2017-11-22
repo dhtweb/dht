@@ -16,7 +16,7 @@ namespace DhtCrawler.Service.Model
         {
             get
             {
-                if (_fileNum > 0)
+                if (_fileNum > 1)
                 {
                     return _fileNum;
                 }
@@ -68,5 +68,7 @@ namespace DhtCrawler.Service.Model
         public IList<TorrentFileModel> Files { get; set; }
         public bool IsDown { get; set; }
         public bool IsDanger { get; set; }
+        [JsonIgnore]
+        public ISet<string> KeyWords { get; set; }
     }
 }

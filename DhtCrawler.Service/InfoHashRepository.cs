@@ -207,7 +207,7 @@ namespace DhtCrawler.Service
 
         public IEnumerable<InfoHashModel> GetAllFullInfoHashModels(DateTime? start = null)
         {
-            var hashs = start.HasValue ? Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE AND createtime>@start", new { start = start.Value }) : Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE");
+            var hashs = start.HasValue ? Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE AND updatetime>@start", new { start = start.Value }) : Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE");
             foreach (var hash in hashs)
             {
                 yield return Connection.QuerySingle<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });

@@ -1,25 +1,34 @@
-﻿using System.IO;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using JiebaNet.Segmenter;
 using Lucene.Net.Analysis;
 using Lucene.Net.Analysis.Core;
+using Lucene.Net.Analysis.Util;
 using Lucene.Net.Util;
 
 namespace DhtCrawler.Common.Index.Analyzer
 {
     public class JieBaAnalyzer : Lucene.Net.Analysis.Analyzer
     {
-
+        private static readonly ISet<string> StopWordSet;
+        static JieBaAnalyzer()
+        {
+            var stopWordPath = Path.Combine(AppContext.BaseDirectory, "Resources", "stopwords.txt");
+            StopWordSet = File.Exists(stopWordPath) ? new HashSet<string>(File.ReadAllLines(stopWordPath)) : new HashSet<string>(new[] { " ", "@", "\r", "\n", "。", "，", "：", "；", "、", "“", "”", "【", "】", "《", "》", "（", "）", "—", "'…", ".", ",", ":", ";", "\"", "\"", "[", "]", "<", ">", "(", ")", "#", "*", "&", "%", "￥", "$", "-", "+", "=", "|", "\\", "{", "}" });
+        }
         protected override TokenStreamComponents CreateComponents(string fieldName, TextReader reader)
         {
             var seg = new JiebaSegmenter();
             var tokenizer = new JiebaTokenizer(seg, reader);
-            var tokenStream = new LowerCaseFilter(LuceneVersion.LUCENE_48, tokenizer);
+            TokenStream tokenStream = new LowerCaseFilter(LuceneVersion.LUCENE_48, tokenizer);
+            tokenStream = new StopFilter(LuceneVersion.LUCENE_48, tokenStream, new CharArraySet(LuceneVersion.LUCENE_48, StopWordSet, true));
             return new JiebaTokenStreamComponents(tokenizer, tokenStream);
         }
 
         private class JiebaTokenStreamComponents : TokenStreamComponents
         {
-            private JiebaTokenizer jiebaTokenizer;
+            private readonly JiebaTokenizer jiebaTokenizer;
             public JiebaTokenStreamComponents(JiebaTokenizer tokenizer, TokenStream result)
                 : base(tokenizer, result)
             {

@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using DhtCrawler.Common.Index;
 using DhtCrawler.Common.Index.Analyzer;
 using DhtCrawler.Service.Model;
-using JiebaNet.Segmenter;
 using Lucene.Net.Analysis;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
@@ -21,11 +19,6 @@ namespace DhtCrawler.Service.Index
             _infoHashRepository = infoHashRepository;
         }
 
-        private string[] SplitString(string keyword)
-        {
-            var seg = new JiebaSegmenter();
-            return seg.CutForSearch(keyword).Select(w => w.ToLower()).ToArray();
-        }
         protected override string IndexDir { get; }
 
         protected override Analyzer KeyWordAnalyzer => new JieBaAnalyzer();
@@ -61,12 +54,13 @@ namespace DhtCrawler.Service.Index
             return doc;
         }
 
-        protected override InfoHashModel GetModel(Document doc, Query query)
+        protected override InfoHashModel GetModel(Document doc, ISet<string> keyWords)
         {
             var item = new InfoHashModel
             {
                 InfoHash = doc.Get("InfoHash"),
-                Name = SetHighKeyWord(doc.Get("Name"), "Name", query),//doc.Get("Name"),//
+                //Name = SetHighKeyWord(doc.Get("Name"), "Name", query),//doc.Get("Name"),//
+                Name = SetHighKeyWord(doc.Get("Name"), keyWords),//doc.Get("Name"),//
                 DownNum = doc.GetField("DownNum").GetInt32ValueOrDefault(),
                 FileNum = doc.GetField("FileNum").GetInt32ValueOrDefault(),
                 FileSize = doc.GetField("FileSize").GetInt64ValueOrDefault(),
@@ -93,13 +87,12 @@ namespace DhtCrawler.Service.Index
                 if (!string.IsNullOrEmpty(keyword))//关键字搜索
                 {
                     var splitKey = SplitString(keyword);
-                    Console.WriteLine(string.Join(",", splitKey));
                     Term[] nameTerms = new Term[splitKey.Length], fileTerms = new Term[splitKey.Length];
                     for (var i = 0; i < splitKey.Length; i++)
                     {
                         var key = splitKey[i];
                         nameTerms[i] = new Term("Name", key);
-                        fileTerms[i] = new Term("Name", key);
+                        fileTerms[i] = new Term("Files", key);
                     }
                     query.Add(new MultiPhraseQuery() { nameTerms }, Occur.SHOULD);
                     query.Add(new MultiPhraseQuery() { fileTerms }, Occur.SHOULD);

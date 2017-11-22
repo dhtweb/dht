@@ -268,55 +268,52 @@ namespace DhtCrawler.DHT
             }
         }
 
-        private Task ProcessMsgData()
+        private async Task ProcessMsgData()
         {
-            return Task.Factory.StartNew(async () =>
-             {
-                 while (running)
-                 {
-                     if (!_recvMessageQueue.TryTake(out DhtData dhtData))
-                     {
-                         await Task.Delay(1000);
-                         continue;
-                     }
-                     try
-                     {
-                         var dic = (Dictionary<string, object>)BEncoder.Decode(dhtData.Data);
-                         var msg = new DhtMessage(dic);
-                         switch (msg.MesageType)
-                         {
-                             case MessageType.Request:
-                                 await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
-                                 break;
-                             case MessageType.Response:
-                                 await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
-                                 break;
-                         }
-                     }
-                     catch (Exception ex)
-                     {
-                         _logger.Error($"ErrorData:{BitConverter.ToString(dhtData.Data)}", ex);
-                         var response = new DhtMessage
-                         {
-                             MesageType = MessageType.Exception,
-                             MessageId = new byte[] { 0, 0 }
-                         };
-                         if (ex is DecodeException)
-                         {
-                             response.Errors.Add(203);
-                             response.Errors.Add("Error Protocol");
-                         }
-                         else
-                         {
-                             response.Errors.Add(202);
-                             response.Errors.Add("Server Error:" + ex.Message);
-                         }
-                         dhtData.Data = response.BEncodeBytes();
-                         _sendMessageQueue.TryAdd(dhtData);
+            while (running)
+            {
+                if (!_recvMessageQueue.TryTake(out DhtData dhtData))
+                {
+                    await Task.Delay(1000);
+                    continue;
+                }
+                try
+                {
+                    var dic = (Dictionary<string, object>)BEncoder.Decode(dhtData.Data);
+                    var msg = new DhtMessage(dic);
+                    switch (msg.MesageType)
+                    {
+                        case MessageType.Request:
+                            await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
+                            break;
+                        case MessageType.Response:
+                            await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
+                            break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"ErrorData:{BitConverter.ToString(dhtData.Data)}", ex);
+                    var response = new DhtMessage
+                    {
+                        MesageType = MessageType.Exception,
+                        MessageId = new byte[] { 0, 0 }
+                    };
+                    if (ex is DecodeException)
+                    {
+                        response.Errors.Add(203);
+                        response.Errors.Add("Error Protocol");
+                    }
+                    else
+                    {
+                        response.Errors.Add(202);
+                        response.Errors.Add("Server Error:" + ex.Message);
+                    }
+                    dhtData.Data = response.BEncodeBytes();
+                    _sendMessageQueue.TryAdd(dhtData);
 
-                     }
-                 }
-             }, TaskCreationOptions.LongRunning);
+                }
+            }
         }
 
         #endregion
@@ -353,67 +350,61 @@ namespace DhtCrawler.DHT
             }
         }
 
-        private Task LoopSendMsg()
+        private async Task LoopSendMsg()
         {
-            return Task.Factory.StartNew(async () =>
+            while (running)
             {
-                while (running)
+                var queue = _responseMessageQueue.Count <= 0 ? _sendMessageQueue : _responseMessageQueue;
+                if (!queue.TryTake(out DhtData dhtData))
                 {
-                    var queue = _responseMessageQueue.Count <= 0 ? _sendMessageQueue : _responseMessageQueue;
-                    if (!queue.TryTake(out DhtData dhtData))
-                    {
-                        await Task.Delay(1000);
-                        continue;
-                    }
-                    try
-                    {
-                        while (!_sendRateLimit.Require(dhtData.Data.Length, out var waitTime))
-                        {
-                            await Task.Delay(waitTime);
-                        }
-                        await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.RemoteEndPoint);
-                    }
-                    catch (SocketException)
-                    {
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Error(ex);
-                    }
+                    await Task.Delay(1000);
+                    continue;
                 }
-            }, TaskCreationOptions.LongRunning);
+                try
+                {
+                    while (!_sendRateLimit.Require(dhtData.Data.Length, out var waitTime))
+                    {
+                        await Task.Delay(waitTime);
+                    }
+                    await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.RemoteEndPoint);
+                }
+                catch (SocketException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex);
+                }
+            }
         }
 
-        private Task LoopFindNodes()
+        private async Task LoopFindNodes()
         {
-            return Task.Factory.StartNew(async () =>
+            int limitNode = 1024 * 10;
+            var nodeSet = new HashSet<DhtNode>();
+            while (running)
             {
-                int limitNode = 1024 * 10;
-                var nodeSet = new HashSet<DhtNode>();
-                while (running)
+                if (_nodeQueue.Count <= 0)
                 {
-                    if (_nodeQueue.Count <= 0)
+                    foreach (var dhtNode in BootstrapNodes.Union(_kTable))
                     {
-                        foreach (var dhtNode in BootstrapNodes.Union(_kTable))
-                        {
-                            if (!running)
-                                return;
-                            if (!_nodeQueue.TryAdd(dhtNode))
-                                break;
-                        }
+                        if (!running)
+                            return;
+                        if (!_nodeQueue.TryAdd(dhtNode))
+                            break;
                     }
-                    while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
-                    {
-                        nodeSet.Add(node);
-                    }
-                    foreach (var node in nodeSet)
-                    {
-                        FindNode(node);
-                    }
-                    nodeSet.Clear();
-                    await Task.Delay(60 * 1000);
                 }
-            }, TaskCreationOptions.LongRunning);
+                while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
+                {
+                    nodeSet.Add(node);
+                }
+                foreach (var node in nodeSet)
+                {
+                    FindNode(node);
+                }
+                nodeSet.Clear();
+                await Task.Delay(60 * 1000);
+            }
         }
 
         #endregion

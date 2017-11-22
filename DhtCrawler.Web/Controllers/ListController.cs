@@ -1,9 +1,12 @@
-﻿using System.Threading.Tasks;
+﻿using System.Linq;
+using System.Threading.Tasks;
+using DhtCrawler.Common.Index.Utils;
 using DhtCrawler.Common.Web.Model;
 using DhtCrawler.Service;
 using DhtCrawler.Service.Index;
 using DhtCrawler.Service.Model;
 using Microsoft.AspNetCore.Mvc;
+using System.Collections.Generic;
 
 namespace DhtCrawler.Web.Controllers
 {
@@ -31,6 +34,7 @@ namespace DhtCrawler.Web.Controllers
             {
                 return RedirectToAction("List");
             }
+            item.KeyWords = new HashSet<string>(item.Name.CutForSearch().Where(k => k.Length > 1));//.Take(10)
             return View(item);
         }
     }
