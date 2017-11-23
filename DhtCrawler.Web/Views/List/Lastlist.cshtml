@@ -1,0 +1,112 @@
+﻿@model DhtCrawler.Common.Web.Model.PageModel<DhtCrawler.Service.Model.InfoHashModel>
+@{
+        ViewBag.Title = "磁力云 - DHT磁力链接搜索引擎";
+        ViewBag.KeyWord = "磁力链接,磁力搜索,BT搜索,BT种子,BT种子搜索,种子搜索,高清BT,迅雷BT搜索,高清BT种子,bt种子搜索器";
+        ViewBag.Description = "磁力云是一个DHT磁力链接搜索引擎，专注于提供磁力链接和BT种子文件搜索服务,你可以在这里搜索电影、美剧、综艺、软件、动漫、教程、游戏等BT资源和磁力链接。";
+}
+
+
+@section PagerHeader{
+    @Html.Partial("_DefaultHeader")
+}
+
+
+<div class="top-search clearfix">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="col-md-2 top-logo">
+                <h1 class="minlogo"><img src="/static/ui/images/toplogo.png" alt="" title="磁力云 - 专业的DHT磁力链接搜索引擎"></h1>
+            </div>
+            <div class="search-box col-md-5">
+                <form class="search_form" action="/list" role="form" method="get" id="topsearch" name="search">
+                    <div class="input-group">
+                        <input type="text" class="form-control sinput search" name="kw" value="@ViewBag.SearchKey" baidusug="1" id="search" placeholder="立即搜索磁力资源..." autocomplete="off">
+                        <span class="input-group-btn">
+                            <button type="submit" class="btn btn-primary">搜 索</button>
+                        </span>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="sort">
+    <ol class="breadcrumb">
+        <span class="hidden-xs">磁力云为您提供 <b class="blue">@ViewBag.Date</b> 最新入库磁力链接</span>
+        <li><a href="http://www.lixianhezi.com/" target="_blank" class="highlight">离线网盘</a></li>
+    </ol>
+</div>
+<div class="search-list col-md-12">
+    <ul class="media-list media-list-set">
+        @foreach (var item in Model.List)
+        {
+            <li class="media">
+                <div class="media-body">
+
+                    <h4><a class="title" target="_blank" href="@Url.RouteUrl("detail", new { hash = item.InfoHash })">@Html.Raw(item.Name)</a></h4>
+                    <div class="media-more">
+                        <cite>创建日期：</cite><span class="label label-success">@item.CreateTime.ToShortDateString()</span>&nbsp;&nbsp;&nbsp;
+                        <cite>文件大小：</cite><span class="label label-warning">@item.ShowFileSize</span>&nbsp;&nbsp;&nbsp;
+                        <cite>文件数：</cite><span class="label label-warning">@item.FileNum</span>&nbsp;&nbsp;&nbsp;
+                        <cite>访问热度：</cite><span class="label label-primary">@item.DownNum</span>&nbsp;&nbsp;&nbsp;
+                        <span class="media-down"><a href="http://www.lixianhezi.com/yun/" title="磁力云" style="color: red"><i class="icon-download"></i> 网盘播放</a></span>
+                    </div>
+                </div>
+            </li>
+        }
+    </ul>
+</div>
+
+<ul class="pagination">
+    @if (Model.PageIndex == 1)
+    {
+        <li class="disabled"><a href="javascript:void(0);">首页</a></li>
+        <li class="disabled"><a href="javascript:void(0);">上一页</a></li>
+    }
+    else
+    {
+        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date,index=1 })">首页</a></li>
+        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = Model.PreIndex })">上一页</a></li>
+    }
+    @for (int start = Math.Max(1, Model.PageIndex - 3), end = Math.Min(Model.Pages, Model.PageIndex + 3); start <= end; start++)
+    {
+        if (start == Model.PageIndex)
+        {
+        <li class="disabled"><a href="javascript:void(0);">@start</a></li>
+        }
+        else
+        {
+        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = start })">@start</a></li>
+        }
+    }
+    @if (Model.PageIndex >= Model.Pages)
+    {
+        <li class="disabled"><a href="javascript:void(0);">下一页</a></li>
+        <li class="disabled"><a href="javascript:void(0);">尾页</a></li>
+    }
+    else
+    {
+        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = Model.NextIndex })">下一页</a></li>
+        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = Model.Pages })">尾页</a></li>
+    }
+</ul>
+@section Footer{
+    <div id="footer" class="bt-footer">
+        <div id="bottom-footer" class="container">
+            <div class="pull-left">
+                <p><strong><a href="/">ciliyun.cc</a></strong> Copyright © 2015 All Rights Reserved.</p>
+            </div>
+        </div>
+    </div>
+    <script type="text/javascript">
+        $(function () {
+            $("#topsearch").submit(function () {
+                var key = $.trim($("#search").val());
+                if (key.length > 0) {
+                    window.location.href = $("#topsearch").attr("action") + "/" + key;
+                }
+                return false;
+            });
+        })
+    </script>
+}

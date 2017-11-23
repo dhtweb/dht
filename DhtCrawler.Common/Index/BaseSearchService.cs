@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -16,7 +17,7 @@ using Directory = Lucene.Net.Store.Directory;
 
 namespace DhtCrawler.Common.Index
 {
-    public abstract class BaseSearchService<T> where T : class
+    public abstract class BaseSearchService<T> : IDisposable where T : class
     {
         private static Directory GetIndexDirectory(string subIndex)
         {
@@ -32,6 +33,30 @@ namespace DhtCrawler.Common.Index
             return directory;
         }
 
+        private static readonly ConcurrentDictionary<string, FSDirectory> FSDirectoryDic = new ConcurrentDictionary<string, FSDirectory>();
+        private static readonly ConcurrentDictionary<string, IndexWriter> IndexWriterDic = new ConcurrentDictionary<string, IndexWriter>();
+
+        private IndexWriter IndexWriter
+        {
+            get
+            {
+                return IndexWriterDic.GetOrAdd(IndexDir, dic =>
+                {
+                    var directory = FSDirectoryDic.GetOrAdd(dic, dir => FSDirectory.Open(dic));  // 取得索引存储的文件夹
+                    if (!DirectoryReader.IndexExists(directory)) //判断是否存在索引文件夹
+                    {
+                        System.IO.Directory.CreateDirectory(IndexDir);
+                    }
+                    var writer = new IndexWriter(directory,
+                        new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
+                        {
+                            IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
+                            OpenMode = OpenMode.CREATE_OR_APPEND
+                        }); //创建索引写入者
+                    return writer;
+                });
+            }
+        }
         protected abstract string IndexDir { get; }
         protected virtual int BatchCommitNum => 10000;
         protected abstract Lucene.Net.Analysis.Analyzer KeyWordAnalyzer { get; }
@@ -101,11 +126,7 @@ namespace DhtCrawler.Common.Index
             var seg = new JiebaSegmenter();
             int index = 0;
             var contentWords = seg.TokenizeAll(content).Where(t => keyWordSet.Contains(t.Word)).ToArray();
-            Console.WriteLine(string.Join("/", keyWordSet));
-            Console.WriteLine(content);
-            Console.WriteLine(string.Join("/", (IEnumerable<Token>)contentWords));
             var resultToken = contentWords.MergeTokenList();
-            Console.WriteLine(string.Join("/", resultToken));
             foreach (var token in resultToken)
             {
                 newContent.Append(content.Substring(index, token.StartIndex - index));
@@ -114,7 +135,7 @@ namespace DhtCrawler.Common.Index
                 newContent.Append(endTag);
                 index = Math.Max(index, token.EndIndex);
             }
-            if (index < content.Length - 1)
+            if (index <= content.Length - 1)
             {
                 newContent.Append(content.Substring(index));
             }
@@ -126,54 +147,37 @@ namespace DhtCrawler.Common.Index
         /// </summary>
         public void ReBuildIndex(Action<T> onBuild)
         {
-            using (FSDirectory directory = FSDirectory.Open(IndexDir)) // 取得索引存储的文件夹
+
+            var list = GetAllModels();
+            int size = 0;
+            lock (IndexWriter)
             {
-                if (!DirectoryReader.IndexExists(directory)) //判断是否存在索引文件夹
+                IndexWriter.DeleteAll();
+                foreach (var item in list)
                 {
-                    System.IO.Directory.CreateDirectory(IndexDir);
-                }
-                if (IndexWriter.IsLocked(directory)) //判断是否被锁定，如果锁定则解锁
-                {
-                    IndexWriter.Unlock(directory);
-                }
-                var list = GetAllModels();
-                int size = 0;
-                using (var writer = new IndexWriter(directory,
-                    new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
+                    var doc = GetDocument(item);
+                    IndexWriter.AddDocument(doc);
+                    onBuild?.Invoke(item);
+                    size++;
+                    if (size >= BatchCommitNum)
                     {
-                        IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                        OpenMode = OpenMode.CREATE
-                    })) //创建索引写入者
-                {
-                    writer.DeleteAll();
-                    foreach (var item in list)
-                    {
-                        var doc = GetDocument(item);
-                        writer.AddDocument(doc);
-                        onBuild?.Invoke(item);
-                        size++;
-                        if (size >= BatchCommitNum)
-                        {
-                            writer.Commit();
-                            size = 0;
-                        }
+                        IndexWriter.Commit();
+                        size = 0;
                     }
-                    if (size > 0)
-                        writer.Commit();
                 }
+                if (size > 0)
+                    IndexWriter.Commit();
             }
         }
 
         public void MultipleThreadReBuildIndex()
         {
-            using (var directory = GetIndexDirectory(IndexDir)) // 取得索引存储的文件夹
+            var list = GetAllModels();
+            lock (IndexWriter)
             {
-                var list = GetAllModels();
                 var indexLocker = new object();
-                using (var parentWriter = new IndexWriter(directory,
-                    new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer))) //创建索引写入者
                 {
-                    parentWriter.DeleteAll();
+                    IndexWriter.DeleteAll();
                     Parallel.ForEach(list,
                         () =>
                         {
@@ -203,31 +207,24 @@ namespace DhtCrawler.Common.Index
                                     {
                                         using (var reader = writer.GetReader(true))
                                         {
-                                            parentWriter.AddIndexes(reader);
+                                            IndexWriter.AddIndexes(reader);
                                         }
                                     }
                                     writer.DeleteAll();
                                 }
                             }
                         });
-                    parentWriter.Commit();
+                    IndexWriter.Commit();
                 }
             }
         }
 
         public void DeleteIndex(T model)
         {
-            using (var indexDirectory = FSDirectory.Open(IndexDir))
+            lock (IndexWriter)
             {
-                using (var writer = new IndexWriter(indexDirectory, new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
-                {
-                    IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                    OpenMode = OpenMode.APPEND
-                }))
-                {
-                    writer.DeleteDocuments(GetTargetTerm(model));
-                    writer.Commit();
-                }
+                IndexWriter.DeleteDocuments(GetTargetTerm(model));
+                IndexWriter.Commit();
             }
         }
         /// <summary>
@@ -236,18 +233,11 @@ namespace DhtCrawler.Common.Index
         /// <param name="model"></param>
         public void AddIndex(T model)
         {
-            using (var indexDirectory = FSDirectory.Open(IndexDir))
+            var doc = GetDocument(model);
+            lock (IndexWriter)
             {
-                var doc = GetDocument(model);
-                using (var writer = new IndexWriter(indexDirectory, new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
-                {
-                    IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                    OpenMode = OpenMode.APPEND
-                }))
-                {
-                    writer.AddDocument(doc);
-                    writer.Commit();
-                }
+                IndexWriter.AddDocument(doc);
+                IndexWriter.Commit();
             }
         }
         /// <summary>
@@ -256,18 +246,11 @@ namespace DhtCrawler.Common.Index
         /// <param name="model"></param>
         public void UpdateIndex(T model)
         {
-            using (var indexDirectory = FSDirectory.Open(IndexDir))
+            var doc = GetDocument(model);
+            lock (IndexWriter)
             {
-                var doc = GetDocument(model);
-                using (var writer = new IndexWriter(indexDirectory, new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
-                {
-                    IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                    OpenMode = OpenMode.APPEND
-                }))
-                {
-                    writer.UpdateDocument(GetTargetTerm(model), doc);
-                    writer.Commit();
-                }
+                IndexWriter.UpdateDocument(GetTargetTerm(model), doc);
+                IndexWriter.Commit();
             }
         }
         /// <summary>
@@ -276,21 +259,14 @@ namespace DhtCrawler.Common.Index
         /// <param name="models"></param>
         public void UpdateIndex(IEnumerable<T> models)
         {
-            using (var indexDirectory = FSDirectory.Open(IndexDir))
+            lock (IndexWriter)
             {
-                using (var writer = new IndexWriter(indexDirectory, new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
+                foreach (var model in models)
                 {
-                    IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                    OpenMode = OpenMode.APPEND
-                }))
-                {
-                    foreach (var model in models)
-                    {
-                        var doc = GetDocument(model);
-                        writer.UpdateDocument(GetTargetTerm(model), doc);
-                    }
-                    writer.Commit();
+                    var doc = GetDocument(model);
+                    IndexWriter.UpdateDocument(GetTargetTerm(model), doc);
                 }
+                IndexWriter.Commit();
             }
         }
         /// <summary>
@@ -304,28 +280,32 @@ namespace DhtCrawler.Common.Index
         /// <returns></returns>
         public IList<T> Search(int index, int size, out int total, Func<Query> getQuery, Func<Sort> getSort)
         {
-            using (var indexDirectory = FSDirectory.Open(IndexDir))
+            using (var reader = IndexWriter.GetReader(false))//获取索引只读对象
             {
-                using (var reader = DirectoryReader.Open(indexDirectory))//获取索引只读对象
+                var searcher = new IndexSearcher(reader);
+                var query = getQuery();
+                var sort = getSort();
+                int start = (index - 1) * size, end = index * size;
+                var docs = searcher.Search(query, null, end, sort);
+                total = docs.TotalHits;
+                var models = new List<T>();
+                var keywords = new HashSet<Term>();
+                query.ExtractTerms(keywords);
+                for (int i = start; i < total & i < end; i++)
                 {
-                    var searcher = new IndexSearcher(reader);
-                    var query = getQuery();
-                    var sort = getSort();
-                    int start = (index - 1) * size, end = index * size;
-                    var docs = searcher.Search(query, null, end, sort);
-                    total = docs.TotalHits;
-                    var models = new List<T>();
-                    var keywords = new HashSet<Term>();
-                    query.ExtractTerms(keywords);
-                    for (int i = start; i < total & i < end; i++)
-                    {
-                        var docNum = docs.ScoreDocs[i].Doc;
-                        var doc = searcher.Doc(docNum);
-                        models.Add(GetModel(doc, new HashSet<string>(keywords.Select(k => k.Text()), StringComparer.OrdinalIgnoreCase)));
-                    }
-                    return models;
+                    var docNum = docs.ScoreDocs[i].Doc;
+                    var doc = searcher.Doc(docNum);
+                    models.Add(GetModel(doc, new HashSet<string>(keywords.Select(k => k.Text()), StringComparer.OrdinalIgnoreCase)));
                 }
+                return models;
             }
+        }
+
+        public void Dispose()
+        {
+            if (!IndexWriterDic.TryRemove(IndexDir, out var writer))
+                return;
+            writer.Dispose();
         }
     }
 }

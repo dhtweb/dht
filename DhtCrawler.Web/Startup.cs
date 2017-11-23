@@ -27,7 +27,7 @@ namespace DhtCrawler.Web
                 var factory = new DbFactory(Configuration["postgresql.url"], NpgsqlFactory.Instance);
                 return new InfoHashRepository(factory);
             });
-            services.AddTransient(provider =>
+            services.AddSingleton(provider =>
             {
                 var infoHashRepo = provider.GetService<InfoHashRepository>();
                 return new IndexSearchService(Configuration["index.dir"], infoHashRepo);
@@ -55,6 +55,7 @@ namespace DhtCrawler.Web
                     name: "default",
                     template: "{controller=Home}/{action=Index}/{id?}");
                 routes.MapRoute("list", "list/{keyword}/{index}", new { controller = "list", action = "list", index = 1 }, new { keyword = "\\S+", index = "\\d+" });
+                routes.MapRoute("last", "last/{date}/{index}", new { controller = "list", action = "lastlist", index = 1 }, new { date = @"\d{4}-\d{2}-\d{2}", index = "\\d+" });
                 routes.MapRoute("detail", "infohash/{hash}.html", new { controller = "list", action = "detail" }, new { hash = "^[A-Za-z0-9]{40}$" });
             });
         }

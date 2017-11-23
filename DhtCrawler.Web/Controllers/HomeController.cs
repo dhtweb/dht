@@ -25,7 +25,7 @@ namespace DhtCrawler.Web.Controllers
         }
         public async Task<IActionResult> Index()
         {
-            ViewBag.TorrentNum = await _infoHashRepository.GetTorrentNum();
+            ViewBag.TorrentNum = await _infoHashRepository.GetTorrentNumAsync();
             return View();
         }
 
@@ -95,7 +95,7 @@ namespace DhtCrawler.Web.Controllers
                             model.InfoHash = Path.GetFileNameWithoutExtension(file);
                         }
                         await Response.WriteAsync((++size) + Environment.NewLine);
-                        await _infoHashRepository.InsertOrUpdate(model);
+                        await _infoHashRepository.InsertOrUpdateAsync(model);
                         //System.IO.File.Move(file, @"G:\torrent\" + Path.GetFileName(file));
                         System.IO.File.Delete(file);
                     }
@@ -142,13 +142,13 @@ namespace DhtCrawler.Web.Controllers
                     list.AddLast(new InfoHashModel() { InfoHash = kv.Key, DownNum = kv.Value });
                     if (list.Count > 1000)
                     {
-                        await _infoHashRepository.InsertOrUpdate(list);
+                        await _infoHashRepository.InsertOrUpdateAsync(list);
                         list.Clear();
                     }
                 }
                 if (list.Count > 0)
                 {
-                    await _infoHashRepository.InsertOrUpdate(list);
+                    await _infoHashRepository.InsertOrUpdateAsync(list);
                 }
                 list.Clear();
                 dic.Clear();

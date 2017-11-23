@@ -47,7 +47,10 @@ namespace DhtCrawler.Service.Index
                             queues.Enqueue(fileFile);
                         }
                     }
-                    names.Add(file.Name);
+                    else
+                    {
+                        names.Add(file.Name);
+                    }
                 }
                 doc.AddTextField("Files", string.Join(",", names), Field.Store.NO);
             }

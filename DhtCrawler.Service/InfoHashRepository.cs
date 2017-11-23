@@ -28,7 +28,7 @@ namespace DhtCrawler.Service
         }
 
 
-        public async Task<bool> InsertOrUpdate(InfoHashModel model)
+        public async Task<bool> InsertOrUpdateAsync(InfoHashModel model)
         {
             var updateSql = new StringBuilder();
             var list = new List<DbParameter>
@@ -82,7 +82,7 @@ namespace DhtCrawler.Service
             return await Connection.ExecuteAsync(string.Format("INSERT INTO t_infohash ({0}) VALUES ({1}) ON CONFLICT  (infohash) DO UPDATE SET {2}", string.Join(",", list.Select(l => l.ParameterName)), string.Join(",", list.Select(l => "@" + l.ParameterName)), updateSql.ToString().TrimEnd(',')), paramater) > 0;
         }
 
-        public async Task<bool> InsertOrUpdate(IEnumerable<InfoHashModel> models)
+        public async Task<bool> InsertOrUpdateAsync(IEnumerable<InfoHashModel> models)
         {
             if (Connection.State != ConnectionState.Open)
             {
@@ -165,12 +165,12 @@ namespace DhtCrawler.Service
 
         }
 
-        public async Task<uint> GetTorrentNum()
+        public async Task<uint> GetTorrentNumAsync()
         {
             return await Connection.ExecuteScalarAsync<uint>("select count(id) from t_infohash where isdown=@flag ", new { flag = true });
         }
 
-        public async Task<IList<string>> GetDownloadInfoHash()
+        public async Task<IList<string>> GetDownloadInfoHashAsync()
         {
             var result = new List<string>();
             var reader = await Connection.ExecuteReaderAsync("select infohash from t_infohash where isdown=@flag ", new { flag = true });
@@ -181,27 +181,39 @@ namespace DhtCrawler.Service
             return result;
         }
 
-        public async Task<(IList<InfoHashModel> List, long Count)> GetInfoHashList(int index, int size)
+        public async Task<(IList<InfoHashModel> List, long Count)> GetInfoHashListAsync(int index, int size, DateTime? start = null, DateTime? end = null, bool desc = true)
         {
-            var result = await Connection.QueryMultipleAsync("SELECT count(id) FROM t_infohash WHERE isdown = TRUE;SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE OFFSET @start LIMIT @size;", new { start = (index - 1) * size, size = size });
+            var where = new StringBuilder();
+            if (start.HasValue)
+            {
+                where.Append("AND createtime >= @startTime ");
+            }
+            if (end.HasValue)
+            {
+                where.Append("AND createtime <= @endTime ");
+            }
+            var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : "order by create"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end });
             var count = await result.ReadFirstAsync<long>();
             var list = await result.ReadAsync<InfoHashModel>();
             return (list.ToArray(), count);
         }
 
-        public async Task<InfoHashModel> GetInfoHashDetail(string hash)
+        public async Task<InfoHashModel> GetInfoHashDetailAsync(string hash)
         {
             return await Connection.QuerySingleAsync<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
         }
 
         public IEnumerable<InfoHashModel> GetAllFullInfoHashModels(DateTime? start = null)
         {
-            var hashs = start.HasValue ? Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE AND updatetime>@start", new { start = start.Value }, null, false) : Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE", (object)null, null, false);
-            using (var queryCon = Factory.CreateConnection())
+            using (var listCon = Factory.CreateConnection())
             {
-                foreach (var hash in hashs)
+                var hashs = start.HasValue ? listCon.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE AND updatetime>@start", new { start = start.Value }, null, false) : listCon.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE", (object)null, null, false);
+                using (var queryCon = Factory.CreateConnection())
                 {
-                    yield return queryCon.QuerySingle<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
+                    foreach (var hash in hashs)
+                    {
+                        yield return queryCon.QuerySingle<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
+                    }
                 }
             }
         }
