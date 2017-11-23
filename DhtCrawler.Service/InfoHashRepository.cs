@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using Dapper;
 using DhtCrawler.Service.Model;
 using DhtCrawler.Common;
+using DhtCrawler.Common.Db;
+using DhtCrawler.Service.Maps;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -15,26 +17,13 @@ namespace DhtCrawler.Service
 {
     public class InfoHashRepository : BaseRepository<InfoHashModel, ulong>
     {
-        private class FileListTypeHandler : SqlMapper.TypeHandler<IList<TorrentFileModel>>
-        {
-            public override void SetValue(IDbDataParameter parameter, IList<TorrentFileModel> value)
-            {
-                parameter.Value = value.ToJson();
-            }
 
-            public override IList<TorrentFileModel> Parse(object value)
-            {
-                if (value == null || !(value is string))
-                    return null;
-                return ((string)value).ToObjectFromJson<IList<TorrentFileModel>>();
-            }
-        }
         static InfoHashRepository()
         {
             SqlMapper.AddTypeHandler(typeof(IList<TorrentFileModel>), new FileListTypeHandler());
         }
 
-        public InfoHashRepository(IDbConnection connection) : base(connection)
+        public InfoHashRepository(DbFactory factory) : base(factory)
         {
         }
 
@@ -207,24 +196,12 @@ namespace DhtCrawler.Service
 
         public IEnumerable<InfoHashModel> GetAllFullInfoHashModels(DateTime? start = null)
         {
-            var hashs = start.HasValue ? Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE AND updatetime>@start", new { start = start.Value }) : Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE");
-            foreach (var hash in hashs)
+            var hashs = start.HasValue ? Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE AND updatetime>@start", new { start = start.Value }, null, false) : Connection.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE", (object)null, null, false);
+            using (var queryCon = Factory.CreateConnection())
             {
-                yield return Connection.QuerySingle<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
-            }
-        }
-        private class InfoHashParamter : SqlMapper.IDynamicParameters
-        {
-            private List<DbParameter> _parameters;
-            public InfoHashParamter(List<DbParameter> parameters)
-            {
-                _parameters = parameters;
-            }
-            public void AddParameters(IDbCommand command, SqlMapper.Identity identity)
-            {
-                foreach (var parameter in _parameters)
+                foreach (var hash in hashs)
                 {
-                    command.Parameters.Add(parameter);
+                    yield return queryCon.QuerySingle<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
                 }
             }
         }

@@ -1,6 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DhtCrawler.Common.Index.Utils;
 using JiebaNet.Segmenter;
 using Lucene.Net.Analysis;
 using Lucene.Net.Analysis.TokenAttributes;
@@ -49,7 +51,8 @@ namespace DhtCrawler.Common.Index.Analyzer
         public void ResetTextReader(TextReader reader)
         {
             var text = reader.ReadToEnd();
-            tokens = segmenter.Tokenize(text, TokenizerMode.Search).ToArray();
+            var buffer = segmenter.TokenizeAll(text);
+            tokens = buffer is IList<Token> list ? list : buffer.ToArray();
             position = -1;
         }
     }

@@ -47,6 +47,7 @@ namespace DhtCrawler.Web.Controllers
                     queue.Enqueue(dirPath);
                 }
                 var files = Directory.GetFiles(dir, "*.json");
+                var size = 0;
                 foreach (var file in files)
                 {
                     var dicInfo = await System.IO.File.ReadAllTextAsync(file, Encoding.UTF8);
@@ -93,7 +94,7 @@ namespace DhtCrawler.Web.Controllers
                         {
                             model.InfoHash = Path.GetFileNameWithoutExtension(file);
                         }
-                        await Response.WriteAsync(model.InfoHash + Environment.NewLine);
+                        await Response.WriteAsync((++size) + Environment.NewLine);
                         await _infoHashRepository.InsertOrUpdate(model);
                         //System.IO.File.Move(file, @"G:\torrent\" + Path.GetFileName(file));
                         System.IO.File.Delete(file);

@@ -133,7 +133,6 @@ namespace DhtCrawler
                                          Console.WriteLine($"download {item.Value} success");
                                          lock (DownLoadQueue)
                                          {
-                                             File.WriteAllBytes(Path.Combine(TorrentPath, item.Value + ".bin"), rawBytes);
                                              File.WriteAllText(Path.Combine(TorrentPath, item.Value + ".json"), torrent.ToJson());
                                          }
                                      }

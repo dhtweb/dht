@@ -1,10 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using Dapper;
+using DhtCrawler.Common;
 using DhtCrawler.Encode;
+using DhtCrawler.Service;
+using DhtCrawler.Service.Maps;
+using DhtCrawler.Service.Model;
+using Npgsql;
 using Xunit;
 
 namespace DhtCrawler.Test
@@ -85,6 +92,22 @@ namespace DhtCrawler.Test
                         Console.WriteLine();
                     }
                 }
+            }
+            Assert.True(true);
+        }
+
+        [Fact]
+        static void TestUpdate()
+        {
+            SqlMapper.AddTypeHandler(typeof(IList<TorrentFileModel>), new FileListTypeHandler());
+            const string conStr = "Host=127.0.0.1;Username=zk;Database=dht;Port=5432";
+            var connection = new NpgsqlConnection(conStr);
+            var update = new NpgsqlConnection(conStr);
+            var list = connection.Query<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown=TRUE AND filenum=1 AND files NOTNULL", (object)null, null, false);
+            foreach (var item in list)
+            {
+                update.Execute("UPDATE t_infohash SET filenum = @num WHERE infohash = @hash", new { num = item.FileNum, hash = item.InfoHash });
+                Console.WriteLine(item.InfoHash);
             }
             Assert.True(true);
         }

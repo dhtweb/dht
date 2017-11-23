@@ -34,7 +34,7 @@ namespace DhtCrawler.Web.Controllers
             {
                 return RedirectToAction("List");
             }
-            item.KeyWords = new HashSet<string>(item.Name.CutForSearch().Where(k => k.Length > 1));//.Take(10)
+            item.KeyWords = new HashSet<string>(item.Name.Cut().Union(item.Name.Cut(false)).Where(k => k.Length > 1));//.Take(10)
             return View(item);
         }
     }

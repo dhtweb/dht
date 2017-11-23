@@ -54,7 +54,7 @@ namespace DhtCrawler.Common.Index.Analyzer
         public void ResetTextReader(TextReader reader)
         {
             var text = reader.ReadToEnd();
-            _tokens = _segmenter.Tokenize(text, TokenizerMode.Search).MergeTokenList(_keywords).ToArray();
+            _tokens = _segmenter.TokenizeAll(text).MergeTokenList(_keywords);
             _position = -1;
         }
     }

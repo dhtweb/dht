@@ -67,7 +67,7 @@ namespace DhtCrawler.Common.Index
         protected virtual string[] SplitString(string keyword)
         {
             var seg = new JiebaSegmenter();
-            return seg.CutForSearch(keyword).Select(w => w.ToLower()).ToArray();
+            return seg.Cut(keyword, true).Union(seg.Cut(keyword)).Where(word => !string.IsNullOrWhiteSpace(word)).Select(w => w.ToLower()).Distinct().ToArray();
         }
 
         /// <summary>
@@ -100,20 +100,19 @@ namespace DhtCrawler.Common.Index
             var newContent = new StringBuilder(content.Length);
             var seg = new JiebaSegmenter();
             int index = 0;
-            var contentWords = seg.Tokenize(content, TokenizerMode.Search).Where(t => keyWordSet.Contains(t.Word)).ToArray();
-            var resultToken = contentWords.MergeTokenList(keyWordSet);
-            Console.WriteLine(string.Join("/", contentWords.Select(t => t)));
-            Console.WriteLine(string.Join("/", keyWordSet.Select(t => t)));
-            Console.WriteLine(string.Join("/", resultToken.Select(t => t)));
+            var contentWords = seg.TokenizeAll(content).Where(t => keyWordSet.Contains(t.Word)).ToArray();
+            Console.WriteLine(string.Join("/", keyWordSet));
+            Console.WriteLine(content);
+            Console.WriteLine(string.Join("/", (IEnumerable<Token>)contentWords));
+            var resultToken = contentWords.MergeTokenList();
+            Console.WriteLine(string.Join("/", resultToken));
             foreach (var token in resultToken)
             {
-                var tokenIndex = content.IndexOf(token.Word, index, StringComparison.OrdinalIgnoreCase);
-                var endIndex = tokenIndex + token.Word.Length;
-                newContent.Append(content.Substring(index, tokenIndex - index));
+                newContent.Append(content.Substring(index, token.StartIndex - index));
                 newContent.Append(preTag);
                 newContent.Append(token.Word);
                 newContent.Append(endTag);
-                index = Math.Max(index, endIndex);
+                index = Math.Max(index, token.EndIndex);
             }
             if (index < content.Length - 1)
             {
@@ -315,16 +314,16 @@ namespace DhtCrawler.Common.Index
                     int start = (index - 1) * size, end = index * size;
                     var docs = searcher.Search(query, null, end, sort);
                     total = docs.TotalHits;
-                    var models = new LinkedList<T>();
+                    var models = new List<T>();
                     var keywords = new HashSet<Term>();
                     query.ExtractTerms(keywords);
                     for (int i = start; i < total & i < end; i++)
                     {
                         var docNum = docs.ScoreDocs[i].Doc;
                         var doc = searcher.Doc(docNum);
-                        models.AddLast(GetModel(doc, new HashSet<string>(keywords.Select(k => k.Text()), StringComparer.OrdinalIgnoreCase)));
+                        models.Add(GetModel(doc, new HashSet<string>(keywords.Select(k => k.Text()), StringComparer.OrdinalIgnoreCase)));
                     }
-                    return models.ToArray();
+                    return models;
                 }
             }
         }

@@ -1,4 +1,5 @@
-﻿using DhtCrawler.Service;
+﻿using DhtCrawler.Common.Db;
+using DhtCrawler.Service;
 using DhtCrawler.Service.Index;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -23,8 +24,8 @@ namespace DhtCrawler.Web
             services.AddMvc();
             services.AddTransient(provider =>
             {
-                var connection = new NpgsqlConnection(Configuration["postgresql.url"]);
-                return new InfoHashRepository(connection);
+                var factory = new DbFactory(Configuration["postgresql.url"], NpgsqlFactory.Instance);
+                return new InfoHashRepository(factory);
             });
             services.AddTransient(provider =>
             {
