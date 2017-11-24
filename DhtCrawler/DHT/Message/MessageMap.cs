@@ -73,7 +73,7 @@ namespace DhtCrawler.DHT.Message
             foreach (var item in snapshotMapInfo)
             {
                 var tuple = item.Value;
-                if (!((DateTime.Now - tuple.LastTime).TotalSeconds > 60))
+                if (!((DateTime.Now - tuple.LastTime).TotalSeconds > 300))
                     continue;
                 MappingInfo.TryRemove(item.Key, out var rm);
                 removeItems.Add(rm.InfoHash);

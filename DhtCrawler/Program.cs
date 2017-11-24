@@ -19,7 +19,6 @@ using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
 using DhtCrawler.Configuration;
 using DhtCrawler.Store;
-using Newtonsoft.Json.Linq;
 
 namespace DhtCrawler
 {
@@ -28,7 +27,7 @@ namespace DhtCrawler
         private static readonly ConcurrentQueue<string> InfoHashQueue = new ConcurrentQueue<string>();
         private static readonly BlockingCollection<InfoHash> DownLoadQueue = new BlockingCollection<InfoHash>(1024);
         private static readonly ConcurrentHashSet<string> DownlaodedSet = new ConcurrentHashSet<string>();
-        private static readonly ConcurrentHashSet<long> BadAddress = new ConcurrentHashSet<long>();
+        private static readonly ConcurrentDictionary<long, DateTime> BadAddress = new ConcurrentDictionary<long, DateTime>();
         private static readonly StoreManager<InfoHash> InfoStore = new StoreManager<InfoHash>("infohash.store");
         private static readonly ILog log = LogManager.GetLogger(typeof(Program));
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
@@ -89,9 +88,9 @@ namespace DhtCrawler
                                 break;
                             }
                         }
-                        //await Task.Delay(1000);
                         if (list.Count <= 0)
                         {
+                            Thread.Sleep(1000);
                             continue;
                         }
                         var rand = new Random();
@@ -105,7 +104,19 @@ namespace DhtCrawler
                                      result.Peers.Add(point);
                                  }
                              }
-                             return result.Peers.Where(point => point.Address.IsPublic() && !BadAddress.Contains(point.ToInt64())).Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
+                             return result.Peers.Where(point =>
+                             {
+                                 if (!point.Address.IsPublic())
+                                     return false;
+                                 var longPeer = point.Address.ToInt64();
+                                 if (BadAddress.TryGetValue(longPeer, out var expireTime))
+                                 {
+                                     if (expireTime > DateTime.Now)
+                                         return false;
+                                     BadAddress.TryRemove(longPeer, out expireTime);
+                                 }
+                                 return true;
+                             }).Select(p => new { Bytes = result.Bytes, Value = result.Value, Peer = p });
                          }).OrderBy(it => it.Bytes[rand.Next(it.Bytes.Length)]);
                         Parallel.ForEach(uniqueItems, parallel, item =>
                              {
@@ -114,9 +125,11 @@ namespace DhtCrawler
                                  var longPeer = item.Peer.ToInt64();
                                  try
                                  {
-                                     if (BadAddress.Contains(longPeer))
+                                     if (BadAddress.TryGetValue(longPeer, out var expireTime))
                                      {
-                                         return;
+                                         if (expireTime > DateTime.Now)
+                                             return;
+                                         BadAddress.TryRemove(longPeer, out expireTime);
                                      }
                                      Console.WriteLine($"downloading {item.Value} from {item.Peer}");
                                      using (var client = new WireClient(item.Peer))
@@ -124,7 +137,7 @@ namespace DhtCrawler
                                          var meta = client.GetMetaData(new global::BitTorrent.InfoHash(item.Bytes), out var rawBytes);
                                          if (meta == null)
                                          {
-                                             BadAddress.Add(longPeer);
+                                             BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1), (ip, before) => DateTime.Now.AddHours(1));
                                              return;
                                          }
                                          DownlaodedSet.Add(item.Value);
@@ -139,7 +152,7 @@ namespace DhtCrawler
                                  }
                                  catch (SocketException ex)
                                  {
-                                     BadAddress.Add(longPeer);
+                                     BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1), (ip, before) => DateTime.Now.AddHours(1));
                                      log.Error("下载失败", ex);
                                  }
                                  catch (Exception ex)
