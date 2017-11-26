@@ -181,7 +181,7 @@ namespace DhtCrawler.Service
             return result;
         }
 
-        public async Task<(IList<InfoHashModel> List, long Count)> GetInfoHashListAsync(int index, int size, DateTime? start = null, DateTime? end = null, bool desc = true)
+        public async Task<(IList<InfoHashModel> List, long Count)> GetInfoHashListAsync(int index, int size, DateTime? start = null, DateTime? end = null, bool? isDanger = null, bool desc = true)
         {
             var where = new StringBuilder();
             if (start.HasValue)
@@ -192,7 +192,11 @@ namespace DhtCrawler.Service
             {
                 where.Append("AND createtime <= @endTime ");
             }
-            var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : "order by create"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end });
+            if (isDanger.HasValue)
+            {
+                where.Append("AND isdanger=@danger");
+            }
+            var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : "order by create"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
             var count = await result.ReadFirstAsync<long>();
             var list = await result.ReadAsync<InfoHashModel>();
             return (list.ToArray(), count);

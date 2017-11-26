@@ -97,7 +97,9 @@ namespace DhtCrawler.Service.Index
                         nameTerms[i] = new Term("Name", key);
                         fileTerms[i] = new Term("Files", key);
                     }
-                    query.Add(new MultiPhraseQuery() { nameTerms }, Occur.SHOULD);
+                    var nameQuery = new MultiPhraseQuery() { nameTerms };
+                    nameQuery.Boost = 1.5f;
+                    query.Add(nameQuery, Occur.SHOULD);
                     query.Add(new MultiPhraseQuery() { fileTerms }, Occur.SHOULD);
                 }
                 if (query.Clauses.Count <= 0)

@@ -12,11 +12,11 @@ using System.Threading.Tasks;
 using BitTorrent.Listeners;
 using BitTorrent.MonoTorrent.BEncoding;
 using DhtCrawler.BitTorrent;
-using DhtCrawler.Utils;
 using log4net;
 using log4net.Config;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
+using DhtCrawler.Common.Utils;
 using DhtCrawler.Configuration;
 using DhtCrawler.Store;
 
@@ -279,18 +279,12 @@ namespace DhtCrawler
         private static Torrent ParseBitTorrent(BEncodedDictionary metaData)
         {
             var torrent = new Torrent();
-            //var encoding = Encoding.UTF8;
-            //if (metaData.ContainsKey("encoding"))
-            //{
-            //    encoding = Encoding.GetEncoding(((BEncodedString)metaData["encoding"]).Text);
-            //}
             if (metaData.ContainsKey("name.utf-8"))
             {
                 torrent.Name = ((BEncodedString)metaData["name.utf-8"]).Text;
             }
             else if (metaData.ContainsKey("name"))
             {
-                //torrent.Name = encoding.GetString(((BEncodedString)metaData["name"]).TextBytes);
                 torrent.Name = ((BEncodedString)metaData["name"]).Text;
             }
             if (metaData.ContainsKey("length"))
@@ -304,7 +298,6 @@ namespace DhtCrawler
                 for (int j = 0; j < files.Count; j++)
                 {
                     var file = (BEncodedDictionary)files[j];
-                    //var filePaths = file.ContainsKey("path.utf-8") ? ((BEncodedList)file["path.utf-8"]).Select(path => ((BEncodedString)path).Text).ToArray() : ((BEncodedList)file["path"]).Select(path => encoding.GetString(((BEncodedString)path).TextBytes)).ToArray();
                     var filePaths = file.ContainsKey("path.utf-8") ? ((BEncodedList)file["path.utf-8"]).Select(path => ((BEncodedString)path).Text).ToArray() : ((BEncodedList)file["path"]).Select(path => ((BEncodedString)path).Text).ToArray();
                     var fileSize = ((BEncodedNumber)file["length"]).Number;
                     if (filePaths.Length > 1)

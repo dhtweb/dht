@@ -102,14 +102,15 @@ namespace BitTorrent.Listeners
                     return null;
 
                 //检查hash值是否正确
-                var sha1 = new System.Security.Cryptography.SHA1CryptoServiceProvider();
-                byte[] infohash = sha1.ComputeHash(rawBytes);
-                if (!infohash.SequenceEqual(hash.Hash))
+                using (var sha1 = new System.Security.Cryptography.SHA1CryptoServiceProvider())
                 {
-                    Trace.WriteLine(EndPoint, "Hash Wrong");
-                    return null;
+                    byte[] infohash = sha1.ComputeHash(rawBytes);
+                    if (!infohash.SequenceEqual(hash.Hash))
+                    {
+                        Trace.WriteLine(EndPoint, "Hash Wrong");
+                        return null;
+                    }
                 }
-
                 return BEncodedDictionary.DecodeTorrent(rawBytes);
             }
             catch (AggregateException ex)

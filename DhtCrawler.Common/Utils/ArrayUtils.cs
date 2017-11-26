@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace DhtCrawler.Utils
+namespace DhtCrawler.Common.Utils
 {
     public static class ArrayUtils
     {

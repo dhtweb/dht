@@ -1,10 +1,6 @@
 ﻿using System;
 using System.Text;
-using System.Threading.Tasks;
-using DhtCrawler.Common.Web.Model;
-using DhtCrawler.Service;
 using DhtCrawler.Service.Index;
-using DhtCrawler.Service.Model;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DhtCrawler.Web.Controllers
@@ -19,10 +15,15 @@ namespace DhtCrawler.Web.Controllers
 
         public IActionResult BuildAll()
         {
+            var i = 0;
             _indexSearchService.ReBuildIndex(it =>
             {
-                var data = Encoding.UTF8.GetBytes(it.InfoHash + Environment.NewLine);
-                Response.Body.Write(data, 0, data.Length);
+                i++;
+                if (i % 100 == 0)
+                {
+                    var codings = Encoding.UTF8.GetBytes(i.ToString() + Environment.NewLine);
+                    Response.Body.Write(codings, 0, codings.Length);
+                }
             });
             return new EmptyResult();
         }

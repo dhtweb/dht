@@ -13,7 +13,7 @@ namespace DhtCrawler.Web.Controllers
 {
     public class ListController : Controller
     {
-        private const int PageSize = 20;
+        private const int PageSize = 15;
         private InfoHashRepository _infoHashRepository;
         private IndexSearchService _indexSearchService;
         public ListController(InfoHashRepository infoHashRepository, IndexSearchService indexSearchService)
@@ -25,7 +25,7 @@ namespace DhtCrawler.Web.Controllers
         public IActionResult List(string keyword, int index = 1)
         {
             ViewBag.SearchKey = keyword;
-            var list = _indexSearchService.GetList(index, 20, out int count, keyword);
+            var list = _indexSearchService.GetList(index, PageSize, out int count, keyword);
             return View(new PageModel<InfoHashModel>() { PageIndex = index, PageSize = PageSize, Total = count, List = list });
         }
 
@@ -45,7 +45,7 @@ namespace DhtCrawler.Web.Controllers
             DateTime start = date.Date, end = date.Date.AddDays(1);
             if (index * PageSize > 10000)
             {
-                index = 500;
+                index = 10000 / PageSize;
             }
             ViewBag.Date = date.ToString("yyyy-MM-dd");
             var result = await _infoHashRepository.GetInfoHashListAsync(index, PageSize, start, end);

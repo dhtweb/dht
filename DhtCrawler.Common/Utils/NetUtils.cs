@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 
-namespace DhtCrawler.Utils
+namespace DhtCrawler.Common.Utils
 {
     public static class NetUtils
     {
@@ -47,7 +47,7 @@ namespace DhtCrawler.Utils
             return ToInt64(array);
         }
 
-        private static readonly List<Tuple<long, long>> ReserveIpRange = new List<Tuple<long, long>>();
+        private static readonly List<Tuple<long, long>> ReserveIpRange;
 
         static NetUtils()
         {
@@ -79,6 +79,7 @@ namespace DhtCrawler.Utils
                 "240.0.0.0/4",
                 "255.255.255.255/32"
             };
+            ReserveIpRange = new List<Tuple<long, long>>(ipInfos.Length);
             foreach (var ipInfo in ipInfos)
             {
                 var info = ComputeIpInfo(ipInfo);
@@ -90,9 +91,10 @@ namespace DhtCrawler.Utils
         {
             var arrays = ipInfo.Split('/');
             byte[] ipArray = arrays[0].Split('.').Select(byte.Parse).ToArray();
-            byte netlength = byte.Parse(arrays[1]);
+            var netlength = int.Parse(arrays[1]);
             byte[] maskArray = { 0, 0, 0, 0 }, startArray = { 0, 0, 0, 0 }, endArray = { 255, 255, 255, 255 };
-            for (byte i = 0, j = netlength; i < maskArray.Length && j > 0; i++, j -= 8)
+
+            for (int i = 0, j = netlength; i < maskArray.Length && j > 0; i++, j -= 8)
             {
                 if (j > 8)
                 {

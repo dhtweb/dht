@@ -5,7 +5,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 using DhtCrawler.Common.Compare;
-using DhtCrawler.Utils;
+using DhtCrawler.Common.Utils;
 using log4net;
 
 namespace DhtCrawler.DHT.Message
@@ -65,7 +65,7 @@ namespace DhtCrawler.DHT.Message
             }
         }
 
-        private static void ClearExpireMessage()
+        private static void ClearExpireMessage(int clearSize = 1000)
         {
             var startTime = DateTime.Now;
             var removeItems = new HashSet<byte[]>(ByteArrayComparer);
@@ -78,6 +78,10 @@ namespace DhtCrawler.DHT.Message
                 MappingInfo.TryRemove(item.Key, out var rm);
                 removeItems.Add(rm.InfoHash);
                 Bucket.Add(item.Key);
+                if (removeItems.Count >= clearSize)
+                {
+                    break;
+                }
             }
             var snapshotIdInfo = IdMappingInfo.ToArray();
             foreach (var mapInfo in snapshotIdInfo)

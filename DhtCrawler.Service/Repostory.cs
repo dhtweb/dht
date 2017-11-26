@@ -25,6 +25,15 @@ namespace DhtCrawler.Service
             this.Factory = factory;
         }
 
+        protected IDbTransaction BeginTransaction()
+        {
+            if (Connection.State != ConnectionState.Open)
+            {
+                Connection.Open();
+            }
+            return Connection.BeginTransaction();
+        }
+
         public void Dispose()
         {
             if (_connection == null)

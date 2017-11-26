@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
+using DhtCrawler.Common.Collections.Extension;
 using DhtCrawler.Common.RateLimit;
 using DhtCrawler.DHT.Message;
 using DhtCrawler.Encode;
@@ -386,7 +387,7 @@ namespace DhtCrawler.DHT
             {
                 if (_nodeQueue.Count <= 0)
                 {
-                    foreach (var dhtNode in BootstrapNodes.Union(_kTable))
+                    foreach (var dhtNode in _kTable)
                     {
                         if (!running)
                             return;
@@ -398,7 +399,7 @@ namespace DhtCrawler.DHT
                 {
                     nodeSet.Add(node);
                 }
-                foreach (var node in nodeSet)
+                foreach (var node in BootstrapNodes.Union(nodeSet))
                 {
                     FindNode(node);
                 }
@@ -425,6 +426,22 @@ namespace DhtCrawler.DHT
         {
             var data = new Dictionary<string, object> { { "info_hash", infoHash } };
             SendMsg(CommandType.Get_Peers, data, node);
+        }
+
+        public void GetPeers(byte[] infoHash)
+        {
+            var nodes = _kTable.FindNodes(infoHash);
+            if (nodes.IsEmpty() || nodes.Count < 8)
+            {
+                foreach (var node in BootstrapNodes)
+                {
+                    nodes.Add(node);
+                }
+            }
+            foreach (var node in nodes)
+            {
+                GetPeers(node, infoHash);
+            }
         }
 
         public void AnnouncePeer(DhtNode node, byte[] infoHash, ushort port, string token)

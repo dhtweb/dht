@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using DhtCrawler.Common.Utils;
 using DhtCrawler.Store;
-using DhtCrawler.Utils;
 
 namespace DhtCrawler.DHT
 {

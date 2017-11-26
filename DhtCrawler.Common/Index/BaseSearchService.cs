@@ -36,25 +36,51 @@ namespace DhtCrawler.Common.Index
         private static readonly ConcurrentDictionary<string, FSDirectory> FSDirectoryDic = new ConcurrentDictionary<string, FSDirectory>();
         private static readonly ConcurrentDictionary<string, IndexWriter> IndexWriterDic = new ConcurrentDictionary<string, IndexWriter>();
 
+        private volatile IndexWriter _writer;
         private IndexWriter IndexWriter
         {
             get
             {
+                if (_writer != null)
+                    return _writer;
                 return IndexWriterDic.GetOrAdd(IndexDir, dic =>
-                {
-                    var directory = FSDirectoryDic.GetOrAdd(dic, dir => FSDirectory.Open(dic));  // 取得索引存储的文件夹
-                    if (!DirectoryReader.IndexExists(directory)) //判断是否存在索引文件夹
-                    {
-                        System.IO.Directory.CreateDirectory(IndexDir);
-                    }
-                    var writer = new IndexWriter(directory,
-                        new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
-                        {
-                            IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                            OpenMode = OpenMode.CREATE_OR_APPEND
-                        }); //创建索引写入者
-                    return writer;
-                });
+                     {
+                         lock (IndexWriterDic)
+                         {
+                             if (_writer != null)
+                                 return _writer;
+                             _writer = new IndexWriter(IndexDirectory,
+                                 new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
+                                 {
+                                     OpenMode = OpenMode.CREATE_OR_APPEND
+                                 });
+                             return _writer;
+                         }
+                     });
+            }
+        }
+
+        private volatile FSDirectory _currentDirectory;
+        private FSDirectory IndexDirectory
+        {
+            get
+            {
+                if (_currentDirectory != null)
+                    return _currentDirectory;
+                return _currentDirectory = FSDirectoryDic.GetOrAdd(IndexDir, dir =>
+                 {
+                     lock (FSDirectoryDic)
+                     {
+                         if (_currentDirectory != null)
+                             return _currentDirectory;
+                         _currentDirectory = FSDirectory.Open(IndexDir);
+                         if (!DirectoryReader.IndexExists(_currentDirectory)) //判断是否存在索引文件夹
+                         {
+                             System.IO.Directory.CreateDirectory(IndexDir);
+                         }
+                         return _currentDirectory;
+                     }
+                 });  // 取得索引存储的文件夹
             }
         }
         protected abstract string IndexDir { get; }
@@ -147,7 +173,6 @@ namespace DhtCrawler.Common.Index
         /// </summary>
         public void ReBuildIndex(Action<T> onBuild)
         {
-
             var list = GetAllModels();
             int size = 0;
             lock (IndexWriter)
@@ -280,7 +305,7 @@ namespace DhtCrawler.Common.Index
         /// <returns></returns>
         public IList<T> Search(int index, int size, out int total, Func<Query> getQuery, Func<Sort> getSort)
         {
-            using (var reader = IndexWriter.GetReader(false))//获取索引只读对象
+            using (var reader = DirectoryReader.Open(IndexDirectory))//获取索引只读对象
             {
                 var searcher = new IndexSearcher(reader);
                 var query = getQuery();
@@ -288,10 +313,11 @@ namespace DhtCrawler.Common.Index
                 int start = (index - 1) * size, end = index * size;
                 var docs = searcher.Search(query, null, end, sort);
                 total = docs.TotalHits;
+                end = Math.Min(end, total);
                 var models = new List<T>();
                 var keywords = new HashSet<Term>();
                 query.ExtractTerms(keywords);
-                for (int i = start; i < total & i < end; i++)
+                for (int i = start; i < total && i < end; i++)
                 {
                     var docNum = docs.ScoreDocs[i].Doc;
                     var doc = searcher.Doc(docNum);

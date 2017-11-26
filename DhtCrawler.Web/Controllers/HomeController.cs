@@ -48,60 +48,70 @@ namespace DhtCrawler.Web.Controllers
                 }
                 var files = Directory.GetFiles(dir, "*.json");
                 var size = 0;
+                var list = new List<KeyValuePair<InfoHashModel, string>>();
                 foreach (var file in files)
                 {
                     var dicInfo = await System.IO.File.ReadAllTextAsync(file, Encoding.UTF8);
-                    try
+                    var model = dicInfo.ToObjectFromJson<InfoHashModel>();
+                    model.CreateTime = System.IO.File.GetLastWriteTime(file);
+                    model.IsDown = true;
+                    if (model.Files != null && model.Files.Any(f => f.Name.IndexOf('/') > -1))
                     {
-                        var model = dicInfo.ToObjectFromJson<InfoHashModel>();
-                        model.CreateTime = System.IO.File.GetLastWriteTime(file);
-                        model.IsDown = true;
-                        if (model.Files != null && model.Files.Any(f => f.Name.IndexOf('/') > -1))
+                        var metaFiles = model.Files;
+                        model.Files = new List<TorrentFileModel>();
+                        foreach (var metaFile in metaFiles)
                         {
-                            var metaFiles = model.Files;
-                            model.Files = new List<TorrentFileModel>();
-                            foreach (var metaFile in metaFiles)
+                            var paths = metaFile.Name.Split('/');
+                            if (paths.Length <= 1)
                             {
-                                var paths = metaFile.Name.Split('/');
-                                if (paths.Length <= 1)
+                                model.Files.Add(metaFile);
+                            }
+                            else
+                            {
+                                var rootFiles = model.Files;
+                                for (var i = 0; i < paths.Length; i++)
                                 {
-                                    model.Files.Add(metaFile);
-                                }
-                                else
-                                {
-                                    var rootFiles = model.Files;
-                                    for (var i = 0; i < paths.Length; i++)
+                                    var path = paths[i];
+                                    var parent = rootFiles.FirstOrDefault(f => f.Name == path);
+                                    if (parent == null)
                                     {
-                                        var path = paths[i];
-                                        var parent = rootFiles.FirstOrDefault(f => f.Name == path);
-                                        if (parent == null)
-                                        {
-                                            parent = new TorrentFileModel() { Name = path, Files = new List<TorrentFileModel>() };
-                                            rootFiles.Add(parent);
-                                        }
-                                        if (i == paths.Length - 1)
-                                        {
-                                            parent.Files = null;
-                                            parent.FileSize = metaFile.FileSize;
-                                        }
-                                        rootFiles = parent.Files;
+                                        parent = new TorrentFileModel() { Name = path, Files = new List<TorrentFileModel>() };
+                                        rootFiles.Add(parent);
                                     }
+                                    if (i == paths.Length - 1)
+                                    {
+                                        parent.Files = null;
+                                        parent.FileSize = metaFile.FileSize;
+                                    }
+                                    rootFiles = parent.Files;
                                 }
                             }
+                        }
 
-                        }
-                        if (string.IsNullOrWhiteSpace(model.InfoHash))
-                        {
-                            model.InfoHash = Path.GetFileNameWithoutExtension(file);
-                        }
-                        await Response.WriteAsync((++size) + Environment.NewLine);
-                        await _infoHashRepository.InsertOrUpdateAsync(model);
-                        //System.IO.File.Move(file, @"G:\torrent\" + Path.GetFileName(file));
-                        System.IO.File.Delete(file);
                     }
-                    catch (Exception ex)
+                    if (string.IsNullOrWhiteSpace(model.InfoHash))
                     {
-                        await Response.WriteAsync(dicInfo + Environment.NewLine);
+                        model.InfoHash = Path.GetFileNameWithoutExtension(file);
+                    }
+                    list.Add(new KeyValuePair<InfoHashModel, string>(model, file));
+                    if (list.Count > 200)
+                    {
+                        await Response.WriteAsync((++size) + Environment.NewLine);
+                        await _infoHashRepository.InsertOrUpdateAsync(list.Select(kv => kv.Key));
+                        foreach (var kv in list)
+                        {
+                            System.IO.File.Delete(kv.Value);
+                        }
+                        list.Clear();
+                    }
+                }
+                if (list.Count > 0)
+                {
+                    await Response.WriteAsync((++size) + Environment.NewLine);
+                    await _infoHashRepository.InsertOrUpdateAsync(list.Select(kv => kv.Key));
+                    foreach (var kv in list)
+                    {
+                        System.IO.File.Delete(kv.Value);
                     }
                 }
             }
@@ -129,7 +139,6 @@ namespace DhtCrawler.Web.Controllers
                     if (!dic.ContainsKey(line))
                     {
                         dic[line] = 0;
-                        await Response.WriteAsync(filePath + ":" + dic.Count.ToString() + Environment.NewLine);
                     }
                     dic[line]++;
                 } while (true);
@@ -152,6 +161,8 @@ namespace DhtCrawler.Web.Controllers
                 }
                 list.Clear();
                 dic.Clear();
+                reader.Close();
+                System.IO.File.Delete(filePath);
             }
         }
 
