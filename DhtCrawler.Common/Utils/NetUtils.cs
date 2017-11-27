@@ -92,30 +92,32 @@ namespace DhtCrawler.Common.Utils
             var arrays = ipInfo.Split('/');
             byte[] ipArray = arrays[0].Split('.').Select(byte.Parse).ToArray();
             var netlength = int.Parse(arrays[1]);
-            byte[] maskArray = { 0, 0, 0, 0 }, startArray = { 0, 0, 0, 0 }, endArray = { 255, 255, 255, 255 };
+            byte[] maskArray = { 0, 0, 0, 0 }, startArray = { 0, 0, 0, 0 }, endArray = { byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue };
 
             for (int i = 0, j = netlength; i < maskArray.Length && j > 0; i++, j -= 8)
             {
                 if (j > 8)
                 {
-                    maskArray[i] = 255;
+                    maskArray[i] = byte.MaxValue;
                 }
                 else
                 {
-                    maskArray[i] = (byte)(255 << (8 - j));
+                    maskArray[i] = (byte)(byte.MaxValue << (8 - j));
                 }
             }
-            for (var i = 0; i < ipArray.Length && netlength > 0; i++, netlength -= 8)
+            for (var i = 0; i < ipArray.Length; i++)
             {
-                if (netlength >= 8)
+                startArray[i] = (byte)(ipArray[i] & maskArray[i]);
+                if (netlength > 8)
                 {
-                    startArray[i] = endArray[i] = ipArray[i];
+                    endArray[i] = startArray[i];
                 }
-                else
+                else if (netlength > 0)
                 {
-                    startArray[i] = (byte)(ipArray[i] & maskArray[i]);
-                    endArray[i] = (byte)(ipArray[i] | (~ipArray[i] & 255));
+                    endArray[i] = (byte)(startArray[i] | (byte.MaxValue >> netlength));
                 }
+                netlength -= 8;
+
             }
             return new Tuple<long, long>(ToInt64(startArray), ToInt64(endArray));
         }
