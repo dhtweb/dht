@@ -1,4 +1,5 @@
 ﻿using DhtCrawler.Common.Db;
+using DhtCrawler.Common.Web.Mvc.Filter;
 using DhtCrawler.Service;
 using DhtCrawler.Service.Index;
 using Microsoft.AspNetCore.Builder;
@@ -23,6 +24,7 @@ namespace DhtCrawler.Web
         {
             services.AddMemoryCache();
             services.AddMvc();
+            services.AddSingleton(provider => new StaticHtmlFilterAttribute(provider.GetService<IHostingEnvironment>()));
             services.AddTransient(provider =>
             {
                 var factory = new DbFactory(Configuration["postgresql.url"], NpgsqlFactory.Instance);

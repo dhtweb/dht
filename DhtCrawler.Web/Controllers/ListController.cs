@@ -8,6 +8,8 @@ using DhtCrawler.Service.Index;
 using DhtCrawler.Service.Model;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
+using System.Text;
+using DhtCrawler.Common.Web.Mvc.Filter;
 
 namespace DhtCrawler.Web.Controllers
 {
@@ -29,6 +31,7 @@ namespace DhtCrawler.Web.Controllers
             return View(new PageModel<InfoHashModel>() { PageIndex = index, PageSize = PageSize, Total = count, List = list });
         }
 
+        [ServiceFilter(typeof(StaticHtmlFilterAttribute), IsReusable = true)]
         public async Task<IActionResult> Detail(string hash)
         {
             var item = await _infoHashRepository.GetInfoHashDetailAsync(hash);
