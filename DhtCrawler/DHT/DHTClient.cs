@@ -209,11 +209,11 @@ namespace DhtCrawler.DHT
 
         private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
         {
-            if (!MessageMap.RequireRegisteredInfo(msg))
+            var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
+            if (!MessageMap.RequireRegisteredInfo(msg, responseNode))
             {
                 return;
             }
-            var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
             _kTable.AddOrUpdateNode(responseNode);
             object nodeInfo;
             ISet<DhtNode> nodes = null;
@@ -329,7 +329,7 @@ namespace DhtCrawler.DHT
                 MesageType = MessageType.Request,
                 Data = new SortedDictionary<string, object>(data)
             };
-            if (!MessageMap.RegisterMessage(msg))
+            if (!MessageMap.RegisterMessage(msg, node))
             {
                 return;
             }
