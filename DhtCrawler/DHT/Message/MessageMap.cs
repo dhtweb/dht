@@ -18,10 +18,10 @@ namespace DhtCrawler.DHT.Message
             public long LastTime { get; set; }
         }
 
-        private class IdMapInfo
+        private class NodeMapInfo
         {
-            public TransactionId TransactionId { get; set; }
-            public int Count { get; set; }
+            public long LastTime { get; set; } = DateTime.Now.Ticks;
+            public ConcurrentDictionary<TransactionId, byte[]> InfoHashMap { get; set; } = new ConcurrentDictionary<TransactionId, byte[]>();
         }
         private static readonly object SyncRoot = new object();
         private static readonly ILog log = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
@@ -30,9 +30,9 @@ namespace DhtCrawler.DHT.Message
         private static readonly IDictionary<TransactionId, CommandType> TransactionIdMapType;
 
         //private static readonly BlockingCollection<TransactionId> Bucket = new BlockingCollection<TransactionId>();
-        //private static readonly ConcurrentDictionary<TransactionId, MapInfo> MappingInfo = new ConcurrentDictionary<TransactionId, MapInfo>();
+        private static readonly ConcurrentDictionary<byte[], NodeMapInfo> NodeMap = new ConcurrentDictionary<byte[], NodeMapInfo>();
         //private static readonly ConcurrentDictionary<byte[], IdMapInfo> IdMappingInfo = new ConcurrentDictionary<byte[], IdMapInfo>(ByteArrayComparer);
-        private static readonly ConcurrentDictionary<byte[], MapInfo> PeerMappingInfo = new ConcurrentDictionary<byte[], MapInfo>(ByteArrayComparer);
+        //private static readonly ConcurrentDictionary<byte[], MapInfo> PeerMappingInfo = new ConcurrentDictionary<byte[], MapInfo>(ByteArrayComparer);
         private static TransactionId[] BucketArray;
         private static int BucketIndex = 0;
         static MessageMap()
@@ -170,13 +170,18 @@ namespace DhtCrawler.DHT.Message
                     return false;
             }
             var infoHash = message.Get<byte[]>("info_hash");
-            var privateKey = new byte[8];
-            Array.Copy(node.CompactEndPoint(), 0, privateKey, 2, 6);
-            var mapInfo = new MapInfo() { LastTime = DateTime.Now.Ticks, InfoHash = infoHash };
-            var trySize = 0;
+            var nodeKey = node.CompactEndPoint();
+            var nodeMapInfo = NodeMap.GetOrAdd(nodeKey, new NodeMapInfo());
+            if (nodeMapInfo.LastTime - TimeSpan.FromMinutes(30).Ticks < 0)
+            {
+                NodeMap.TryRemove(nodeKey, out nodeMapInfo);
+                return false;
+            }
+            var tryTimes = 0;
             while (true)
             {
-                trySize++;
+                if (tryTimes > 10)
+                    break;
                 lock (BucketArray)
                 {
                     BucketIndex++;
@@ -184,23 +189,14 @@ namespace DhtCrawler.DHT.Message
                         BucketIndex = 0;
                 }
                 var msgId = BucketArray[BucketIndex];
-                privateKey[0] = msgId[0];
-                privateKey[1] = msgId[1];
-                if (PeerMappingInfo.TryAdd(privateKey, mapInfo))
+                if (nodeMapInfo.InfoHashMap.TryAdd(msgId, infoHash))
                 {
                     message.MessageId = msgId;
                     return true;
                 }
-                if (PeerMappingInfo.TryGetValue(privateKey, out var rm))
-                {
-                    if (rm.LastTime + TimeSpan.FromHours(1).Ticks < DateTime.Now.Ticks)
-                        return false;
-                    PeerMappingInfo.TryRemove(privateKey, out rm);
-                }
-                if (trySize > 10)
-                    return false;
+                tryTimes++;
             }
-
+            return false;
         }
 
         //public static bool RequireRegisteredInfo(DhtMessage message)
@@ -249,20 +245,21 @@ namespace DhtCrawler.DHT.Message
                 message.CommandType = TransactionIdMapType[message.MessageId];
                 return true;
             }
-            Console.WriteLine(PeerMappingInfo.Count);
             message.CommandType = CommandType.Get_Peers;
             var msgId = message.MessageId;
-            var privateKey = new byte[8];
-            privateKey[0] = msgId[0];
-            privateKey[1] = msgId[1];
-            Array.Copy(node.CompactEndPoint(), 0, privateKey, 2, 6);
-            if (PeerMappingInfo.TryRemove(privateKey, out var mapInfo))
+            var nodeKey = node.CompactEndPoint();
+            if (!NodeMap.TryGetValue(nodeKey, out var nodeMap))
             {
-                if (mapInfo.InfoHash == null)
+                return false;
+            }
+            nodeMap.LastTime = DateTime.Now.Ticks;
+            if (nodeMap.InfoHashMap.TryRemove(msgId, out var mapInfo))
+            {
+                if (mapInfo == null)
                 {
                     return false;
                 }
-                message.Data.Add("info_hash", mapInfo.InfoHash);
+                message.Data.Add("info_hash", mapInfo);
                 return true;
             }
             return false;
