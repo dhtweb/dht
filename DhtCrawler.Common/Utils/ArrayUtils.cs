@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 
 namespace DhtCrawler.Common.Utils
 {
@@ -16,6 +17,16 @@ namespace DhtCrawler.Common.Utils
             var result = new T[size];
             Array.Copy(array, index, result, 0, size);
             return result;
+        }
+
+        public static string ToHex(this byte[] array)
+        {
+            var sb = new StringBuilder(array.Length * 2);
+            foreach (byte t in array)
+            {
+                sb.Append(Convert.ToString(t, 16));
+            }
+            return sb.ToString();
         }
     }
 }

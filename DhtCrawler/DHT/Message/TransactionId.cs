@@ -15,6 +15,8 @@ namespace DhtCrawler.DHT.Message
             _bytes = bytes ?? throw new ArgumentException("bytes array's length must not be null");
         }
 
+        public byte this[int index] => _bytes[index];
+
         public override string ToString()
         {
             return string.Concat(_bytes);

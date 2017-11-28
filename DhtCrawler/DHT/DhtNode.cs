@@ -10,6 +10,18 @@ namespace DhtCrawler.DHT
         public byte[] NodeId { get; set; }
         public IPAddress Host { get; set; }
         public ushort Port { get; set; }
+        public DhtNode() { }
+
+        public DhtNode(IPEndPoint ipEndPoint)
+        {
+            Host = ipEndPoint.Address;
+            Port = (ushort)ipEndPoint.Port;
+        }
+
+        public DhtNode(byte[] nodeId, IPEndPoint ipEndPoint) : this(ipEndPoint)
+        {
+            NodeId = nodeId;
+        }
 
         public override bool Equals(object obj)
         {
@@ -20,7 +32,12 @@ namespace DhtCrawler.DHT
 
         public override int GetHashCode()
         {
-            return (Host + ":" + Port).GetHashCode();
+            return this.ToString().GetHashCode();
+        }
+
+        public override string ToString()
+        {
+            return Host + ":" + Port;
         }
 
         public static DhtNode ParseNode(byte[] data, int startIndex)
@@ -60,6 +77,14 @@ namespace DhtCrawler.DHT
             Array.Copy(NodeId, info, 20);
             Array.Copy(Host.GetAddressBytes(), 0, info, 20, 4);
             Array.Copy(BitConverter.IsLittleEndian ? BitConverter.GetBytes(Port).Reverse().ToArray() : BitConverter.GetBytes(Port), 0, info, 24, 2);
+            return info;
+        }
+
+        public byte[] CompactEndPoint()
+        {
+            var info = new byte[6];
+            Array.Copy(Host.GetAddressBytes(), 0, info, 0, 4);
+            Array.Copy(BitConverter.IsLittleEndian ? BitConverter.GetBytes(Port).Reverse().ToArray() : BitConverter.GetBytes(Port), 0, info, 4, 2);
             return info;
         }
     }
