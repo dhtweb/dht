@@ -13,6 +13,7 @@ using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Search.Highlight;
 using Lucene.Net.Store;
+using Lucene.Net.Support;
 using Directory = Lucene.Net.Store.Directory;
 
 namespace DhtCrawler.Common.Index
@@ -93,7 +94,6 @@ namespace DhtCrawler.Common.Index
         /// <param name="item"></param>
         /// <returns></returns>
         protected abstract Document GetDocument(T item);
-
         /// <summary>
         /// 由lucence获取实际对象
         /// </summary>
@@ -315,13 +315,14 @@ namespace DhtCrawler.Common.Index
                 total = docs.TotalHits;
                 end = Math.Min(end, total);
                 var models = new List<T>();
-                var keywords = new HashSet<Term>();
-                query.ExtractTerms(keywords);
+                var queryTerms = new HashSet<Term>();
+                query.ExtractTerms(queryTerms);
+                var keywords = new HashSet<string>(queryTerms.Select(k => k.Text()), StringComparer.OrdinalIgnoreCase);
                 for (int i = start; i < total && i < end; i++)
                 {
                     var docNum = docs.ScoreDocs[i].Doc;
                     var doc = searcher.Doc(docNum);
-                    models.Add(GetModel(doc, new HashSet<string>(keywords.Select(k => k.Text()), StringComparer.OrdinalIgnoreCase)));
+                    models.Add(GetModel(doc, keywords));
                 }
                 return models;
             }

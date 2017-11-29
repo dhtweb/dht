@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace DhtCrawler.Common.Collections.Extension
+namespace DhtCrawler.Common.Utils
 {
     public static class CollectionUtils
     {

@@ -9,7 +9,7 @@ using DhtCrawler.Service.Model;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Text;
-using DhtCrawler.Common.Web.Mvc.Filter;
+using DhtCrawler.Common.Web.Mvc.Static;
 
 namespace DhtCrawler.Web.Controllers
 {
@@ -46,13 +46,19 @@ namespace DhtCrawler.Web.Controllers
         public async Task<IActionResult> Lastlist(DateTime date, int index = 1)
         {
             DateTime start = date.Date, end = date.Date.AddDays(1);
-            if (index * PageSize > 10000)
+            if (index > 500)
             {
-                index = 10000 / PageSize;
+                index = 500;
             }
             ViewBag.Date = date.ToString("yyyy-MM-dd");
             var result = await _infoHashRepository.GetInfoHashListAsync(index, PageSize, start, end);
-            return View(new PageModel<InfoHashModel>() { PageIndex = index, PageSize = PageSize, Total = Math.Min((int)result.Count, 10000), List = result.List });
+            return View(new PageModel<InfoHashModel>() { PageIndex = index, PageSize = PageSize, Total = Math.Min((int)result.Count, 500 * PageSize), List = result.List });
+        }
+
+        public async Task<IActionResult> Lastestlist(int index = 1)
+        {
+            var result = await _infoHashRepository.GetInfoHashListAsync(index, PageSize);
+            return View("Lastlist", new PageModel<InfoHashModel>() { PageIndex = index, PageSize = PageSize, Total = Math.Min((int)result.Count, 500 * PageSize), List = result.List });
         }
     }
 }

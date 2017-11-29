@@ -62,7 +62,6 @@ namespace DhtCrawler.Service.Index
             var item = new InfoHashModel
             {
                 InfoHash = doc.Get("InfoHash"),
-                //Name = SetHighKeyWord(doc.Get("Name"), "Name", query),//doc.Get("Name"),//
                 Name = SetHighKeyWord(doc.Get("Name"), keyWords),//doc.Get("Name"),//
                 DownNum = doc.GetField("DownNum").GetInt32ValueOrDefault(),
                 FileNum = doc.GetField("FileNum").GetInt32ValueOrDefault(),
@@ -77,9 +76,9 @@ namespace DhtCrawler.Service.Index
             return _infoHashRepository.GetAllFullInfoHashModels();
         }
 
-        protected override Term GetTargetTerm(InfoHashModel model)
+        protected override Term GetTargetTerm(InfoHashModel item)
         {
-            return new Term("ModelId", model.InfoHash);
+            return new Term("InfoHash", item.InfoHash);
         }
 
         public IList<InfoHashModel> GetList(int index, int size, out int count, string keyword)

@@ -13,13 +13,13 @@ namespace DhtCrawler.Common.Collections
         private readonly HashSet<T> hashSet;
         public ConcurrentHashSet()
         {
-            rwLockSlim = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
+            rwLockSlim = new ReaderWriterLockSlim();
             hashSet = new HashSet<T>();
         }
 
         public ConcurrentHashSet(Func<T, T, bool> compare, Func<T, int> hash)
         {
-            rwLockSlim = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
+            rwLockSlim = new ReaderWriterLockSlim();
             hashSet = new HashSet<T>(new WrapperEqualityComparer<T>(compare, hash));
         }
 
