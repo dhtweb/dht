@@ -50,6 +50,7 @@ namespace DhtCrawler.DHT
         private readonly BlockingCollection<DhtData> _recvMessageQueue;
         private readonly BlockingCollection<DhtData> _sendMessageQueue;
         private readonly BlockingCollection<DhtData> _responseMessageQueue;
+        private readonly CancellationTokenSource _cancellationTokenSource;
 
         private readonly IList<Task> _tasks;
         private readonly IRateLimit _sendRateLimit;
@@ -106,6 +107,7 @@ namespace DhtCrawler.DHT
             _sendRateLimit = new TokenBucketLimit(config.SendRateLimit * 1024, 1, TimeUnit.Second);
             _receveRateLimit = new TokenBucketLimit(config.ReceiveRateLimit * 1024, 1, TimeUnit.Second);
             _processThreadNum = config.ProcessThreadNum;
+            _cancellationTokenSource = new CancellationTokenSource();
             _tasks = new List<Task>();
         }
 
@@ -395,16 +397,21 @@ namespace DhtCrawler.DHT
                             break;
                     }
                 }
-                while (_nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
+                while (running && _nodeQueue.TryTake(out var node) && nodeSet.Count <= limitNode)
                 {
                     nodeSet.Add(node);
                 }
-                foreach (var node in BootstrapNodes.Union(nodeSet))
+                using (var nodeEnumerator = BootstrapNodes.Union(nodeSet).GetEnumerator())
                 {
-                    FindNode(node);
+                    while (running && nodeEnumerator.MoveNext())
+                    {
+                        FindNode(nodeEnumerator.Current);
+                    }
                 }
                 nodeSet.Clear();
-                await Task.Delay(60 * 1000);
+                if (!running)
+                    return;
+                await Task.Delay(60 * 1000, _cancellationTokenSource.Token);
             }
         }
 
@@ -482,6 +489,7 @@ namespace DhtCrawler.DHT
         {
             _logger.Info("shuting down");
             running = false;
+            _cancellationTokenSource.Cancel();
             ClearCollection(_nodeQueue);
             ClearCollection(_recvMessageQueue);
             ClearCollection(_sendMessageQueue);

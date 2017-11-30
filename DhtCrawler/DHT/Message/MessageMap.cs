@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
+using DhtCrawler.Common.Compare;
 using DhtCrawler.Common.Utils;
 using log4net;
 
@@ -14,15 +15,22 @@ namespace DhtCrawler.DHT.Message
         private class NodeMapInfo
         {
             public long LastTime { get; set; } = DateTime.Now.Ticks;
-            public ConcurrentDictionary<TransactionId, byte[]> InfoHashMap { get; set; } = new ConcurrentDictionary<TransactionId, byte[]>();
+            public bool IsExpire => LastTime + ExpireTimeSpan < DateTime.Now.Ticks;
+            public ConcurrentDictionary<TransactionId, NodeMapInfoItem> InfoHashMap { get; } = new ConcurrentDictionary<TransactionId, NodeMapInfoItem>();
+        }
+        private class NodeMapInfoItem
+        {
+            public byte[] InfoHash { get; set; }
+            public long LastTime { get; } = DateTime.Now.Ticks;
+            public bool IsExpire => LastTime + ExpireTimeSpan < DateTime.Now.Ticks;
         }
         private static readonly long ExpireTimeSpan = TimeSpan.FromMinutes(30).Ticks;
         private static readonly object SyncRoot = new object();
         private static readonly ILog log = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         private static readonly IDictionary<CommandType, TransactionId> TypeMapTransactionId;
         private static readonly IDictionary<TransactionId, CommandType> TransactionIdMapType;
-
-        private static readonly ConcurrentDictionary<byte[], NodeMapInfo> NodeMap = new ConcurrentDictionary<byte[], NodeMapInfo>();
+        private static readonly IEqualityComparer<byte[]> ByteArrayComparer = new WrapperEqualityComparer<byte[]>((x, y) => x.Length == y.Length && x.SequenceEqual(y), x => x.Sum(b => b));
+        private static readonly ConcurrentDictionary<byte[], NodeMapInfo> NodeMap = new ConcurrentDictionary<byte[], NodeMapInfo>(ByteArrayComparer);
         private static TransactionId[] BucketArray;
         private static int BucketIndex = 0;
         private static DateTime LastClearTime = DateTime.Now;
@@ -65,15 +73,29 @@ namespace DhtCrawler.DHT.Message
         private static void ClearExpireMessage()
         {
             var startTime = DateTime.Now;
-            var removeSize = 0;
+            int removeSize = 0, msgSize = 0;
             foreach (var mapInfo in NodeMap)
             {
-                if (mapInfo.Value.InfoHashMap.Count > 0 && mapInfo.Value.LastTime + ExpireTimeSpan > DateTime.Now.Ticks)
-                    continue;
-                NodeMap.TryRemove(mapInfo.Key, out var rm);
-                removeSize++;
+                if (mapInfo.Value.InfoHashMap.Count <= 0 || mapInfo.Value.IsExpire)
+                {
+                    NodeMap.TryRemove(mapInfo.Key, out var rm);
+                    removeSize += rm.InfoHashMap.Count;
+                }
+                else
+                {
+                    foreach (var infoItem in mapInfo.Value.InfoHashMap)
+                    {
+                        if (!infoItem.Value.IsExpire)
+                            continue;
+                        mapInfo.Value.InfoHashMap.TryRemove(infoItem.Key, out var rmItem);
+                        removeSize += 1;
+                    }
+                    msgSize += mapInfo.Value.InfoHashMap.Count;
+                }
+
             }
-            log.Info($"清理过期的注册消息数:{removeSize},用时:{(DateTime.Now - startTime).TotalSeconds}");
+            GC.Collect();
+            log.Info($"清理过期的注册消息数:{removeSize},现有消息数:{msgSize},用时:{(DateTime.Now - startTime).TotalSeconds}");
         }
 
         public static bool RegisterMessage(DhtMessage message, DhtNode node)
@@ -92,10 +114,9 @@ namespace DhtCrawler.DHT.Message
                 default:
                     return false;
             }
-            var infoHash = message.Get<byte[]>("info_hash");
             var nodeKey = node.CompactEndPoint();
             var nodeMapInfo = NodeMap.GetOrAdd(nodeKey, new NodeMapInfo());
-            if (nodeMapInfo.LastTime - ExpireTimeSpan < 0)
+            if (nodeMapInfo.IsExpire)
             {
                 NodeMap.TryRemove(nodeKey, out nodeMapInfo);
                 return false;
@@ -112,6 +133,8 @@ namespace DhtCrawler.DHT.Message
                 }
             }
             var tryTimes = 0;
+            var infoHash = message.Get<byte[]>("info_hash");
+            var mapItem = new NodeMapInfoItem() { InfoHash = infoHash };
             while (true)
             {
                 if (tryTimes > 10)
@@ -123,7 +146,7 @@ namespace DhtCrawler.DHT.Message
                         BucketIndex = 0;
                 }
                 var msgId = BucketArray[BucketIndex];
-                if (nodeMapInfo.InfoHashMap.TryAdd(msgId, infoHash))
+                if (nodeMapInfo.InfoHashMap.TryAdd(msgId, mapItem))
                 {
                     message.MessageId = msgId;
                     return true;
@@ -140,7 +163,6 @@ namespace DhtCrawler.DHT.Message
                 message.CommandType = TransactionIdMapType[message.MessageId];
                 return true;
             }
-            Console.WriteLine(NodeMap.Count);
             message.CommandType = CommandType.Get_Peers;
             var msgId = message.MessageId;
             var nodeKey = node.CompactEndPoint();
@@ -148,17 +170,26 @@ namespace DhtCrawler.DHT.Message
             {
                 return false;
             }
+            var result = false;
             nodeMap.LastTime = DateTime.Now.Ticks;
-            if (nodeMap.InfoHashMap.TryRemove(msgId, out var mapInfo))
+            if (nodeMap.InfoHashMap.TryRemove(msgId, out var infohash))
             {
-                if (mapInfo == null)
+                if (infohash?.InfoHash == null)
                 {
                     return false;
                 }
-                message.Data.Add("info_hash", mapInfo);
-                return true;
+                message.Data.Add("info_hash", infohash.InfoHash);
+                Console.WriteLine(NodeMap.Count + ",host msgsize:" + nodeMap.InfoHashMap.Count);
+                result = true;
             }
-            return false;
+            if (nodeMap.InfoHashMap.Count <= 0)
+            {
+                if (NodeMap.TryRemove(nodeKey, out var rm) && rm.InfoHashMap.Count > 0)
+                {
+                    NodeMap.TryAdd(nodeKey, rm);
+                }
+            }
+            return result;
         }
     }
 }
