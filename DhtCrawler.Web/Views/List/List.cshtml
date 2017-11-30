@@ -2,7 +2,7 @@
 @{
     if (ViewBag.SearchKey != null)
     {
-        ViewBag.Title = string.Format("{0} - 第1页 磁力链接资源列表_BT种子_迅雷种子下载_高清BT下载 - 磁力云磁力链接搜索引擎", ViewBag.SearchKey); ;
+        ViewBag.Title = string.Format("{0} - 第{1}页 磁力链接资源列表_BT种子_迅雷种子下载_高清BT下载 - 磁力云磁力链接搜索引擎", ViewBag.SearchKey, Model.PageIndex); ;
         ViewBag.KeyWord = string.Format("{0},{0}磁力链接,{0}磁力搜索,{0}BT种子,{0}迅雷下载,{0}下载,BT种子,磁力链接,磁力搜索", ViewBag.SearchKey);
         ViewBag.Description = string.Format("磁力云为您查询到的{0}的DHT磁力链接资源，您可以在本页查看{0}磁力链接和{0}BT种子下载地址。", ViewBag.SearchKey);
     }
@@ -40,17 +40,17 @@
         </div>
     </div>
 </div>
-@if (Model.Total<=0)
+@if (Model.Total <= 0)
 {
     <div class="search-list col-md-12">
         <ul class="media-list media-list-set">
 
             <p>抱歉，没有找到关于 “<b>@ViewBag.SearchKey</b>” 的结果</p>
-        <p>您可以首先尝试&nbsp;<a href=""><span class="label label-warning">刷新</span></a>&nbsp;本页重试,或者可能还没有索引到该资源，请试试其它关键词。</p>
-        <p>点此<a href="/">返回首页</a>重新搜索，请尽量使用简短词搜索。</p>
+            <p>您可以首先尝试&nbsp;<a href=""><span class="label label-warning">刷新</span></a>&nbsp;本页重试,或者可能还没有索引到该资源，请试试其它关键词。</p>
+            <p>点此<a href="/">返回首页</a>重新搜索，请尽量使用简短词搜索。</p>
 
-    </ul>
-</div>
+        </ul>
+    </div>
 }
 else
 {

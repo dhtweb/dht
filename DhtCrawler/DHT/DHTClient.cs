@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using DhtCrawler.Common.RateLimit;
 using DhtCrawler.Common.Utils;
@@ -66,6 +65,7 @@ namespace DhtCrawler.DHT
             return targetId.Take(10).Concat(selfId.Skip(10)).ToArray();
         }
 
+        protected virtual IMessageMap MessageMap => DefaultMessageMap.Instance;
 
         #region 事件
 

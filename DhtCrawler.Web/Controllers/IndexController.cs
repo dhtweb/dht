@@ -19,7 +19,7 @@ namespace DhtCrawler.Web.Controllers
             _indexSearchService.ReBuildIndex(it =>
             {
                 i++;
-                if (i % 100 == 0)
+                if (i % 1000 == 0)
                 {
                     var codings = Encoding.UTF8.GetBytes(i.ToString() + Environment.NewLine);
                     Response.Body.Write(codings, 0, codings.Length);

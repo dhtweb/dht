@@ -58,7 +58,7 @@ namespace DhtCrawler.Web.Controllers
         public async Task<IActionResult> Lastestlist(int index = 1)
         {
             var result = await _infoHashRepository.GetInfoHashListAsync(index, PageSize);
-            return View("Lastlist", new PageModel<InfoHashModel>() { PageIndex = index, PageSize = PageSize, Total = Math.Min((int)result.Count, 500 * PageSize), List = result.List });
+            return View("LastList", new PageModel<InfoHashModel>() { PageIndex = index, PageSize = PageSize, Total = Math.Min((int)result.Count, 500 * PageSize), List = result.List });
         }
     }
 }

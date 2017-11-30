@@ -4,9 +4,9 @@ using Newtonsoft.Json;
 
 namespace DhtCrawler.Service.Model
 {
-    public class InfoHashModel : BaseModel<ulong>
+    public class InfoHashModel : BaseModel<long>
     {
-        public override ulong Id { get; set; }
+        public override long Id { get; set; }
         public string InfoHash { get; set; }
         public string Name { get; set; }
 

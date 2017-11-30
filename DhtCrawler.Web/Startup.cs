@@ -29,11 +29,9 @@ namespace DhtCrawler.Web
             services.AddMvc();
             services.AddSingleton<IQueue<PageStaticHtmlItem>, DefaultQueue<PageStaticHtmlItem>>();
             services.AddSingleton(provider => new StaticHtmlFilterAttribute(provider.GetService<IQueue<PageStaticHtmlItem>>()));
-            services.AddTransient(provider =>
-            {
-                var factory = new DbFactory(Configuration["postgresql.url"], NpgsqlFactory.Instance);
-                return new InfoHashRepository(factory);
-            });
+            services.AddSingleton(new DbFactory(Configuration["postgresql.url"], NpgsqlFactory.Instance));
+            services.AddTransient<InfoHashRepository>();
+            services.AddTransient<KeyWordRepository>();
             services.AddSingleton(provider =>
             {
                 var infoHashRepo = provider.GetService<InfoHashRepository>();

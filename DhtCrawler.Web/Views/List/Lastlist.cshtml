@@ -1,8 +1,8 @@
 ﻿@model DhtCrawler.Common.Web.Model.PageModel<DhtCrawler.Service.Model.InfoHashModel>
 @{
-        ViewBag.Title = "磁力云 - DHT磁力链接搜索引擎";
-        ViewBag.KeyWord = "磁力链接,磁力搜索,BT搜索,BT种子,BT种子搜索,种子搜索,高清BT,迅雷BT搜索,高清BT种子,bt种子搜索器";
-        ViewBag.Description = "磁力云是一个DHT磁力链接搜索引擎，专注于提供磁力链接和BT种子文件搜索服务,你可以在这里搜索电影、美剧、综艺、软件、动漫、教程、游戏等BT资源和磁力链接。";
+    ViewBag.Title = "磁力云 - DHT磁力链接搜索引擎";
+    ViewBag.KeyWord = "磁力链接,磁力搜索,BT搜索,BT种子,BT种子搜索,种子搜索,高清BT,迅雷BT搜索,高清BT种子,bt种子搜索器";
+    ViewBag.Description = "磁力云是一个DHT磁力链接搜索引擎，专注于提供磁力链接和BT种子文件搜索服务,你可以在这里搜索电影、美剧、综艺、软件、动漫、教程、游戏等BT资源和磁力链接。";
 }
 
 
@@ -65,18 +65,30 @@
     }
     else
     {
-        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date,index=1 })">首页</a></li>
-        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = Model.PreIndex })">上一页</a></li>
+        if (ViewBag.Date != null)
+        {
+            <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date,index=1 })">首页</a></li>
+            <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = Model.PreIndex })">上一页</a></li>
+        }
+        else
+        {
+            <li><a href="@Url.RouteUrl("lastest", new { index=1 })">首页</a></li>
+            <li><a href="@Url.RouteUrl("lastest", new { index = Model.PreIndex })">上一页</a></li>
+        }
     }
     @for (int start = Math.Max(1, Model.PageIndex - 3), end = Math.Min(Model.Pages, Model.PageIndex + 3); start <= end; start++)
     {
         if (start == Model.PageIndex)
         {
-        <li class="disabled"><a href="javascript:void(0);">@start</a></li>
+            <li class="disabled"><a href="javascript:void(0);">@start</a></li>
+        }
+        else if (ViewBag.Date != null)
+        {
+            <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = start })">@start</a></li>
         }
         else
         {
-        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = start })">@start</a></li>
+            <li><a href="@Url.RouteUrl("lastest", new { ndex = start })">@start</a></li>
         }
     }
     @if (Model.PageIndex >= Model.Pages)
@@ -84,10 +96,15 @@
         <li class="disabled"><a href="javascript:void(0);">下一页</a></li>
         <li class="disabled"><a href="javascript:void(0);">尾页</a></li>
     }
+    else if (ViewBag.Date != null)
+    {
+        <li><a href="@Url.RouteUrl("last", new {date = ViewBag.Date, index = Model.NextIndex})">下一页</a></li>
+        <li><a href="@Url.RouteUrl("last", new {date = ViewBag.Date, index = Model.Pages})">尾页</a></li>
+    }
     else
     {
-        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = Model.NextIndex })">下一页</a></li>
-        <li><a href="@Url.RouteUrl("last", new { date = ViewBag.Date, index = Model.Pages })">尾页</a></li>
+        <li><a href="@Url.RouteUrl("lastest", new {index = Model.NextIndex})">下一页</a></li>
+        <li><a href="@Url.RouteUrl("lastest", new {index = Model.Pages})">尾页</a></li>
     }
 </ul>
 @section Footer{

@@ -15,9 +15,8 @@ using NpgsqlTypes;
 
 namespace DhtCrawler.Service
 {
-    public class InfoHashRepository : BaseRepository<InfoHashModel, ulong>
+    public class InfoHashRepository : BaseRepository<InfoHashModel, long>
     {
-
         static InfoHashRepository()
         {
             SqlMapper.AddTypeHandler(typeof(IList<TorrentFileModel>), new FileListTypeHandler());
@@ -27,8 +26,7 @@ namespace DhtCrawler.Service
         {
         }
 
-
-        public async Task<bool> InsertOrUpdateAsync(InfoHashModel model)
+        private async Task<bool> InsertOrUpdateAsync(InfoHashModel model, IDbTransaction transaction)
         {
             var updateSql = new StringBuilder();
             var list = new List<DbParameter>
@@ -55,7 +53,7 @@ namespace DhtCrawler.Service
             if (model.DownNum > 0)
             {
                 list.Add(new NpgsqlParameter("downnum", model.DownNum));
-                updateSql.Append("downnum = excluded.downnum +@downnum,");
+                updateSql.Append("downnum = ti.downnum +@downnum,");
             }
             if (model.FileNum > 0)
             {
@@ -79,7 +77,12 @@ namespace DhtCrawler.Service
                 updateSql.Append("files = @files,");
             }
             var paramater = new InfoHashParamter(list);
-            return await Connection.ExecuteAsync(string.Format("INSERT INTO t_infohash ({0}) VALUES ({1}) ON CONFLICT  (infohash) DO UPDATE SET {2}", string.Join(",", list.Select(l => l.ParameterName)), string.Join(",", list.Select(l => "@" + l.ParameterName)), updateSql.ToString().TrimEnd(',')), paramater) > 0;
+            return await Connection.ExecuteAsync(string.Format("INSERT INTO t_infohash AS ti ({0}) VALUES ({1}) ON CONFLICT  (infohash) DO UPDATE SET {2}", string.Join(",", list.Select(l => l.ParameterName)), string.Join(",", list.Select(l => "@" + l.ParameterName)), updateSql.ToString().TrimEnd(',')), paramater, transaction) > 0;
+        }
+
+        public async Task<bool> InsertOrUpdateAsync(InfoHashModel model)
+        {
+            return await InsertOrUpdateAsync(model, null);
         }
 
         public async Task<bool> InsertOrUpdateAsync(IEnumerable<InfoHashModel> models)
@@ -93,61 +96,7 @@ namespace DhtCrawler.Service
             {
                 foreach (var model in models)
                 {
-                    var updateSql = new StringBuilder();
-                    var list = new List<DbParameter>
-                    {
-                        new NpgsqlParameter("updatetime", DateTime.Now),
-                        new NpgsqlParameter("infohash", model.InfoHash)
-                    };
-                    updateSql.Append("updatetime = @updatetime,");
-                    if (model.CreateTime != default(DateTime))
-                    {
-                        list.Add(new NpgsqlParameter("createtime", model.CreateTime));
-                        updateSql.Append("createtime = @createtime,");
-                    }
-                    if (model.IsDown)
-                    {
-                        list.Add(new NpgsqlParameter("isdown", model.IsDown));
-                        updateSql.Append("isdown = @isdown,");
-                    }
-                    if (model.IsDanger)
-                    {
-                        list.Add(new NpgsqlParameter("isdanger", model.IsDanger));
-                        updateSql.Append("isdanger = @isdanger,");
-                    }
-                    if (model.DownNum > 0)
-                    {
-                        list.Add(new NpgsqlParameter("downnum", model.DownNum));
-                        updateSql.Append("downnum = excluded.downnum +@downnum,");
-                    }
-                    if (model.FileNum > 0)
-                    {
-                        list.Add(new NpgsqlParameter("filenum", model.FileNum));
-                        updateSql.Append("filenum = @filenum,");
-                    }
-                    if (model.FileSize > 0)
-                    {
-                        list.Add(new NpgsqlParameter("filesize", model.FileSize));
-                        updateSql.Append("filesize = @filesize,");
-                    }
-                    if (model.Name != null)
-                    {
-                        list.Add(new NpgsqlParameter("name", model.Name));
-                        updateSql.Append("name = @name,");
-                    }
-                    if (model.Files != null && model.Files.Count > 0)
-                    {
-                        var param = new NpgsqlParameter("files", NpgsqlDbType.Jsonb) { Value = model.Files.ToJson() };
-                        list.Add(param);
-                        updateSql.Append("files = @files,");
-                    }
-                    var paramater = new InfoHashParamter(list);
-                    await Connection.ExecuteAsync(
-                        string.Format(
-                            "INSERT INTO t_infohash ({0}) VALUES ({1}) ON CONFLICT  (infohash) DO UPDATE SET {2}",
-                            string.Join(",", list.Select(l => l.ParameterName)),
-                            string.Join(",", list.Select(l => "@" + l.ParameterName)),
-                            updateSql.ToString().TrimEnd(',')), paramater, trans);
+                    await InsertOrUpdateAsync(model, trans);
                 }
                 trans.Commit();
                 return true;
@@ -209,17 +158,28 @@ namespace DhtCrawler.Service
 
         public IEnumerable<InfoHashModel> GetAllFullInfoHashModels(DateTime? start = null)
         {
-            using (var listCon = Factory.CreateConnection())
+            var id = 0L;
+            var size = 500;
+            var sql = new StringBuilder("SELECT id, infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, files, isdanger FROM t_infohash WHERE isdown=TRUE AND id > @id");
+            if (start.HasValue)
             {
-                var hashs = start.HasValue ? listCon.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE AND updatetime>@start", new { start = start.Value }, null, false) : listCon.Query<string>("SELECT infohash FROM t_infohash WHERE isdown=TRUE", (object)null, null, false);
-                using (var queryCon = Factory.CreateConnection())
-                {
-                    foreach (var hash in hashs)
-                    {
-                        yield return queryCon.QuerySingle<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
-                    }
-                }
+                sql.Append(" AND updatetime>@start");
             }
+            sql.Append(" LIMIT @size");
+            do
+            {
+                var length = 0;
+                var hashs = Connection.Query<InfoHashModel>(sql.ToString(), new { id, start, size });
+                foreach (var model in hashs)
+                {
+                    length++;
+                    id = model.Id;
+                    yield return model;
+                }
+                if (length < size)
+                    yield break;
+            } while (true);
         }
+
     }
 }
