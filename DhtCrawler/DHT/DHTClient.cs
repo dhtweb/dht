@@ -65,7 +65,8 @@ namespace DhtCrawler.DHT
             return targetId.Take(10).Concat(selfId.Skip(10)).ToArray();
         }
 
-        protected virtual IMessageMap MessageMap => DefaultMessageMap.Instance;
+        private readonly StsdbMessageMap _messageMap = new StsdbMessageMap("msgstore\\msg.stsdb");
+        protected virtual AbstractMessageMap MessageMap => _messageMap;
 
         #region 事件
 
@@ -489,7 +490,7 @@ namespace DhtCrawler.DHT
         {
             _logger.Info("shuting down");
             running = false;
-            _cancellationTokenSource.Cancel();
+            _cancellationTokenSource.Cancel(true);
             ClearCollection(_nodeQueue);
             ClearCollection(_recvMessageQueue);
             ClearCollection(_sendMessageQueue);
