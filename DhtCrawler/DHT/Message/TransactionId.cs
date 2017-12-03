@@ -16,6 +16,7 @@ namespace DhtCrawler.DHT.Message
         }
 
         public byte this[int index] => _bytes[index];
+        public int Length => _bytes.Length;
 
         public override string ToString()
         {

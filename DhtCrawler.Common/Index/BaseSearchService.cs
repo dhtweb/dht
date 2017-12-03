@@ -198,48 +198,52 @@ namespace DhtCrawler.Common.Index
         public void MultipleThreadReBuildIndex()
         {
             var list = GetAllModels();
+            var rmPaths = new List<string>();
             lock (IndexWriter)
             {
                 var indexLocker = new object();
-                {
-                    IndexWriter.DeleteAll();
-                    Parallel.ForEach(list,
-                        () =>
-                        {
-                            var subIndex = Path.Combine(IndexDir, Guid.NewGuid().ToString());
-                            var subDirectory = GetIndexDirectory(subIndex);
-                            return new IndexWriter(subDirectory,
-                                new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
-                                {
-                                    IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                                    OpenMode = OpenMode.CREATE
-                                });
-                        },
-                        (item, state, writer) =>
-                        {
-                            if (state.IsExceptional)
-                                state.Break();
-                            var doc = GetDocument(item);
-                            writer.AddDocument(doc);
-                            return writer;
-                        }, writer =>
-                        {
-                            using (writer.Directory)
+                IndexWriter.DeleteAll();
+                Parallel.ForEach(list,
+                    () =>
+                    {
+                        var subIndex = Path.Combine(IndexDir, Guid.NewGuid().ToString());
+                        rmPaths.Add(subIndex);
+                        var subDirectory = GetIndexDirectory(subIndex);
+                        return new IndexWriter(subDirectory,
+                            new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
                             {
-                                using (writer)
+                                IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
+                                OpenMode = OpenMode.CREATE
+                            });
+                    },
+                    (item, state, writer) =>
+                    {
+                        if (state.IsExceptional)
+                            state.Break();
+                        var doc = GetDocument(item);
+                        writer.AddDocument(doc);
+                        return writer;
+                    }, writer =>
+                    {
+                        using (writer.Directory)
+                        {
+                            using (writer)
+                            {
+                                lock (indexLocker)
                                 {
-                                    lock (indexLocker)
+                                    using (var reader = writer.GetReader(true))
                                     {
-                                        using (var reader = writer.GetReader(true))
-                                        {
-                                            IndexWriter.AddIndexes(reader);
-                                        }
+                                        IndexWriter.AddIndexes(reader);
                                     }
-                                    writer.DeleteAll();
                                 }
+                                writer.DeleteAll();
                             }
-                        });
-                    IndexWriter.Commit();
+                        }
+                    });
+                IndexWriter.Commit();
+                foreach (var rmPath in rmPaths)
+                {
+                    System.IO.Directory.Delete(rmPath);
                 }
             }
         }

@@ -165,7 +165,7 @@ namespace DhtCrawler.Service
             {
                 sql.Append(" AND updatetime>@start");
             }
-            sql.Append(" LIMIT @size");
+            sql.Append("order by id LIMIT @size");
             do
             {
                 var length = 0;

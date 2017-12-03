@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using DhtCrawler.Common.Utils;
 using log4net;
 
@@ -50,7 +51,20 @@ namespace DhtCrawler.DHT.Message
         }
 
         protected abstract bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId);
+
+        protected virtual Task<bool> RegisterGetPeersMessageAsync(byte[] infoHash, DhtNode node,
+            out TransactionId msgId)
+        {
+            return Task.FromResult(RegisterGetPeersMessage(infoHash, node, out msgId));
+        }
+
         protected abstract bool RequireGetPeersRegisteredInfo(TransactionId msgId, DhtNode node, out byte[] infoHash);
+
+        protected virtual Task<bool> RequireGetPeersRegisteredInfoAsync(TransactionId msgId, DhtNode node,
+            out byte[] infoHash)
+        {
+            return Task.FromResult(RequireGetPeersRegisteredInfo(msgId, node, out infoHash));
+        }
 
         public bool RegisterMessage(DhtMessage message, DhtNode node)
         {
@@ -76,6 +90,30 @@ namespace DhtCrawler.DHT.Message
             return false;
         }
 
+        public async Task<bool> RegisterMessageAsync(DhtMessage message, DhtNode node)
+        {
+            switch (message.CommandType)
+            {
+                case CommandType.UnKnow:
+                    return false;
+                case CommandType.Ping:
+                case CommandType.Find_Node:
+                case CommandType.Announce_Peer:
+                    message.MessageId = TypeMapTransactionId[message.CommandType];
+                    return true;
+                case CommandType.Get_Peers:
+                    break;
+                default:
+                    return false;
+            }
+            if (await RegisterGetPeersMessageAsync(message.Get<byte[]>("info_hash"), node, out var msgId))
+            {
+                message.MessageId = msgId;
+                return true;
+            }
+            return false;
+        }
+
         public bool RequireRegisteredInfo(DhtMessage message, DhtNode node)
         {
             if (TransactionIdMapType.ContainsKey(message.MessageId))
@@ -85,6 +123,22 @@ namespace DhtCrawler.DHT.Message
             }
             message.CommandType = CommandType.Get_Peers;
             if (RequireGetPeersRegisteredInfo(message.MessageId, node, out var infoHash))
+            {
+                message.Data.Add("info_hash", infoHash);
+                return true;
+            }
+            return false;
+        }
+
+        public async Task<bool> RequireRegisteredInfoAsync(DhtMessage message, DhtNode node)
+        {
+            if (TransactionIdMapType.ContainsKey(message.MessageId))
+            {
+                message.CommandType = TransactionIdMapType[message.MessageId];
+                return true;
+            }
+            message.CommandType = CommandType.Get_Peers;
+            if (await RequireGetPeersRegisteredInfoAsync(message.MessageId, node, out var infoHash))
             {
                 message.Data.Add("info_hash", infoHash);
                 return true;

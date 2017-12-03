@@ -4,10 +4,10 @@
     "NodeQueueMaxSize": 10240,
     "ReceiveQueueMaxSize": 20480,
     "SendQueueMaxSize": 20480,
-    "SendRateLimit": 150,
-    "ReceiveRateLimit": 150,
-    "ProcessThreadNum": 1
+    "SendRateLimit": 200,
+    "ReceiveRateLimit": 1024,
+    "ProcessThreadNum": 2
   },
-  "BatchDownSize": 512,
-  "MaxDownThreadNum": 32
+  "BatchDownSize": 128,
+  "MaxDownThreadNum": 128
 }

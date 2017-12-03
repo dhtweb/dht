@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
 using System.Threading.Tasks;
 using BitTorrent.Messages;
 using BitTorrent.Messages.Wire;
@@ -39,7 +38,7 @@ namespace BitTorrent.Listeners
             EndPoint = endpoint;
         }
 
-        public async Task<BEncodedDictionary> GetMetaDataAsync(InfoHash hash)
+        public async Task<(BEncodedDictionary, bool)> GetMetaDataAsync(InfoHash hash)
         {
             WireMessage message;
             ExtHandShack exths;
@@ -56,7 +55,7 @@ namespace BitTorrent.Listeners
                 if (!connectTask.IsCompleted || connectTask.Status != TaskStatus.RanToCompletion)
                 {
                     Trace.WriteLine("Connect Timeout", "Socket");
-                    return null;
+                    return (null, true);
                 }
                 stream = client.GetStream();
 
@@ -69,7 +68,7 @@ namespace BitTorrent.Listeners
                 if (!message.Legal || !(message as HandShack).SupportExtend)
                 {
                     Trace.WriteLine(EndPoint, "HandShack Fail");
-                    return null;
+                    return (null, true);
                 }
 
                 //发送拓展握手
@@ -81,7 +80,7 @@ namespace BitTorrent.Listeners
                 if (!exths.Legal || !exths.CanGetMetadate || exths.MetadataSize > MaxMetadataSize || exths.MetadataSize <= 0)
                 {
                     Trace.WriteLine(EndPoint, "ExtendHandShack Fail");
-                    return null;
+                    return (null, true);
                 }
                 metadataSize = exths.MetadataSize;
                 ut_metadata = exths.UtMetadata;
@@ -97,7 +96,7 @@ namespace BitTorrent.Listeners
                 //等待pieces接收完毕
                 metadata = await metaTask;
                 if (metadata == null)
-                    return null;
+                    return (null, false);
                 //检查hash值是否正确
                 using (var sha1 = new System.Security.Cryptography.SHA1CryptoServiceProvider())
                 {
@@ -105,10 +104,10 @@ namespace BitTorrent.Listeners
                     if (!infohash.SequenceEqual(hash.Hash))
                     {
                         Trace.WriteLine(EndPoint, "Hash Wrong");
-                        return null;
+                        return (null, false);
                     }
                 }
-                return BEncodedDictionary.DecodeTorrent(metadata);
+                return (BEncodedDictionary.DecodeTorrent(metadata), false);
             }
             catch (AggregateException ex)
             {
@@ -116,8 +115,7 @@ namespace BitTorrent.Listeners
             }
             finally
             {
-                if (client != null)
-                    client.Close();
+                client?.Close();
             }
         }
 
@@ -151,7 +149,7 @@ namespace BitTorrent.Listeners
                     }
                     else
                     {
-                        Thread.Sleep(100);
+                        await Task.Delay(100);
                         tryed++;
                     }
                 }
@@ -188,7 +186,7 @@ namespace BitTorrent.Listeners
             {
                 //获取数据长度头
                 buffer = new byte[head];
-                tmp = stream.Read(buffer, 0, head);
+                tmp = await stream.ReadAsync(buffer, 0, head);
                 if (tmp == 0)//未获得数据长度头 返回
                 {
                     Trace.WriteLine(EndPoint, "No Message to Get");

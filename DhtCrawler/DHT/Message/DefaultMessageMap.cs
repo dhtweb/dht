@@ -10,51 +10,67 @@ namespace DhtCrawler.DHT.Message
     {
         private class NodeMapInfo
         {
-            public long LastTime { get; set; } = DateTime.Now.Ticks;
-            public bool IsExpire => LastTime + ExpireTimeSpan < DateTime.Now.Ticks;
+            public long LastTime { private get; set; } = DateTime.Now.Ticks;
             public ConcurrentDictionary<TransactionId, NodeMapInfoItem> InfoHashMap { get; } = new ConcurrentDictionary<TransactionId, NodeMapInfoItem>();
+            public bool IsExpire(long expireTimeSpan)
+            {
+                return LastTime + expireTimeSpan < DateTime.Now.Ticks;
+            }
+
+            public int RemoveExpire(long expireTimeSpan)
+            {
+                var size = 0;
+                foreach (var item in InfoHashMap)
+                {
+                    if (!item.Value.IsExpire(expireTimeSpan))
+                        continue;
+                    if (InfoHashMap.TryRemove(item.Key, out var rm))
+                        size++;
+                }
+                return size;
+            }
         }
         private class NodeMapInfoItem
         {
             public byte[] InfoHash { get; set; }
-            public long LastTime { get; } = DateTime.Now.Ticks;
-            public bool IsExpire => LastTime + ExpireTimeSpan < DateTime.Now.Ticks;
+            public long LastTime { private get; set; }
+            public bool IsExpire(long expireTimeSpan)
+            {
+                return LastTime + expireTimeSpan < DateTime.Now.Ticks;
+            }
         }
-        public static readonly DefaultMessageMap Instance = new DefaultMessageMap();
+        public static readonly DefaultMessageMap Instance = new DefaultMessageMap(TimeSpan.FromMinutes(20).Ticks);
 
-        private static readonly long ExpireTimeSpan = TimeSpan.FromMinutes(30).Ticks;
+        private readonly long _expireTimeSpan;
         private static readonly IEqualityComparer<byte[]> ByteArrayComparer = new WrapperEqualityComparer<byte[]>((x, y) => x.Length == y.Length && x.SequenceEqual(y), x => x.Sum(b => b));
         private static readonly ConcurrentDictionary<byte[], NodeMapInfo> NodeMap = new ConcurrentDictionary<byte[], NodeMapInfo>(ByteArrayComparer);
 
         private int _bucketIndex = 0;
-        private DateTime _lastClearTime = DateTime.Now;
+        private DateTime _lastClearTime;
         private readonly object _syncRoot = new object();
 
-        private static void ClearExpireMessage()
+        public DefaultMessageMap(long expireTimeSpan)
+        {
+            _expireTimeSpan = expireTimeSpan;
+            _lastClearTime = DateTime.Now.AddTicks(_expireTimeSpan);
+        }
+        private void ClearExpireMessage()
         {
             var startTime = DateTime.Now;
             int removeSize = 0, msgSize = 0;
             foreach (var mapInfo in NodeMap)
             {
-                if (mapInfo.Value.InfoHashMap.Count <= 0 || mapInfo.Value.IsExpire)
+                if (mapInfo.Value.InfoHashMap.Count <= 0 || mapInfo.Value.IsExpire(_expireTimeSpan))
                 {
                     NodeMap.TryRemove(mapInfo.Key, out var rm);
                     removeSize += rm.InfoHashMap.Count;
                 }
                 else
                 {
-                    foreach (var infoItem in mapInfo.Value.InfoHashMap)
-                    {
-                        if (!infoItem.Value.IsExpire)
-                            continue;
-                        mapInfo.Value.InfoHashMap.TryRemove(infoItem.Key, out var rmItem);
-                        removeSize += 1;
-                    }
+                    removeSize += mapInfo.Value.RemoveExpire(_expireTimeSpan);
                     msgSize += mapInfo.Value.InfoHashMap.Count;
                 }
-
             }
-            GC.Collect();
             Log.Info($"清理过期的注册消息数:{removeSize},现有消息数:{msgSize},用时:{(DateTime.Now - startTime).TotalSeconds}");
         }
 
@@ -62,25 +78,25 @@ namespace DhtCrawler.DHT.Message
         {
             var nodeKey = node.CompactEndPoint();
             var nodeMapInfo = NodeMap.GetOrAdd(nodeKey, new NodeMapInfo());
-            if (nodeMapInfo.IsExpire)
+            if (nodeMapInfo.IsExpire(_expireTimeSpan))
             {
                 NodeMap.TryRemove(nodeKey, out nodeMapInfo);
                 msgId = null;
                 return false;
             }
-            if ((DateTime.Now - _lastClearTime).Ticks > ExpireTimeSpan)
+            if (DateTime.Now >= _lastClearTime)
             {
                 lock (_syncRoot)
                 {
-                    if ((DateTime.Now - _lastClearTime).Ticks > ExpireTimeSpan)
+                    if (DateTime.Now >= _lastClearTime)
                     {
                         ClearExpireMessage();
-                        _lastClearTime = DateTime.Now;
+                        _lastClearTime = DateTime.Now.AddTicks(_expireTimeSpan);
                     }
                 }
             }
             var tryTimes = 0;
-            var mapItem = new NodeMapInfoItem() { InfoHash = infoHash };
+            var mapItem = new NodeMapInfoItem() { InfoHash = infoHash, LastTime = DateTime.Now.Ticks };
             while (true)
             {
                 if (tryTimes > 10)
@@ -125,10 +141,18 @@ namespace DhtCrawler.DHT.Message
             {
                 if (NodeMap.TryRemove(nodeKey, out var rm) && rm.InfoHashMap.Count > 0)
                 {
-                    NodeMap.TryAdd(nodeKey, rm);
+                    NodeMap.AddOrUpdate(nodeKey, rm, (key, old) =>
+                    {
+                        foreach (var item in rm.InfoHashMap)
+                        {
+                            old.InfoHashMap.TryAdd(item.Key, item.Value);
+                        }
+                        return old;
+                    });
                 }
             }
             return result;
         }
+
     }
 }

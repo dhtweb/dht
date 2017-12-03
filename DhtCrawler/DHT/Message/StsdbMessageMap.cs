@@ -6,11 +6,6 @@ namespace DhtCrawler.DHT.Message
 {
     public class StsdbMessageMap : AbstractMessageMap, IDisposable
     {
-        private class Record
-        {
-            public byte[] InfoHash { get; set; }
-            public DateTime AddTime { get; set; }
-        }
         private readonly IStorageEngine _storageEngine;
         private readonly ITable<byte[], Record> _table;
         private readonly object _syncRoot = new object();
@@ -24,6 +19,13 @@ namespace DhtCrawler.DHT.Message
                 fileInfo.Directory.Create();
             }
             _storageEngine = STSdb.FromStream(fileInfo.Open(FileMode.OpenOrCreate));
+            var engine = (StorageEngine)_storageEngine;
+            engine.CacheSize = 16;
+            engine.INTERNAL_NODE_MAX_OPERATIONS_IN_ROOT = 4 * 1024;
+            engine.INTERNAL_NODE_MIN_OPERATIONS = 16 * 1024;
+            engine.INTERNAL_NODE_MAX_OPERATIONS = 32 * 1024;
+            engine.LEAF_NODE_MIN_RECORDS = 8 * 1024;
+            engine.LEAF_NODE_MAX_RECORDS = 32 * 1024;
             _table = _storageEngine.OpenXTable<byte[], Record>("dhtMsg");
         }
         protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId)
@@ -52,7 +54,7 @@ namespace DhtCrawler.DHT.Message
                     {
                         _operateSize++;
                         _table[key] = new Record() { InfoHash = infoHash, AddTime = DateTime.Now };
-                        if (_operateSize > 10000)
+                        if (_operateSize > 5120)
                         {
                             _storageEngine.Commit();
                             _operateSize = 0;
@@ -84,7 +86,7 @@ namespace DhtCrawler.DHT.Message
                 infoHash = old.InfoHash;
                 _operateSize++;
                 _table.Delete(key);
-                if (_operateSize > 10000)
+                if (_operateSize > 5120)
                 {
                     _storageEngine.Commit();
                     _operateSize = 0;

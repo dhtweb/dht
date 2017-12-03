@@ -40,9 +40,9 @@ namespace BitTorrent.Listeners
             EndPoint = endpoint;
         }
 
-        public BEncodedDictionary GetMetaData(InfoHash hash, out byte[] rawBytes)
+        public BEncodedDictionary GetMetaData(InfoHash hash, out bool netError)
         {
-            rawBytes = null;
+            netError = false;
             WireMessage message;
             ExtHandShack exths;
             long metadataSize;
@@ -54,6 +54,7 @@ namespace BitTorrent.Listeners
                 //连接
                 if (!client.ConnectAsync(EndPoint.Address, EndPoint.Port).Wait(5000))
                 {
+                    netError = true;
                     Trace.WriteLine("Connect Timeout", "Socket");
                     return null;
                 }
@@ -67,6 +68,7 @@ namespace BitTorrent.Listeners
                 message = ReceiveMessage<HandShack>(1);
                 if (!message.Legal || !(message as HandShack).SupportExtend)
                 {
+                    netError = true;
                     Trace.WriteLine(EndPoint, "HandShack Fail");
                     return null;
                 }
@@ -79,6 +81,7 @@ namespace BitTorrent.Listeners
                 exths = ReceiveMessage<ExtHandShack>();
                 if (!exths.Legal || !exths.CanGetMetadate || exths.MetadataSize > MaxMetadataSize || exths.MetadataSize <= 0)
                 {
+                    netError = true;
                     Trace.WriteLine(EndPoint, "ExtendHandShack Fail");
                     return null;
                 }
@@ -96,7 +99,7 @@ namespace BitTorrent.Listeners
                 }
                 //等待pieces接收完毕
                 rtask.Wait();
-                rawBytes = rtask.Result;
+                var rawBytes = rtask.Result;
 
                 if (rawBytes == null)
                     return null;

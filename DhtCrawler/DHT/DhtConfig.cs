@@ -35,5 +35,10 @@
         /// 消息处理线程数
         /// </summary>
         public int ProcessThreadNum { get; set; } = 1;
+
+        /// <summary>
+        /// KTable节点大小
+        /// </summary>
+        public int KTableSize { get; set; } = 2048;
     }
 }

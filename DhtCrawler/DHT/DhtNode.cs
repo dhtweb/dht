@@ -27,7 +27,7 @@ namespace DhtCrawler.DHT
         {
             if (!(obj is DhtNode node))
                 return false;
-            return node.Port == Port && node.Host.Equals(node.Host);
+            return node.Port == Port && node.Host.Equals(Host);
         }
 
         public override int GetHashCode()
@@ -46,7 +46,8 @@ namespace DhtCrawler.DHT
             Array.Copy(data, startIndex, idArray, 0, 20);
             Array.Copy(data, startIndex + 20, ipArray, 0, 4);
             Array.Copy(data, startIndex + 24, portArray, 0, 2);
-            return new DhtNode() { Host = new IPAddress(ipArray), Port = BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0), NodeId = idArray };
+            var port = portArray[0] << 8 | portArray[1];
+            return new DhtNode() { Host = new IPAddress(ipArray), Port = (ushort)port, NodeId = idArray };
         }
 
         public static IPEndPoint ParsePeer(byte[] data, int startIndex)
@@ -54,7 +55,8 @@ namespace DhtCrawler.DHT
             byte[] ipArray = new byte[4], portArray = new byte[2];
             Array.Copy(data, startIndex, ipArray, 0, 4);
             Array.Copy(data, startIndex + 4, portArray, 0, 2);
-            return new IPEndPoint(new IPAddress(ipArray), BitConverter.ToUInt16(BitConverter.IsLittleEndian ? portArray.Reverse().ToArray() : portArray, 0));
+            var port = portArray[0] << 8 | portArray[1];
+            return new IPEndPoint(new IPAddress(ipArray), port);
         }
 
         public static ISet<DhtNode> ParseNode(byte[] nodeBytes)
@@ -76,7 +78,8 @@ namespace DhtCrawler.DHT
             var info = new byte[26];
             Array.Copy(NodeId, info, 20);
             Array.Copy(Host.GetAddressBytes(), 0, info, 20, 4);
-            Array.Copy(BitConverter.IsLittleEndian ? BitConverter.GetBytes(Port).Reverse().ToArray() : BitConverter.GetBytes(Port), 0, info, 24, 2);
+            info[24] = (byte)(Port >> 8);
+            info[25] = (byte)Port;
             return info;
         }
 
@@ -84,7 +87,8 @@ namespace DhtCrawler.DHT
         {
             var info = new byte[6];
             Array.Copy(Host.GetAddressBytes(), 0, info, 0, 4);
-            Array.Copy(BitConverter.IsLittleEndian ? BitConverter.GetBytes(Port).Reverse().ToArray() : BitConverter.GetBytes(Port), 0, info, 4, 2);
+            info[4] = (byte)(Port >> 8);
+            info[5] = (byte)Port;
             return info;
         }
     }

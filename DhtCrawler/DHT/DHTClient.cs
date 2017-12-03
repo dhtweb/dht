@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using DhtCrawler.Common.RateLimit;
 using DhtCrawler.Common.Utils;
@@ -65,12 +66,14 @@ namespace DhtCrawler.DHT
             return targetId.Take(10).Concat(selfId.Skip(10)).ToArray();
         }
 
-        private readonly StsdbMessageMap _messageMap = new StsdbMessageMap("msgstore\\msg.stsdb");
-        protected virtual AbstractMessageMap MessageMap => _messageMap;
+        //private readonly AbstractMessageMap _messageMap = new SqLiteMessageMap("Data Source=dht.db3");
+        protected virtual AbstractMessageMap MessageMap => DefaultMessageMap.Instance;
 
         #region 事件
 
         public event Func<InfoHash, Task> OnFindPeer;
+
+        public event Func<InfoHash, Task> OnAnnouncePeer;
 
         public event Func<InfoHash, Task> OnReceiveInfoHash;
 
@@ -95,10 +98,18 @@ namespace DhtCrawler.DHT
         {
             _endPoint = new IPEndPoint(IPAddress.Any, config.Port);
             _client = new UdpClient(_endPoint) { Ttl = byte.MaxValue };
+            switch (Environment.OSVersion.Platform)
+            {
+                case PlatformID.Win32NT:
+                case PlatformID.Win32S:
+                case PlatformID.Win32Windows:
+                case PlatformID.WinCE:
+                    _client.Client.IOControl(-1744830452, new byte[] { 0, 0, 0, 0 }, null);
+                    break;
+            }
 
-            //_client.Client.IOControl((IOControlCode)(-1744830452), new byte[] { 0, 0, 0, 0 }, null);
             _node = new DhtNode() { Host = IPAddress.Any, Port = config.Port, NodeId = GenerateRandomNodeId() };
-            _kTable = new RouteTable(2048);
+            _kTable = new RouteTable(config.KTableSize);
 
             _nodeQueue = new BlockingCollection<DhtNode>(config.NodeQueueMaxSize);
             _recvMessageQueue = new BlockingCollection<DhtData>(config.ReceiveQueueMaxSize);
@@ -191,9 +202,9 @@ namespace DhtCrawler.DHT
                             remotePoint.Port = Convert.ToInt32(msg.Data["port"]);
                         }
                         infoHash.Peers = new HashSet<IPEndPoint>(1) { remotePoint };
-                        if (OnFindPeer != null)
+                        if (OnAnnouncePeer != null)
                         {
-                            await OnFindPeer(infoHash);
+                            await OnAnnouncePeer(infoHash);
                         }
                     }
                     break;
@@ -212,6 +223,8 @@ namespace DhtCrawler.DHT
 
         private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
         {
+            if (msg.MessageId.Length != 2)
+                return;
             var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
             if (!MessageMap.RequireRegisteredInfo(msg, responseNode))
             {
@@ -412,7 +425,8 @@ namespace DhtCrawler.DHT
                 nodeSet.Clear();
                 if (!running)
                     return;
-                await Task.Delay(60 * 1000, _cancellationTokenSource.Token);
+                if (SendMessageCount > 0 && ReceviceMessageCount > 0)
+                    await Task.Delay(60 * 1000, _cancellationTokenSource.Token);
             }
         }
 
@@ -463,26 +477,28 @@ namespace DhtCrawler.DHT
         {
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            foreach (var task in Enumerable.Repeat(0, _processThreadNum).Select(i =>
+            for (int i = 0; i < _processThreadNum; i++)
             {
                 var local = i;
-                return ProcessMsgData().ContinueWith(
-                    t =>
-                    {
-                        _logger.InfoFormat("ProcessMsg {0} Over", local);
-                    });
-            }))
-            {
-                _tasks.Add(task);
+                Task.Run(() =>
+                {
+                    _tasks.Add(ProcessMsgData().ContinueWith(t => { _logger.InfoFormat("ProcessMsg {0} Over", local); }));
+                });
             }
-            _tasks.Add(LoopFindNodes().ContinueWith(t =>
+            Task.Run(() =>
             {
-                _logger.Info("Loop FindNode Over");
-            }));
-            _tasks.Add(LoopSendMsg().ContinueWith(t =>
+                _tasks.Add(LoopFindNodes().ContinueWith(t =>
+                {
+                    _logger.Info("Loop FindNode Over");
+                }));
+            });
+            Task.Run(() =>
             {
-                _logger.Info("Loop SendMeg Over");
-            }));
+                _tasks.Add(LoopSendMsg().ContinueWith(t =>
+                {
+                    _logger.Info("Loop SendMeg Over");
+                }));
+            });
             _logger.Info("starting");
         }
 
