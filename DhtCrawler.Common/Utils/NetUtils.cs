@@ -14,7 +14,7 @@ namespace DhtCrawler.Common.Utils
             return ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]);
         }
 
-        public static long ToInt64(byte[] array)
+        public static long ToInt64(this byte[] array)
         {
             long result = 0;
             for (int i = array.Length - 1; i >= 0; i--)

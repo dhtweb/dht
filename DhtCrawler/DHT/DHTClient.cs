@@ -48,8 +48,8 @@ namespace DhtCrawler.DHT
 
         private readonly BlockingCollection<DhtNode> _nodeQueue;
         private readonly BlockingCollection<DhtData> _recvMessageQueue;
-        private readonly BlockingCollection<DhtData> _sendMessageQueue;
-        private readonly BlockingCollection<DhtData> _responseMessageQueue;
+        private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _sendMessageQueue;
+        private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _responseMessageQueue;//
         private readonly CancellationTokenSource _cancellationTokenSource;
 
         private readonly IList<Task> _tasks;
@@ -66,8 +66,7 @@ namespace DhtCrawler.DHT
             return targetId.Take(10).Concat(selfId.Skip(10)).ToArray();
         }
 
-        //private readonly AbstractMessageMap _messageMap = new SqLiteMessageMap("Data Source=dht.db3");
-        protected virtual AbstractMessageMap MessageMap => DefaultMessageMap.Instance;
+        protected virtual AbstractMessageMap MessageMap => DhtCrawler.DHT.Message.MessageMap.Instance;
 
         #region 事件
 
@@ -113,8 +112,8 @@ namespace DhtCrawler.DHT
 
             _nodeQueue = new BlockingCollection<DhtNode>(config.NodeQueueMaxSize);
             _recvMessageQueue = new BlockingCollection<DhtData>(config.ReceiveQueueMaxSize);
-            _sendMessageQueue = new BlockingCollection<DhtData>(config.SendQueueMaxSize);
-            _responseMessageQueue = new BlockingCollection<DhtData>();
+            _sendMessageQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>(config.SendQueueMaxSize);
+            _responseMessageQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>();
 
             _sendRateLimit = new TokenBucketLimit(config.SendRateLimit * 1024, 1, TimeUnit.Second);
             _receveRateLimit = new TokenBucketLimit(config.ReceiveRateLimit * 1024, 1, TimeUnit.Second);
@@ -213,12 +212,7 @@ namespace DhtCrawler.DHT
                 default:
                     return;
             }
-            var sendData = new DhtData
-            {
-                RemoteEndPoint = remotePoint,
-                Data = response.BEncodeBytes()
-            };
-            _responseMessageQueue.TryAdd(sendData, EnqueueWaitTime);
+            _responseMessageQueue.TryAdd(new Tuple<DhtMessage, DhtNode>(response, new DhtNode(remotePoint)));
         }
 
         private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
@@ -326,8 +320,7 @@ namespace DhtCrawler.DHT
                         response.Errors.Add(202);
                         response.Errors.Add("Server Error:" + ex.Message);
                     }
-                    dhtData.Data = response.BEncodeBytes();
-                    _sendMessageQueue.TryAdd(dhtData);
+                    _sendMessageQueue.TryAdd(new Tuple<DhtMessage, DhtNode>(response, new DhtNode(dhtData.RemoteEndPoint)));
 
                 }
             }
@@ -350,13 +343,7 @@ namespace DhtCrawler.DHT
                 return;
             }
             msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
-            MessageEnqueue(msg, node);
-        }
-
-        private void MessageEnqueue(DhtMessage msg, DhtNode node)
-        {
-            var bytes = msg.BEncodeBytes();
-            var dhtItem = new DhtData() { Data = bytes, RemoteEndPoint = new IPEndPoint(node.Host, node.Port) };
+            var dhtItem = new Tuple<DhtMessage, DhtNode>(msg, node);
             if (msg.CommandType == CommandType.Get_Peers)
             {
                 _sendMessageQueue.TryAdd(dhtItem, EnqueueWaitTime);
@@ -372,18 +359,29 @@ namespace DhtCrawler.DHT
             while (running)
             {
                 var queue = _responseMessageQueue.Count <= 0 ? _sendMessageQueue : _responseMessageQueue;
-                if (!queue.TryTake(out DhtData dhtData))
+                if (!queue.TryTake(out var dhtData))
                 {
                     await Task.Delay(1000);
                     continue;
                 }
                 try
                 {
-                    while (!_sendRateLimit.Require(dhtData.Data.Length, out var waitTime))
+                    var msg = dhtData.Item1;
+                    var node = dhtData.Item2;
+                    if (queue == _sendMessageQueue)
+                    {
+                        if (!MessageMap.RegisterMessage(msg, node))
+                        {
+                            continue;
+                        }
+                    }
+                    var sendBytes = msg.BEncodeBytes();
+                    var remotepoint = new IPEndPoint(node.Host, node.Port);
+                    while (!_sendRateLimit.Require(sendBytes.Length, out var waitTime))
                     {
                         await Task.Delay(waitTime);
                     }
-                    await _client.SendAsync(dhtData.Data, dhtData.Data.Length, dhtData.RemoteEndPoint);
+                    await _client.SendAsync(sendBytes, sendBytes.Length, remotepoint);
                 }
                 catch (SocketException)
                 {

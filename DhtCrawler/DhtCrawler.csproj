@@ -12,10 +12,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="DHT\Message\SqLiteMessageMap.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="log4net" Version="2.0.8" />
     <PackageReference Include="STSdb4.Core" Version="1.0.0" />
   </ItemGroup>
