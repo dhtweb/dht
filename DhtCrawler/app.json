@@ -8,6 +8,7 @@
     "ReceiveRateLimit": 1024,
     "ProcessThreadNum": 2
   },
+  "BufferDownSize": 8192,
   "BatchDownSize": 128,
   "MaxDownThreadNum": 128
 }
