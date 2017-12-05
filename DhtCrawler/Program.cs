@@ -324,7 +324,8 @@ namespace DhtCrawler
                 ReceiveRateLimit = dhtSection.GetInt("ReceiveRateLimit", 150),
                 ReceiveQueueMaxSize = dhtSection.GetInt("ReceiveQueueMaxSize", 20480),
                 KTableSize = dhtSection.GetInt("KTableSize", 8192),
-                ProcessWaitSize = dhtSection.GetInt("ProcessWaitSize")
+                ProcessWaitSize = dhtSection.GetInt("ProcessWaitSize"),
+                ProcessWaitTime = dhtSection.GetInt("ProcessWaitTime", 100)
             };
             var dhtClient = new DhtClient(dhtConfig);
             dhtClient.OnFindPeer += DhtClient_OnFindPeer;

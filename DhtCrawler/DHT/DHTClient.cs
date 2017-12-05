@@ -61,6 +61,10 @@ namespace DhtCrawler.DHT
         /// 消息处理时等待次数
         /// </summary>
         private readonly int waitSize;
+        /// <summary>
+        /// 等待时间（毫秒）
+        /// </summary>
+        private readonly int waitTime;
         private byte[] GetNeighborNodeId(byte[] targetId)
         {
             var selfId = _node.NodeId;
@@ -124,6 +128,7 @@ namespace DhtCrawler.DHT
             _cancellationTokenSource = new CancellationTokenSource();
 
             waitSize = config.ProcessWaitSize;
+            waitTime = config.ProcessWaitTime;
             _tasks = new List<Task>();
         }
 
@@ -287,15 +292,16 @@ namespace DhtCrawler.DHT
         private async Task ProcessMsgData()
         {
             var size = 0;
+            var canWait = waitTime > 0 && waitSize > 0;
             while (running)
             {
-                if (!_recvMessageQueue.TryTake(out DhtData dhtData) || waitSize > 0 && size >= waitSize)
+                if (!_recvMessageQueue.TryTake(out DhtData dhtData))
                 {
-                    await Task.Delay(1000);
-                    if (dhtData == null)
-                    {
-                        continue;
-                    }
+                    continue;
+                }
+                if (canWait && size > waitSize)
+                {
+                    await Task.Delay(waitTime);
                     size = 0;
                 }
                 try

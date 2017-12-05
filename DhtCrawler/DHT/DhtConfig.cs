@@ -44,5 +44,9 @@
         /// 处理消息等待次数
         /// </summary>
         public int ProcessWaitSize { get; set; }
+        /// <summary>
+        /// 处理消息等待时间（毫秒）
+        /// </summary>
+        public int ProcessWaitTime { get; set; }
     }
 }

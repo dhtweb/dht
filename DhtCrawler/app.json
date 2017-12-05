@@ -6,8 +6,9 @@
     "SendQueueMaxSize": 20480,
     "SendRateLimit": 200,
     "ReceiveRateLimit": 1024,
-    "ProcessThreadNum": 2,
-    "ProcessWaitSize": 0
+    "ProcessThreadNum": 3,
+    "ProcessWaitSize": 0,
+    "ProcessWaitTime": 0
   },
   "BufferDownSize": 8192,
   "BatchDownSize": 128,
