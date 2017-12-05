@@ -40,5 +40,9 @@
         /// KTable节点大小
         /// </summary>
         public int KTableSize { get; set; } = 2048;
+        /// <summary>
+        /// 处理消息等待次数
+        /// </summary>
+        public int ProcessWaitSize { get; set; }
     }
 }

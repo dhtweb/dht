@@ -57,7 +57,10 @@ namespace DhtCrawler.DHT
         private readonly IRateLimit _receveRateLimit;
         private readonly int _processThreadNum;
         private volatile bool running = false;
-
+        /// <summary>
+        /// 消息处理时等待次数
+        /// </summary>
+        private readonly int waitSize;
         private byte[] GetNeighborNodeId(byte[] targetId)
         {
             var selfId = _node.NodeId;
@@ -66,7 +69,7 @@ namespace DhtCrawler.DHT
             return targetId.Take(10).Concat(selfId.Skip(10)).ToArray();
         }
 
-        protected virtual AbstractMessageMap MessageMap => DhtCrawler.DHT.Message.MessageMap.Instance;
+        protected virtual AbstractMessageMap MessageMap => DefaultMessageMap.Instance;
 
         #region 事件
 
@@ -119,6 +122,8 @@ namespace DhtCrawler.DHT
             _receveRateLimit = new TokenBucketLimit(config.ReceiveRateLimit * 1024, 1, TimeUnit.Second);
             _processThreadNum = config.ProcessThreadNum;
             _cancellationTokenSource = new CancellationTokenSource();
+
+            waitSize = config.ProcessWaitSize;
             _tasks = new List<Task>();
         }
 
@@ -281,12 +286,17 @@ namespace DhtCrawler.DHT
 
         private async Task ProcessMsgData()
         {
+            var size = 0;
             while (running)
             {
-                if (!_recvMessageQueue.TryTake(out DhtData dhtData))
+                if (!_recvMessageQueue.TryTake(out DhtData dhtData) || waitSize > 0 && size >= waitSize)
                 {
                     await Task.Delay(1000);
-                    continue;
+                    if (dhtData == null)
+                    {
+                        continue;
+                    }
+                    size = 0;
                 }
                 try
                 {
@@ -301,6 +311,7 @@ namespace DhtCrawler.DHT
                             await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
                             break;
                     }
+                    Interlocked.Increment(ref size);
                 }
                 catch (Exception ex)
                 {
@@ -321,7 +332,6 @@ namespace DhtCrawler.DHT
                         response.Errors.Add("Server Error:" + ex.Message);
                     }
                     _sendMessageQueue.TryAdd(new Tuple<DhtMessage, DhtNode>(response, new DhtNode(dhtData.RemoteEndPoint)));
-
                 }
             }
         }
@@ -423,7 +433,7 @@ namespace DhtCrawler.DHT
                 nodeSet.Clear();
                 if (!running)
                     return;
-                if (SendMessageCount > 0 && ReceviceMessageCount > 0)
+                if (nodeSet.Count < 10 || (SendMessageCount > 0 && ReceviceMessageCount > 0))
                     await Task.Delay(60 * 1000, _cancellationTokenSource.Token);
             }
         }
