@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using DhtCrawler.Common.Compare;
+using DhtCrawler.Common.Utils;
 
 namespace DhtCrawler.DHT.Message
 {
@@ -42,8 +43,7 @@ namespace DhtCrawler.DHT.Message
         public static readonly DefaultMessageMap Instance = new DefaultMessageMap(TimeSpan.FromMinutes(20).Ticks);
 
         private readonly long _expireTimeSpan;
-        private static readonly IEqualityComparer<byte[]> ByteArrayComparer = new WrapperEqualityComparer<byte[]>((x, y) => x.Length == y.Length && x.SequenceEqual(y), x => x.Sum(b => b));
-        private static readonly ConcurrentDictionary<byte[], NodeMapInfo> NodeMap = new ConcurrentDictionary<byte[], NodeMapInfo>(ByteArrayComparer);
+        private static readonly ConcurrentDictionary<long, NodeMapInfo> NodeMap = new ConcurrentDictionary<long, NodeMapInfo>();
 
         private int _bucketIndex = 0;
         private DateTime _lastClearTime;
@@ -76,7 +76,7 @@ namespace DhtCrawler.DHT.Message
 
         protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId)
         {
-            var nodeKey = node.CompactEndPoint();
+            var nodeKey = node.CompactEndPoint().ToInt64();
             var nodeMapInfo = NodeMap.GetOrAdd(nodeKey, new NodeMapInfo());
             if (nodeMapInfo.IsExpire(_expireTimeSpan))
             {
@@ -121,7 +121,7 @@ namespace DhtCrawler.DHT.Message
         protected override bool RequireGetPeersRegisteredInfo(TransactionId msgId, DhtNode node, out byte[] infoHash)
         {
             infoHash = null;
-            var nodeKey = node.CompactEndPoint();
+            var nodeKey = node.CompactEndPoint().ToInt64();
             if (!NodeMap.TryGetValue(nodeKey, out var nodeMap))
             {
                 return false;

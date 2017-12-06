@@ -50,7 +50,7 @@ namespace BitTorrent.Listeners
             try
             {
                 //连接
-                Task connectTask = client.ConnectAsync(EndPoint.Address, EndPoint.Port), waitTask = Task.Delay(6000);
+                Task connectTask = client.ConnectAsync(EndPoint.Address, EndPoint.Port), waitTask = Task.Delay(5000);
                 await Task.WhenAny(waitTask, connectTask);
                 if (!connectTask.IsCompleted || connectTask.Status != TaskStatus.RanToCompletion)
                 {

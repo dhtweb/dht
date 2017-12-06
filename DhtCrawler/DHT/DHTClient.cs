@@ -249,7 +249,15 @@ namespace DhtCrawler.DHT
                     var infoHash = new InfoHash(hashByte);
                     if (msg.Data.TryGetValue("values", out nodeInfo))
                     {
-                        var peerInfo = (IList<object>)nodeInfo;
+                        IList<object> peerInfo;
+                        if (nodeInfo is byte[] bytes)
+                        {
+                            peerInfo = new object[] { bytes };
+                        }
+                        else
+                        {
+                            peerInfo = (IList<object>)nodeInfo;
+                        }
                         var peers = new HashSet<IPEndPoint>(peerInfo.Count);
                         foreach (var t in peerInfo)
                         {

@@ -145,7 +145,7 @@ namespace DhtCrawler.Service
             {
                 where.Append("AND isdanger=@danger");
             }
-            var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : "order by create"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
+            var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
             var count = await result.ReadFirstAsync<long>();
             var list = await result.ReadAsync<InfoHashModel>();
             return (list.ToArray(), count);
@@ -165,7 +165,7 @@ namespace DhtCrawler.Service
             {
                 sql.Append(" AND updatetime>@start");
             }
-            sql.Append("order by id LIMIT @size");
+            sql.Append(" order by id LIMIT @size");
             do
             {
                 var length = 0;
