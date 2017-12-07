@@ -171,13 +171,13 @@ namespace DhtCrawler.DHT.Message
 
         protected override bool RequireGetPeersRegisteredInfo(TransactionId msgId, DhtNode node, out byte[] infoHash)
         {
-            var nodeId = node.CompactEndPoint().ToInt64();
             if (_mappingInfo.TryGetValue(msgId, out var mapInfo))
             {
                 if (_idMappingInfo.TryGetValue(mapInfo.InfoHash, out var idMap))
                 {
                     lock (idMap)
                     {
+                        var nodeId = node.CompactEndPoint().ToInt64();
                         idMap.Remove(nodeId);
                         if (idMap.Count <= 0)
                         {

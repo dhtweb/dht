@@ -25,15 +25,16 @@ namespace DhtCrawler.DHT
             random.NextBytes(ids);
             return ids;
         }
-        //初始节点 
-        private static readonly DhtNode[] BootstrapNodes =
+
+        private static readonly DhtNode[] DefaultBootstrapNodes =
         {
-            new DhtNode() { Host = Dns.GetHostAddresses("router.bittorrent.com")[0], Port = 6881 },
-            new DhtNode() { Host = Dns.GetHostAddresses("dht.transmissionbt.com")[0], Port = 6881 },
-            new DhtNode() { Host = Dns.GetHostAddresses("router.utorrent.com")[0], Port = 6881 },
-            new DhtNode() { Host = IPAddress.Parse("82.221.103.244"), Port = 6881 },
-            new DhtNode() { Host = IPAddress.Parse("23.21.224.150"), Port = 6881 }
+            new DhtNode() {Host = IPAddress.Parse("67.215.246.10"), Port = 6881},
+            new DhtNode() {Host = IPAddress.Parse("87.98.162.88"), Port = 6881},
+            new DhtNode() {Host = IPAddress.Parse("82.221.103.244"), Port = 6881},
+            new DhtNode() {Host = IPAddress.Parse("23.21.224.150"), Port = 6881}
         };
+        //初始节点 
+        private readonly IList<DhtNode> _bootstrapNodes;
         /// <summary>
         /// 默认入队等待时间（超时丢弃）
         /// </summary>
@@ -129,6 +130,7 @@ namespace DhtCrawler.DHT
             waitSize = config.ProcessWaitSize;
             waitTime = config.ProcessWaitTime;
             _tasks = new List<Task>();
+            _bootstrapNodes = new List<DhtNode>(DefaultBootstrapNodes);
         }
 
         #region 处理收到消息
@@ -140,9 +142,9 @@ namespace DhtCrawler.DHT
             {
                 var remotePoint = _endPoint;
                 var data = client.EndReceive(asyncResult, ref remotePoint);
-                while (!_receveRateLimit.Require(data.Length, out var waitTime))
+                while (!_receveRateLimit.Require(data.Length, out var limitTime))
                 {
-                    Thread.Sleep(waitTime);
+                    Thread.Sleep(limitTime);
                 }
                 _recvMessageQueue.TryAdd(new DhtData() { Data = data, RemoteEndPoint = remotePoint }, EnqueueWaitTime);
                 if (!running)
@@ -304,6 +306,7 @@ namespace DhtCrawler.DHT
             {
                 if (!_recvMessageQueue.TryTake(out DhtData dhtData))
                 {
+                    await Task.Delay(1000);
                     continue;
                 }
                 if (canWait && size > waitSize)
@@ -436,7 +439,7 @@ namespace DhtCrawler.DHT
                 {
                     nodeSet.Add(node);
                 }
-                using (var nodeEnumerator = BootstrapNodes.Union(nodeSet).GetEnumerator())
+                using (var nodeEnumerator = _bootstrapNodes.Union(nodeSet).GetEnumerator())
                 {
                     while (running && nodeEnumerator.MoveNext())
                     {
@@ -476,7 +479,7 @@ namespace DhtCrawler.DHT
             var nodes = _kTable.FindNodes(infoHash);
             if (nodes.IsEmpty() || nodes.Count < 8)
             {
-                foreach (var node in BootstrapNodes)
+                foreach (var node in _bootstrapNodes)
                 {
                     nodes.Add(node);
                 }
@@ -493,6 +496,14 @@ namespace DhtCrawler.DHT
             SendMsg(CommandType.Announce_Peer, data, node);
         }
         #endregion
+
+        public bool AddBootstrapNode(DhtNode node)
+        {
+            if (running)
+                return false;
+            _bootstrapNodes.Add(node);
+            return true;
+        }
 
         public void Run()
         {

@@ -191,7 +191,7 @@ namespace DhtCrawler
                     }
                     if (info == null)
                     {
-                        await Task.Delay(100);
+                        await Task.Delay(1000);
                         continue;
                     }
                     if (DownlaodedSet.Contains(info.Value))
