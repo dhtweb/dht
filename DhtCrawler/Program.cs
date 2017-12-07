@@ -47,23 +47,6 @@ namespace DhtCrawler
         private static volatile bool running = true;
         static void Main(string[] args)
         {
-            var client = ConnectionMultiplexer.Connect("127.0.0.1:6379");
-            var database = client.GetDatabase();
-            var registerScript = LuaScript.Prepare(@"local flag=redis.call('SADD',@hash,@point)
-if(flag~=1)
-then
-    return 0
-end
-redis.call('EXPIRE',@hash,1800)
-local result=redis.call('HMSET',@point,@msgId,@hash)
-if(result['ok'])
-then
-    redis.call('EXPIRE',@point,1800)
-    return 1;
-end
-return 0;");
-            var result = database.ScriptEvaluate(registerScript, new { hash = (RedisKey)"87C9D1547A8FF40EE4421C921E90BD1F43E496F3", point = IPAddress.Any.GetAddressBytes(), msgId = new byte[] { 1, 1 } });
-            Console.WriteLine(result);
             InitDownInfo();
             EnsureDirectory();
             InitLog();

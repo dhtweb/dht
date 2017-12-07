@@ -2,8 +2,10 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using DhtCrawler.Common.Compare;
 using DhtCrawler.Common.Utils;
+using log4net;
 
 namespace DhtCrawler.DHT.Message
 {
@@ -14,9 +16,10 @@ namespace DhtCrawler.DHT.Message
             public byte[] InfoHash { get; set; }
             public DateTime LastTime { get; set; }
         }
+
         private class IdMapInfo
         {
-            private ISet<long> set;
+            private HashSet<long> peers;
             public TransactionId TransactionId { get; set; }
             public int Count
             {
@@ -24,137 +27,179 @@ namespace DhtCrawler.DHT.Message
                 {
                     lock (this)
                     {
-                        return set.Count;
+                        return peers.Count;
                     }
                 }
             }
 
             public IdMapInfo()
             {
-                set = new HashSet<long>();
+                peers = new HashSet<long>();
             }
 
-            public bool Add(long key)
+            public bool Add(long peer)
             {
                 lock (this)
-                {
-                    return set.Add(key);
-                }
+                    return peers.Add(peer);
             }
 
-            public void Remove(long key)
+            public bool Remove(long peer)
             {
                 lock (this)
-                {
-                    set.Remove(key);
-                }
+                    return peers.Remove(peer);
             }
         }
-        private static readonly IEqualityComparer<byte[]> ByteArrayComparer = new WrapperEqualityComparer<byte[]>((x, y) => x.Length == y.Length && x.SequenceEqual(y), x => x.Sum(b => b));
 
-        private readonly ConcurrentDictionary<TransactionId, MapInfo> MappingInfo = new ConcurrentDictionary<TransactionId, MapInfo>();
-        private readonly ConcurrentDictionary<byte[], IdMapInfo> IdMappingInfo = new ConcurrentDictionary<byte[], IdMapInfo>(ByteArrayComparer);
-        private int _index;
+        private static readonly ILog log = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
 
-        private void ClearExpireMessage(int batchSize)
+        private static readonly IEqualityComparer<byte[]> ByteArrayComparer =
+            new WrapperEqualityComparer<byte[]>((x, y) => x.Length == y.Length && x.SequenceEqual(y),
+                x => x.Sum(b => b));
+
+        private readonly BlockingCollection<TransactionId> _bucket = new BlockingCollection<TransactionId>();
+
+        private readonly ConcurrentDictionary<TransactionId, MapInfo> _mappingInfo =
+            new ConcurrentDictionary<TransactionId, MapInfo>();
+
+        private readonly ConcurrentDictionary<byte[], IdMapInfo> _idMappingInfo =
+            new ConcurrentDictionary<byte[], IdMapInfo>(ByteArrayComparer);
+        public static readonly MessageMap Default = new MessageMap();
+        public MessageMap()
+        {
+            InitBucket();
+        }
+
+        private void InitBucket()
+        {
+            foreach (var transactionId in _bucketArray)
+            {
+                _bucket.Add(transactionId);
+            }
+        }
+
+        private void ClearExpireMessage(int clearSize = 1000)
         {
             var startTime = DateTime.Now;
             var removeItems = new HashSet<byte[]>(ByteArrayComparer);
-            var snapshotMapInfo = MappingInfo.ToArray();
-            Array.Sort(snapshotMapInfo, new WrapperComparer<KeyValuePair<TransactionId, MapInfo>>((v1, v2) => (int)(v2.Value.LastTime.Ticks - v1.Value.LastTime.Ticks)));
-            foreach (var item in snapshotMapInfo)
+            foreach (var item in _mappingInfo)
             {
-                MappingInfo.TryRemove(item.Key, out var rm);
+                var tuple = item.Value;
+                if (!((DateTime.Now - tuple.LastTime).TotalSeconds > 600))
+                    continue;
+                _mappingInfo.TryRemove(item.Key, out var rm);
                 removeItems.Add(rm.InfoHash);
-                if (removeItems.Count > batchSize)
+                _bucket.Add(item.Key);
+                if (removeItems.Count >= clearSize)
                 {
                     break;
                 }
             }
-            var snapshotIdInfo = IdMappingInfo.ToArray();
-            foreach (var mapInfo in snapshotIdInfo)
+            if (removeItems.Count < clearSize)
             {
-                if (mapInfo.Value.Count <= 0 || removeItems.Contains(mapInfo.Key))
-                    IdMappingInfo.TryRemove(mapInfo.Key, out var rm);
+                var snapshotMapInfo = _mappingInfo.ToArray();
+                Array.Sort(snapshotMapInfo,
+                    new WrapperComparer<KeyValuePair<TransactionId, MapInfo>>((v1, v2) =>
+                        v2.Value.LastTime.CompareTo(v1.Value.LastTime)));
+                foreach (var item in snapshotMapInfo)
+                {
+                    removeItems.Add(item.Key);
+                    if (removeItems.Count >= clearSize)
+                        break;
+                }
             }
-            Log.Info($"清理过期的命令ID数:{batchSize},用时:{(DateTime.Now - startTime).TotalSeconds}");
+            if (removeItems.Count > 0)
+            {
+                foreach (var mapInfo in _idMappingInfo)
+                {
+                    if (mapInfo.Value.Count <= 0 || removeItems.Contains(mapInfo.Key))
+                        _idMappingInfo.TryRemove(mapInfo.Key, out var rm);
+                }
+            }
+            log.Info($"清理过期的命令ID,清理后可用命令ID数:{_bucket.Count},用时:{(DateTime.Now - startTime).TotalSeconds}");
         }
-        public static readonly MessageMap Instance = new MessageMap();
-        protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId messageId)
+
+        protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId)
         {
             var nodeId = node.CompactEndPoint().ToInt64();
-            var tryTimes = 0;
-            while (true)
+            TransactionId messageId;
+            if (_idMappingInfo.TryGetValue(infoHash, out var idMap))
             {
-                tryTimes++;
-                if (IdMappingInfo.TryGetValue(infoHash, out var idMap))
+                if (!idMap.Add(nodeId))
                 {
-                    if (!idMap.Add(nodeId))
+                    msgId = null;
+                    return false;
+                }
+                messageId = idMap.TransactionId;
+                if (_mappingInfo.TryGetValue(messageId, out var info))
+                {
+                    info.LastTime = DateTime.Now;
+                }
+            }
+            else
+            {
+                msgId = null;
+                var start = DateTime.Now;
+                while (!_bucket.TryTake(out messageId, 1000))
+                {
+                    if ((DateTime.Now - start).TotalSeconds > 10) //10秒内获取不到就丢弃
                     {
-                        messageId = null;
                         return false;
                     }
-                    messageId = idMap.TransactionId;
-                    var newMap = new MapInfo() { LastTime = DateTime.Now, InfoHash = infoHash };
-                    var newVal = MappingInfo.AddOrUpdate(messageId, newMap, (id, info) =>
-                          {
-                              info.LastTime = DateTime.Now;
-                              return info;
-                          });
-                    return newMap == newVal || ByteArrayComparer.Equals(newVal.InfoHash, infoHash);
+                    ClearExpireMessage();
                 }
-                TransactionId msgId;
-                lock (this)
-                {
-                    _index++;
-                    msgId = _bucketArray[_index];
-                }
-                if (MappingInfo.TryAdd(msgId, new MapInfo()
+                if (!_mappingInfo.TryAdd(messageId, new MapInfo()
                 {
                     LastTime = DateTime.Now,
                     InfoHash = infoHash
                 }))
                 {
-                    messageId = msgId;
-                    var newIdMap = new IdMapInfo() { TransactionId = messageId };
-                    newIdMap.Add(nodeId);
-                    return IdMappingInfo.TryAdd(infoHash, newIdMap);
-                }
-                if (MappingInfo.Count >= _bucketArray.Length)
-                {
-                    lock (this)
-                    {
-                        if (MappingInfo.Count >= _bucketArray.Length)
-                            ClearExpireMessage(1000);
-                    }
-                }
-                if (tryTimes > 3)
-                {
-                    messageId = null;
+                    msgId = null;
                     return false;
                 }
+                idMap = new IdMapInfo() { TransactionId = messageId };
+                idMap.Add(nodeId);
+                if (_idMappingInfo.TryAdd(infoHash, idMap))
+                {
+                    msgId = messageId;
+                    return true;
+                }
+                return false;
             }
+            msgId = messageId;
+            return true;
         }
 
         protected override bool RequireGetPeersRegisteredInfo(TransactionId msgId, DhtNode node, out byte[] infoHash)
         {
-            if (MappingInfo.TryGetValue(msgId, out var mapInfo))
+            var nodeId = node.CompactEndPoint().ToInt64();
+            if (_mappingInfo.TryGetValue(msgId, out var mapInfo))
             {
-                infoHash = mapInfo.InfoHash;
-                if (IdMappingInfo.TryGetValue(mapInfo.InfoHash, out var idMap))
+                if (_idMappingInfo.TryGetValue(mapInfo.InfoHash, out var idMap))
                 {
-                    var nodeId = node.CompactEndPoint().ToInt64();
-                    idMap.Remove(nodeId);
-                    if (idMap.Count <= 0)
+                    lock (idMap)
                     {
-                        IdMappingInfo.TryRemove(mapInfo.InfoHash, out var rmIdMap);
-                        MappingInfo.TryRemove(msgId, out var rmMap);
+                        idMap.Remove(nodeId);
+                        if (idMap.Count <= 0)
+                        {
+                            _idMappingInfo.TryRemove(mapInfo.InfoHash, out var rm);
+                            if (_mappingInfo.TryRemove(msgId, out var obj))
+                                _bucket.Add(msgId);
+                        }
                     }
                 }
-                return true;
+                else
+                {
+                    if (_mappingInfo.TryRemove(msgId, out var obj))
+                        _bucket.Add(msgId);
+                }
             }
-            infoHash = null;
-            return false;
+            if (mapInfo?.InfoHash == null)
+            {
+                infoHash = null;
+                return false;
+            }
+            infoHash = mapInfo.InfoHash;
+            return true;
         }
     }
 }

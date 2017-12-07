@@ -13,13 +13,13 @@ namespace DhtCrawler.DHT.Message
                                                 return 0
                                             end
                                             redis.call('EXPIRE',@hash,1800)
-                                            local result=redis.call('HSET',@point,@msgId,@hash)
-                                            if(result['ok'])
+                                            local result=redis.call('HSETNX',@point,@msgId,@hash)
+                                            if(result)
                                             then
                                                 redis.call('EXPIRE',@point,1800)
                                                 return 1
                                             end
-                                            return 0";
+                                            return -1";
 
         private const string UnRegisterLua = @"local hash=redis.call('HGET',@point,@msgId)
                                             if(hash)
