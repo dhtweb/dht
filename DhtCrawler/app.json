@@ -8,7 +8,8 @@
     "ReceiveRateLimit": 1024,
     "ProcessThreadNum": 3,
     "ProcessWaitSize": 0,
-    "ProcessWaitTime": 0
+    "ProcessWaitTime": 0,
+    "KTableSize": 2048 
   },
   "BufferDownSize": 8192,
   "BatchDownSize": 128,

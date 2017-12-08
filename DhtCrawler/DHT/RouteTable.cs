@@ -35,8 +35,10 @@ namespace DhtCrawler.DHT
         }
 
         private static readonly TimeSpan RouteLife = TimeSpan.FromMinutes(15);
+
         private readonly int _maxNodeSize;
         private readonly ConcurrentDictionary<string, Route> _kTable;
+        private long _minLastTime = DateTime.Now.Ticks;
 
         private static byte[] ComputeRouteDistance(byte[] sourceId, byte[] targetId)
         {
@@ -58,12 +60,8 @@ namespace DhtCrawler.DHT
 
         public void AddNode(DhtNode node)
         {
-            if (node.NodeId == null)
+            if (node.NodeId == null || _kTable.Count >= _maxNodeSize)
                 return;
-            if (_kTable.Count >= _maxNodeSize)
-            {
-                return;
-            }
             var route = new Route()
             {
                 Node = node,
@@ -84,9 +82,13 @@ namespace DhtCrawler.DHT
         {
             if (node.NodeId == null)
                 return;
-            if (_kTable.Count >= _maxNodeSize)
+            if (_kTable.Count >= _maxNodeSize && _minLastTime + RouteLife.Ticks < DateTime.Now.Ticks)
             {
-                ClearExpireNode();
+                lock (this)
+                {
+                    if (_minLastTime + RouteLife.Ticks < DateTime.Now.Ticks)
+                        ClearExpireNode();
+                }
             }
             if (_kTable.Count >= _maxNodeSize)
                 return;
@@ -105,13 +107,17 @@ namespace DhtCrawler.DHT
 
         private void ClearExpireNode()
         {
+            var minTime = DateTime.MaxValue.Ticks;
             foreach (var item in _kTable.Values)
             {
                 if (DateTime.Now.Ticks - item.LastTime > RouteLife.Ticks)
                 {
                     _kTable.TryRemove(item.RouteId, out Route remove);
+                    continue;
                 }
+                minTime = Math.Min(_minLastTime, item.LastTime);
             }
+            _minLastTime = Math.Max(minTime, _minLastTime);
         }
 
         public IList<DhtNode> FindNodes(byte[] id)
@@ -119,9 +125,11 @@ namespace DhtCrawler.DHT
             if (_kTable.Count <= 8)
                 return _kTable.Values.Take(8).Select(route => route.Node).ToArray();
             var list = new SortedList<byte[], DhtNode>(8, RouteComparer.Instance);//大的排在前，小的排在后
+            var minTime = DateTime.MaxValue.Ticks;
+            var tableFull = _kTable.Count >= _maxNodeSize;
             foreach (var item in _kTable.Values)
             {
-                if (DateTime.Now.Ticks - item.LastTime > RouteLife.Ticks)
+                if (tableFull && DateTime.Now.Ticks - item.LastTime > RouteLife.Ticks)
                 {
                     _kTable.TryRemove(item.RouteId, out Route route);
                     continue;
@@ -136,22 +144,28 @@ namespace DhtCrawler.DHT
                     list.RemoveAt(0);
                 }
                 list.Add(distance, item.Node);
+                minTime = Math.Min(_minLastTime, item.LastTime);
             }
+            _minLastTime = Math.Max(minTime, _minLastTime);
             return list.Values;
         }
 
         #region IEnumerable
         public IEnumerator<DhtNode> GetEnumerator()
         {
+            var minTime = DateTime.MaxValue.Ticks;
+            var tableFull = _kTable.Count >= _maxNodeSize;
             foreach (var item in _kTable.Values)
             {
-                if (DateTime.Now.Ticks - item.LastTime > RouteLife.Ticks)
+                if (tableFull && DateTime.Now.Ticks - item.LastTime > RouteLife.Ticks)
                 {
                     _kTable.TryRemove(item.RouteId, out Route route);
                     continue;
                 }
+                minTime = Math.Min(_minLastTime, item.LastTime);
                 yield return item.Node;
             }
+            _minLastTime = Math.Max(minTime, _minLastTime);
         }
 
         IEnumerator IEnumerable.GetEnumerator()

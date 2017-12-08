@@ -7,9 +7,11 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using BitTorrent.Listeners;
 using BitTorrent.MonoTorrent.BEncoding;
 using DhtCrawler.BitTorrent;
 using log4net;
@@ -52,7 +54,7 @@ namespace DhtCrawler
             InitLog();
             LoadDownInfoHash();
             RunSpider();
-            RunDown();
+            RunDownAsync();
             RunWriteTorrent();
             RunRecordInfoHash();
             WaitComplete();
@@ -119,6 +121,7 @@ namespace DhtCrawler
                 {
                     yield return downItem;
                 }
+                list.Clear();
             }
         }
 
@@ -254,7 +257,6 @@ namespace DhtCrawler
             {
                 log.Error("下载失败", ex);
             }
-
         }
 
         private static Task DhtClient_OnAnnouncePeer(InfoHash arg)
@@ -324,7 +326,7 @@ namespace DhtCrawler
                 SendRateLimit = dhtSection.GetInt("SendRateLimit", 150),
                 ReceiveRateLimit = dhtSection.GetInt("ReceiveRateLimit", 150),
                 ReceiveQueueMaxSize = dhtSection.GetInt("ReceiveQueueMaxSize", 20480),
-                KTableSize = dhtSection.GetInt("KTableSize", 8192),
+                KTableSize = dhtSection.GetInt("KTableSize", 1024),
                 ProcessWaitSize = dhtSection.GetInt("ProcessWaitSize"),
                 ProcessWaitTime = dhtSection.GetInt("ProcessWaitTime", 100)
             };
@@ -337,7 +339,7 @@ namespace DhtCrawler
             {
                 while (true)
                 {
-                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count}");
+                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},待写入磁盘种子数:{WriteTorrentQueue.Count}");
                     await Task.Delay(60 * 1000);
                 }
             }, TaskCreationOptions.LongRunning);
@@ -350,15 +352,86 @@ namespace DhtCrawler
 
         private static void RunDown()
         {
+            var task = Task.Factory.StartNew(() =>
+            {
+                int parallelDownSize = ConfigurationManager.Default.GetInt("MaxDownThreadNum", 32), downSize = ConfigurationManager.Default.GetInt("BatchDownSize", 128);
+                var paralleOption = new ParallelOptions() { MaxDegreeOfParallelism = parallelDownSize };
+                while (running)
+                {
+                    var list = GetBatchDownInfo(downSize);
+                    if (list.Count <= 0)
+                    {
+                        Thread.Sleep(1000);
+                        continue;
+                    }
+                    Parallel.ForEach(list, paralleOption, hash =>
+                    {
+                        if (DownlaodedSet.Contains(hash.Value))
+                        {
+                            return;
+                        }
+                        var longPeer = hash.Peer.ToInt64();
+                        try
+                        {
+                            if (BadAddress.TryGetValue(longPeer, out var expireTime))
+                            {
+                                if (expireTime > DateTime.Now)
+                                {
+                                    return;
+                                }
+                                BadAddress.TryRemove(longPeer, out expireTime);
+                            }
+                            Console.WriteLine($"downloading {hash.Value}");
+                            using (var client = new WireClient(hash.Peer))
+                            {
+                                var meta = client.GetMetaData(new global::BitTorrent.InfoHash(hash.Bytes), out var netError);
+                                if (meta == null)
+                                {
+                                    if (netError)
+                                    {
+                                        BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1),
+                                            (ip, before) => DateTime.Now.AddHours(1));
+                                    }
+                                    return;
+                                }
+                                DownlaodedSet.Add(hash.Value);
+                                var torrent = ParseBitTorrent(meta);
+                                torrent.InfoHash = hash.Value;
+                                WriteTorrentQueue.Enqueue(torrent);
+                            }
+                        }
+                        catch (SocketException)
+                        {
+                            BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1), (ip, before) => DateTime.Now.AddHours(1));
+                        }
+                        catch (IOException)
+                        {
+                            BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1), (ip, before) => DateTime.Now.AddHours(1));
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Error("下载失败", ex);
+                        }
+                    });
+                }
+            }, TaskCreationOptions.LongRunning);
+            Console.CancelKeyPress += (sender, e) =>
+            {
+                task.Wait();
+            };
+        }
+
+        private static void RunDownAsync()
+        {
             int parallelDownSize = ConfigurationManager.Default.GetInt("MaxDownThreadNum", 32);//downSize = ConfigurationManager.Default.GetInt("BatchDownSize", 128),
             var downTasks = new Task[parallelDownSize];
             for (int i = 0; i < parallelDownSize; i++)
             {
                 var local = i;
-                downTasks[local] = Task.Run(async () =>
+                downTasks[local] = Task.Factory.StartNew(async () =>
                 {
                     await LoopDownload(local);
-                });
+                }, TaskCreationOptions.LongRunning);
             }
             Console.CancelKeyPress += (sender, e) =>
             {
