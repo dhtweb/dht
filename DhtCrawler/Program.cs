@@ -60,6 +60,7 @@ namespace DhtCrawler
             WaitComplete();
         }
 
+        #region BT种子下载
         private static IEnumerable<DownInfoHash> GetDownInfo(int batchSize)
         {
             var list = new List<InfoHash>();
@@ -259,97 +260,6 @@ namespace DhtCrawler
             }
         }
 
-        private static Task DhtClient_OnAnnouncePeer(InfoHash arg)
-        {
-            if (DownlaodedSet.Contains(arg.Value))
-                return Task.CompletedTask;
-            if (!DownLoadQueue.TryAdd(arg))
-                InfoStore.Add(arg);
-            return Task.CompletedTask;
-        }
-
-        private static void InitDownInfo()
-        {
-            InfoHashQueue = new ConcurrentQueue<string>();
-            WriteTorrentQueue = new ConcurrentQueue<Torrent>();
-            DownLoadQueue = new BlockingCollection<InfoHash>(ConfigurationManager.Default.GetInt("BufferDownSize", 5120));
-            DownlaodedSet = new ConcurrentHashSet<string>();
-            BadAddress = new ConcurrentDictionary<long, DateTime>();
-            InfoStore = new StoreManager<InfoHash>("infohash.store");
-        }
-
-        private static void EnsureDirectory()
-        {
-            Directory.CreateDirectory(TorrentPath);
-            Directory.CreateDirectory(InfoPath);
-        }
-
-        private static void InitLog()
-        {
-            var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
-            XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
-            AppDomain.CurrentDomain.UnhandledException += (sender, e) => { watchLog.Error(e.ExceptionObject); };
-        }
-
-        private static void LoadDownInfoHash()
-        {
-            var queue = new Queue<string>(new[] { TorrentPath });
-            while (queue.Count > 0)
-            {
-                var dir = queue.Dequeue();
-                foreach (var directory in Directory.GetDirectories(dir))
-                {
-                    queue.Enqueue(directory);
-                }
-                foreach (var file in Directory.GetFiles(dir))
-                {
-                    DownlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
-                }
-            }
-            if (!File.Exists(DownloadInfoPath))
-                return;
-            foreach (var line in File.ReadAllLines(DownloadInfoPath))
-            {
-                DownlaodedSet.Add(line);
-            }
-        }
-
-        private static void RunSpider()
-        {
-            var dhtSection = ConfigurationManager.Default.GetSection("DhtConfig");
-            var dhtConfig = new DhtConfig()
-            {
-                NodeQueueMaxSize = dhtSection.GetInt("NodeQueueMaxSize", 10240),
-                Port = (ushort)dhtSection.GetInt("Port"),
-                ProcessThreadNum = dhtSection.GetInt("ProcessThreadNum", 1),
-                SendQueueMaxSize = dhtSection.GetInt("SendQueueMaxSize", 20480),
-                SendRateLimit = dhtSection.GetInt("SendRateLimit", 150),
-                ReceiveRateLimit = dhtSection.GetInt("ReceiveRateLimit", 150),
-                ReceiveQueueMaxSize = dhtSection.GetInt("ReceiveQueueMaxSize", 20480),
-                KTableSize = dhtSection.GetInt("KTableSize", 1024),
-                ProcessWaitSize = dhtSection.GetInt("ProcessWaitSize"),
-                ProcessWaitTime = dhtSection.GetInt("ProcessWaitTime", 100)
-            };
-            var dhtClient = new DhtClient(dhtConfig);
-            dhtClient.OnFindPeer += DhtClient_OnFindPeer;
-            dhtClient.OnReceiveInfoHash += DhtClient_OnReceiveInfoHash;
-            dhtClient.OnAnnouncePeer += DhtClient_OnAnnouncePeer;
-            dhtClient.Run();
-            Task.Factory.StartNew(async () =>
-            {
-                while (true)
-                {
-                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},待写入磁盘种子数:{WriteTorrentQueue.Count}");
-                    await Task.Delay(60 * 1000);
-                }
-            }, TaskCreationOptions.LongRunning);
-            Console.CancelKeyPress += (sender, e) =>
-            {
-                dhtClient.ShutDown();
-                e.Cancel = true;
-            };
-        }
-
         private static void RunDown()
         {
             var task = Task.Factory.StartNew(() =>
@@ -444,85 +354,6 @@ namespace DhtCrawler
             };
         }
 
-        private static void RunWriteTorrent()
-        {
-            Task.Factory.StartNew(async () =>
-            {
-                var directory = new DirectoryInfo(TorrentPath);
-                while (running)
-                {
-                    while (WriteTorrentQueue.TryDequeue(out var item))
-                    {
-                        var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                        var path = Path.Combine(subdirectory.FullName, item.InfoHash + ".json");
-                        await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), item.ToJson());
-                        await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
-                        Console.WriteLine($"download {item.InfoHash} success");
-                    }
-                    await Task.Delay(500);
-                }
-                while (WriteTorrentQueue.TryDequeue(out var item))
-                {
-                    var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                    var path = Path.Combine(subdirectory.FullName, item.InfoHash + ".json");
-                    await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), item.ToJson());
-                    await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
-                    Console.WriteLine($"download {item.InfoHash} success");
-                }
-            });
-        }
-
-        private static void RunRecordInfoHash()
-        {
-            Task.Factory.StartNew(async () =>
-            {
-                while (true)
-                {
-                    var count = 0;
-                    var content = new StringBuilder();
-                    while (InfoHashQueue.TryDequeue(out var info) && count < 1000)
-                    {
-                        content.Append(info).Append(Environment.NewLine);
-                        count++;
-                    }
-                    if (count > 0)
-                    {
-                        await File.AppendAllTextAsync(Path.Combine(InfoPath, DateTime.Now.ToString("yyyy-MM-dd") + ".txt"), content.ToString());
-                    }
-                    else
-                    {
-                        await Task.Delay(1000);
-                    }
-                }
-            }, TaskCreationOptions.LongRunning);
-        }
-
-        private static void WaitComplete()
-        {
-            var locker = new ManualResetEvent(false);
-            Console.CancelKeyPress += (sender, e) =>
-            {
-                locker.Set();
-                Environment.Exit(0);
-            };
-            locker.WaitOne();
-        }
-
-        private static Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
-        {
-            infoHash.IsDown = DownlaodedSet.Contains(infoHash.Value);
-            InfoHashQueue.Enqueue(infoHash.Value);
-            return Task.CompletedTask;
-        }
-
-        private static Task DhtClient_OnFindPeer(InfoHash arg)
-        {
-            if (DownlaodedSet.Contains(arg.Value))
-                return Task.CompletedTask;
-            if (!DownLoadQueue.TryAdd(arg))
-                InfoStore.Add(arg);
-            return Task.CompletedTask;
-        }
 
         private static Torrent ParseBitTorrent(BEncodedDictionary metaData)
         {
@@ -590,6 +421,211 @@ namespace DhtCrawler
                 }
             }
             return torrent;
+        }
+        #endregion
+
+        #region DHT事件
+
+        private static Task DhtClient_OnAnnouncePeer(InfoHash arg)
+        {
+            if (DownlaodedSet.Contains(arg.Value))
+                return Task.CompletedTask;
+            if (!DownLoadQueue.TryAdd(arg))
+                InfoStore.Add(arg);
+            return Task.CompletedTask;
+        }
+        private static Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
+        {
+            infoHash.IsDown = DownlaodedSet.Contains(infoHash.Value);
+            InfoHashQueue.Enqueue(infoHash.Value);
+            return Task.CompletedTask;
+        }
+
+        private static Task DhtClient_OnFindPeer(InfoHash arg)
+        {
+            if (DownlaodedSet.Contains(arg.Value))
+                return Task.CompletedTask;
+            if (!DownLoadQueue.TryAdd(arg))
+                InfoStore.Add(arg);
+            return Task.CompletedTask;
+        }
+
+        #endregion
+
+        private static void InitDownInfo()
+        {
+            InfoHashQueue = new ConcurrentQueue<string>();
+            WriteTorrentQueue = new ConcurrentQueue<Torrent>();
+            DownLoadQueue = new BlockingCollection<InfoHash>(ConfigurationManager.Default.GetInt("BufferDownSize", 5120));
+            DownlaodedSet = new ConcurrentHashSet<string>();
+            BadAddress = new ConcurrentDictionary<long, DateTime>();
+            InfoStore = new StoreManager<InfoHash>("infohash.store");
+        }
+
+        private static void EnsureDirectory()
+        {
+            Directory.CreateDirectory(TorrentPath);
+            Directory.CreateDirectory(InfoPath);
+        }
+
+        private static void InitLog()
+        {
+            var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
+            XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) => { watchLog.Error(e.ExceptionObject); };
+        }
+
+        private static void LoadDownInfoHash()
+        {
+            var queue = new Queue<string>(new[] { TorrentPath });
+            while (queue.Count > 0)
+            {
+                var dir = queue.Dequeue();
+                foreach (var directory in Directory.GetDirectories(dir))
+                {
+                    queue.Enqueue(directory);
+                }
+                foreach (var file in Directory.GetFiles(dir))
+                {
+                    DownlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
+                }
+            }
+            if (!File.Exists(DownloadInfoPath))
+                return;
+            foreach (var line in File.ReadAllLines(DownloadInfoPath))
+            {
+                DownlaodedSet.Add(line);
+            }
+        }
+
+        private static void RunSpider()
+        {
+            var dhtSection = ConfigurationManager.Default.GetSection("DhtConfig");
+            var dhtConfig = new DhtConfig()
+            {
+                NodeQueueMaxSize = dhtSection.GetInt("NodeQueueMaxSize", 10240),
+                Port = (ushort)dhtSection.GetInt("Port"),
+                ProcessThreadNum = dhtSection.GetInt("ProcessThreadNum", 1),
+                SendQueueMaxSize = dhtSection.GetInt("SendQueueMaxSize", 20480),
+                SendRateLimit = dhtSection.GetInt("SendRateLimit", 150),
+                ReceiveRateLimit = dhtSection.GetInt("ReceiveRateLimit", 150),
+                ReceiveQueueMaxSize = dhtSection.GetInt("ReceiveQueueMaxSize", 20480),
+                KTableSize = dhtSection.GetInt("KTableSize", 1024),
+                ProcessWaitSize = dhtSection.GetInt("ProcessWaitSize"),
+                ProcessWaitTime = dhtSection.GetInt("ProcessWaitTime", 100)
+            };
+            var dhtClient = new DhtClient(dhtConfig);
+            dhtClient.OnFindPeer += DhtClient_OnFindPeer;
+            dhtClient.OnReceiveInfoHash += DhtClient_OnReceiveInfoHash;
+            dhtClient.OnAnnouncePeer += DhtClient_OnAnnouncePeer;
+            dhtClient.Run();
+            Task.Factory.StartNew(async () =>
+            {
+                while (true)
+                {
+                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},待写入磁盘种子数:{WriteTorrentQueue.Count}");
+                    await Task.Delay(60 * 1000);
+                }
+            }, TaskCreationOptions.LongRunning);
+            Task.Factory.StartNew(() =>
+            {
+                while (true)
+                {
+                    var infoHashFiles = Directory.GetFiles(InfoPath, "*.txt");
+                    var sets = new HashSet<string>();
+                    foreach (var hashFile in infoHashFiles)
+                    {
+                        var hashes = File.ReadAllLines(hashFile);
+                        foreach (var hash in hashes)
+                        {
+                            if (sets.Contains(hash) || DownlaodedSet.Contains(hash))
+                                continue;
+                            while (dhtClient.SendMessageCount >= dhtConfig.SendQueueMaxSize)
+                            {
+                                Thread.Sleep(1000);
+                            }
+                            var hashBytes = new byte[20];
+                            for (var i = 0; i < hashBytes.Length; i++)
+                            {
+                                hashBytes[i] = Convert.ToByte(hash.Substring(i * 2, 2), 16);
+                            }
+                            dhtClient.GetPeers(hashBytes);
+                            sets.Add(hash);
+                        }
+                    }
+                    sets.Clear();
+                    Thread.Sleep(60000 * 30);
+                }
+            }, TaskCreationOptions.LongRunning);
+            Console.CancelKeyPress += (sender, e) =>
+            {
+                dhtClient.ShutDown();
+                e.Cancel = true;
+            };
+        }
+
+        private static void RunWriteTorrent()
+        {
+            Task.Factory.StartNew(async () =>
+            {
+                var directory = new DirectoryInfo(TorrentPath);
+                while (running)
+                {
+                    while (WriteTorrentQueue.TryDequeue(out var item))
+                    {
+                        var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
+                        var path = Path.Combine(subdirectory.FullName, item.InfoHash + ".json");
+                        await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), item.ToJson());
+                        await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
+                        Console.WriteLine($"download {item.InfoHash} success");
+                    }
+                    await Task.Delay(500);
+                }
+                while (WriteTorrentQueue.TryDequeue(out var item))
+                {
+                    var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
+                    var path = Path.Combine(subdirectory.FullName, item.InfoHash + ".json");
+                    await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), item.ToJson());
+                    await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
+                    Console.WriteLine($"download {item.InfoHash} success");
+                }
+            });
+        }
+
+        private static void RunRecordInfoHash()
+        {
+            Task.Factory.StartNew(async () =>
+            {
+                while (true)
+                {
+                    var count = 0;
+                    var content = new StringBuilder();
+                    while (InfoHashQueue.TryDequeue(out var info) && count < 1000)
+                    {
+                        content.Append(info).Append(Environment.NewLine);
+                        count++;
+                    }
+                    if (count > 0)
+                    {
+                        await File.AppendAllTextAsync(Path.Combine(InfoPath, DateTime.Now.ToString("yyyy-MM-dd") + ".txt"), content.ToString());
+                    }
+                    else
+                    {
+                        await Task.Delay(1000);
+                    }
+                }
+            }, TaskCreationOptions.LongRunning);
+        }
+
+        private static void WaitComplete()
+        {
+            var locker = new ManualResetEvent(false);
+            Console.CancelKeyPress += (sender, e) =>
+            {
+                locker.Set();
+                Environment.Exit(0);
+            };
+            locker.WaitOne();
         }
     }
 }

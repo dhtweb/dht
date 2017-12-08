@@ -81,30 +81,21 @@ namespace DhtCrawler.DHT.Message
         {
             var startTime = DateTime.Now;
             var removeItems = new HashSet<byte[]>(ByteArrayComparer);
-            foreach (var item in _mappingInfo)
+            var snapshotMapInfo = _mappingInfo.ToArray();
+            Array.Sort(snapshotMapInfo,
+                new WrapperComparer<KeyValuePair<TransactionId, MapInfo>>((v1, v2) =>
+                    v1.Value.LastTime.CompareTo(v2.Value.LastTime)));
+            foreach (var item in snapshotMapInfo)
             {
                 var tuple = item.Value;
                 if (!((DateTime.Now - tuple.LastTime).TotalSeconds > 600))
-                    continue;
+                    break;
                 _mappingInfo.TryRemove(item.Key, out var rm);
                 removeItems.Add(rm.InfoHash);
                 _bucket.Add(item.Key);
                 if (removeItems.Count >= clearSize)
                 {
                     break;
-                }
-            }
-            if (removeItems.Count < clearSize)
-            {
-                var snapshotMapInfo = _mappingInfo.ToArray();
-                Array.Sort(snapshotMapInfo,
-                    new WrapperComparer<KeyValuePair<TransactionId, MapInfo>>((v1, v2) =>
-                        v2.Value.LastTime.CompareTo(v1.Value.LastTime)));
-                foreach (var item in snapshotMapInfo)
-                {
-                    removeItems.Add(item.Key);
-                    if (removeItems.Count >= clearSize)
-                        break;
                 }
             }
             if (removeItems.Count > 0)

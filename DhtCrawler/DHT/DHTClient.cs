@@ -364,10 +364,6 @@ namespace DhtCrawler.DHT
                 MesageType = MessageType.Request,
                 Data = new SortedDictionary<string, object>(data)
             };
-            if (!MessageMap.RegisterMessage(msg, node))
-            {
-                return;
-            }
             msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
             var dhtItem = new Tuple<DhtMessage, DhtNode>(msg, node);
             if (msg.CommandType == CommandType.Get_Peers)
@@ -476,7 +472,7 @@ namespace DhtCrawler.DHT
 
         public void GetPeers(byte[] infoHash)
         {
-            var nodes = _kTable.FindNodes(infoHash);
+            var nodes = new HashSet<DhtNode>(_kTable.FindNodes(infoHash));
             if (nodes.IsEmpty() || nodes.Count < 8)
             {
                 foreach (var node in _bootstrapNodes)
