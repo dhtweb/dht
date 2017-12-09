@@ -54,7 +54,14 @@ namespace DhtCrawler
             InitLog();
             LoadDownInfoHash();
             RunSpider();
-            RunDownAsync();
+            if (Environment.ProcessorCount > 1)
+            {
+                RunDownAsync();
+            }
+            else
+            {
+                RunDown();
+            }
             RunWriteTorrent();
             RunRecordInfoHash();
             WaitComplete();
