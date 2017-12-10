@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using DhtCrawler.Common.Compare;
 using DhtCrawler.Common.Utils;
 
 namespace DhtCrawler.DHT.Message
@@ -95,24 +92,17 @@ namespace DhtCrawler.DHT.Message
                     }
                 }
             }
-            var tryTimes = 0;
             var mapItem = new NodeMapInfoItem() { InfoHash = infoHash, LastTime = DateTime.Now.Ticks };
-            while (true)
+            lock (_bucketArray)
             {
-                if (tryTimes > 10)
-                    break;
-                lock (_bucketArray)
-                {
-                    _bucketIndex++;
-                    if (_bucketIndex >= _bucketArray.Length)
-                        _bucketIndex = 0;
-                }
+                _bucketIndex++;
+                if (_bucketIndex >= _bucketArray.Length)
+                    _bucketIndex = 0;
                 msgId = _bucketArray[_bucketIndex];
-                if (nodeMapInfo.InfoHashMap.TryAdd(msgId, mapItem))
-                {
-                    return true;
-                }
-                tryTimes++;
+            }
+            if (nodeMapInfo.InfoHashMap.TryAdd(msgId, mapItem))
+            {
+                return true;
             }
             msgId = null;
             return false;

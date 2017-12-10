@@ -38,7 +38,7 @@ namespace DhtCrawler.Service
             if (model.CreateTime != default(DateTime))
             {
                 list.Add(new NpgsqlParameter("createtime", model.CreateTime));
-                updateSql.Append("createtime = @createtime,");
+                //updateSql.Append("createtime = @createtime,");
             }
             if (model.IsDown)
             {

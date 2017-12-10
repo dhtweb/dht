@@ -231,7 +231,8 @@ namespace DhtCrawler.DHT
             if (msg.MessageId.Length != 2)
                 return;
             var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
-            if (!MessageMap.RequireRegisteredInfo(msg, responseNode))
+            var flag = MessageMap.RequireRegisteredInfo(msg, responseNode);
+            if (!flag)
             {
                 return;
             }
@@ -263,7 +264,11 @@ namespace DhtCrawler.DHT
                         foreach (var t in peerInfo)
                         {
                             var peer = (byte[])t;
-                            peers.Add(DhtNode.ParsePeer(peer, 0));
+                            var point = DhtNode.ParsePeer(peer, 0);
+                            if (point.Address.IsPublic())
+                            {
+                                peers.Add(point);
+                            }
                         }
                         if (peers.Count > 0)
                         {
@@ -392,21 +397,23 @@ namespace DhtCrawler.DHT
                     var node = dhtData.Item2;
                     if (queue == _sendMessageQueue)
                     {
-                        if (!MessageMap.RegisterMessage(msg, node))
+                        var regResult = MessageMap.RegisterMessage(msg, node);
+                        if (!regResult)
                         {
                             continue;
                         }
                     }
                     var sendBytes = msg.BEncodeBytes();
                     var remotepoint = new IPEndPoint(node.Host, node.Port);
-                    while (!_sendRateLimit.Require(sendBytes.Length, out var waitTime))
+                    if (!remotepoint.Address.IsPublic())
                     {
-                        await Task.Delay(waitTime);
+                        continue;
+                    }
+                    while (!_sendRateLimit.Require(sendBytes.Length, out var limitTime))
+                    {
+                        await Task.Delay(limitTime);
                     }
                     await _client.SendAsync(sendBytes, sendBytes.Length, remotepoint);
-                }
-                catch (SocketException)
-                {
                 }
                 catch (Exception ex)
                 {

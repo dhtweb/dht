@@ -24,7 +24,7 @@ namespace DhtCrawler.Common.Utils
             var sb = new StringBuilder(array.Length * 2);
             foreach (byte t in array)
             {
-                sb.Append(Convert.ToString(t, 16));
+                sb.Append(t.ToString("X2"));
             }
             return sb.ToString();
         }

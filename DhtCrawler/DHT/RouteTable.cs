@@ -20,15 +20,18 @@ namespace DhtCrawler.DHT
             private RouteComparer() { }
             public int Compare(byte[] x, byte[] y)
             {
+                if (x.Length != y.Length)
+                {
+                    return x.Length > y.Length ? -1 : 1;
+                }
                 var length = Math.Min(x.Length, y.Length);
                 for (var i = 0; i < length; i++)
                 {
                     if (x[i] == y[i])
                         continue;
                     return x[i] > y[i] ? -1 : 1;
-
                 }
-                return x.Length > y.Length ? -1 : 1;
+                return 1;
             }
 
             public static readonly IComparer<byte[]> Instance = new RouteComparer();
@@ -42,7 +45,7 @@ namespace DhtCrawler.DHT
 
         private static byte[] ComputeRouteDistance(byte[] sourceId, byte[] targetId)
         {
-            var result = new byte[20];
+            var result = new byte[Math.Min(sourceId.Length, targetId.Length)];
             for (var i = 0; i < result.Length; i++)
             {
                 result[i] = (byte)(sourceId[i] ^ targetId[i]);

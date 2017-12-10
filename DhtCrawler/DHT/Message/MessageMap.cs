@@ -88,7 +88,7 @@ namespace DhtCrawler.DHT.Message
             foreach (var item in snapshotMapInfo)
             {
                 var tuple = item.Value;
-                if (!((DateTime.Now - tuple.LastTime).TotalSeconds > 600))
+                if (!((DateTime.Now - tuple.LastTime).TotalSeconds > 1200))
                     break;
                 _mappingInfo.TryRemove(item.Key, out var rm);
                 removeItems.Add(rm.InfoHash);
@@ -129,14 +129,15 @@ namespace DhtCrawler.DHT.Message
             else
             {
                 msgId = null;
-                var start = DateTime.Now;
+                var cleared = false;
                 while (!_bucket.TryTake(out messageId, 1000))
                 {
-                    if ((DateTime.Now - start).TotalSeconds > 10) //10秒内获取不到就丢弃
+                    if (cleared) //清理以后没有过期命令则丢弃该消息
                     {
                         return false;
                     }
                     ClearExpireMessage();
+                    cleared = true;
                 }
                 if (!_mappingInfo.TryAdd(messageId, new MapInfo()
                 {

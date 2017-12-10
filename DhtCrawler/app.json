@@ -4,14 +4,15 @@
     "NodeQueueMaxSize": 10240,
     "ReceiveQueueMaxSize": 20480,
     "SendQueueMaxSize": 20480,
-    "SendRateLimit": 1024,
-    "ReceiveRateLimit": 1024,
-    "ProcessThreadNum": 3,
+    "SendRateLimit": 256,
+    "ReceiveRateLimit": 512,
+    "ProcessThreadNum": 1,
     "ProcessWaitSize": 0,
     "ProcessWaitTime": 0,
     "KTableSize": 2048
   },
   "BufferDownSize": 8192,
   "BatchDownSize": 128,
-  "MaxDownThreadNum": 128
+  "MaxDownThreadNum": 64,
+  "DownMode": "Task"
 }
