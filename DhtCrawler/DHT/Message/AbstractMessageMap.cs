@@ -52,18 +52,18 @@ namespace DhtCrawler.DHT.Message
 
         protected abstract bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId);
 
-        protected virtual Task<bool> RegisterGetPeersMessageAsync(byte[] infoHash, DhtNode node,
-            out TransactionId msgId)
+        protected virtual Task<(bool IsOk, TransactionId MsgId)> RegisterGetPeersMessageAsync(byte[] infoHash, DhtNode node)
         {
-            return Task.FromResult(RegisterGetPeersMessage(infoHash, node, out msgId));
+            var result = RegisterGetPeersMessage(infoHash, node, out var msgId);
+            return Task.FromResult((result, msgId));
         }
 
         protected abstract bool RequireGetPeersRegisteredInfo(TransactionId msgId, DhtNode node, out byte[] infoHash);
 
-        protected virtual Task<bool> RequireGetPeersRegisteredInfoAsync(TransactionId msgId, DhtNode node,
-            out byte[] infoHash)
+        protected virtual Task<(bool IsOk, byte[] InfoHash)> RequireGetPeersRegisteredInfoAsync(TransactionId msgId, DhtNode node)
         {
-            return Task.FromResult(RequireGetPeersRegisteredInfo(msgId, node, out infoHash));
+            var result = RequireGetPeersRegisteredInfo(msgId, node, out var infoHash);
+            return Task.FromResult((result, infoHash));
         }
 
         public bool RegisterMessage(DhtMessage message, DhtNode node)
@@ -106,9 +106,10 @@ namespace DhtCrawler.DHT.Message
                 default:
                     return false;
             }
-            if (await RegisterGetPeersMessageAsync(message.Get<byte[]>("info_hash"), node, out var msgId))
+            var result = await RegisterGetPeersMessageAsync(message.Get<byte[]>("info_hash"), node);
+            if (result.IsOk)
             {
-                message.MessageId = msgId;
+                message.MessageId = result.MsgId;
                 return true;
             }
             return false;
@@ -138,9 +139,10 @@ namespace DhtCrawler.DHT.Message
                 return true;
             }
             message.CommandType = CommandType.Get_Peers;
-            if (await RequireGetPeersRegisteredInfoAsync(message.MessageId, node, out var infoHash))
+            var result = await RequireGetPeersRegisteredInfoAsync(message.MessageId, node);
+            if (result.IsOk)
             {
-                message.Data.Add("info_hash", infoHash);
+                message.Data.Add("info_hash", result.InfoHash);
                 return true;
             }
             return false;

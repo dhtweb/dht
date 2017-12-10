@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Utils;
 using StackExchange.Redis;
@@ -19,7 +20,7 @@ namespace DhtCrawler.DHT.Message
                                                 redis.call('EXPIRE',@point,1800)
                                                 return 1
                                             end
-                                            return -1";
+                                            return 0";
 
         private const string UnRegisterLua = @"local hash=redis.call('HGET',@point,@msgId)
                                             if(hash)
@@ -27,74 +28,121 @@ namespace DhtCrawler.DHT.Message
                                                 redis.call('HDEL',@point,@msgId)
                                             end
                                             return hash";
+        private readonly IList<LoadedLuaScript> registerScript;
+        private readonly IList<LoadedLuaScript> unRegisterScript;
         private readonly IDatabase database;
-        private readonly LuaScript registerScript;
-        private readonly LuaScript unRegisterScript;
         private string _storePath;
         private int _index;
         private object[] locks;
         public RedisMessageMap(string serverUrl)
         {
             var client = ConnectionMultiplexer.Connect(serverUrl);
+            var points = client.GetEndPoints();
             database = client.GetDatabase();
-            registerScript = LuaScript.Prepare(RegisterLua);
-            unRegisterScript = LuaScript.Prepare(UnRegisterLua);
+            var rScript = LuaScript.Prepare(RegisterLua);
+            var uScript = LuaScript.Prepare(UnRegisterLua);
+            registerScript = new LoadedLuaScript[points.Length];
+            unRegisterScript = new LoadedLuaScript[points.Length];
+            for (var i = 0; i < points.Length; i++)
+            {
+                var point = points[i];
+                var server = client.GetServer(point);
+                registerScript[i] = rScript.Load(server);
+                unRegisterScript[i] = uScript.Load(server);
+            }
         }
 
         protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId)
         {
-            var nodeId = (ulong)node.CompactEndPoint().ToInt64();
-            var tryTimes = 0;
-            msgId = null;
-            while (tryTimes < 3)
+            var nodeId = node.CompactEndPoint().ToInt64();
+            var srcript = registerScript[(int)(nodeId % registerScript.Count)];
+            lock (this)
             {
-                tryTimes++;
-                lock (this)
+                _index++;
+                if (_index >= _bucketArray.Length)
                 {
-                    _index++;
-                    if (_index >= _bucketArray.Length)
-                        _index = 0;
+                    _index = 0;
                 }
                 msgId = _bucketArray[_index];
-                var path = nodeId << 16 | (uint)(msgId[0] << 8) | msgId[1];
-                var filePath = Path.Combine(_storePath, path + ".bin");
-                var syncObj = locks[path % (ulong)locks.Length];
-                lock (syncObj)
-                {
-                    if (File.Exists(filePath))
-                    {
-                        continue;
-                    }
-                    File.WriteAllBytes(filePath, infoHash);
-                    return true;
-                }
             }
+            var result = srcript.Evaluate(database, new { point = nodeId, hash = infoHash.ToHex(), msgId = ((byte[])msgId).ToHex() });
+            if (result.IsNull)
+            {
+                msgId = null;
+                return false;
+            }
+            var resultInt = (int)result;
+            if (resultInt == 1)
+            {
+                return true;
+            }
+            msgId = null;
             return false;
         }
 
         protected override bool RequireGetPeersRegisteredInfo(TransactionId msgId, DhtNode node, out byte[] infoHash)
         {
-            var nodeId = (ulong)node.CompactEndPoint().ToInt64();
-            var path = nodeId << 16 | (uint)(msgId[0] << 8) | msgId[1];
-            var filePath = Path.Combine(_storePath, path + ".bin");
-            var syncObj = locks[path % (ulong)locks.Length];
-            lock (syncObj)
+            var nodeId = node.CompactEndPoint().ToInt64();
+            var srcript = unRegisterScript[(int)(nodeId % registerScript.Count)];
+            var result = srcript.Evaluate(database, new { point = nodeId, msgId = ((byte[])msgId).ToHex() });
+            if (result.IsNull)
             {
-                if (File.Exists(filePath))
-                {
-                    infoHash = File.ReadAllBytes(filePath);
-                    File.Delete(filePath);
-                    return true;
-                }
                 infoHash = null;
                 return false;
             }
+            var hash = (string)result;
+            infoHash = hash.HexStringToByteArray();
+            return true;
         }
 
-        protected override Task<bool> RequireGetPeersRegisteredInfoAsync(TransactionId msgId, DhtNode node, out byte[] infoHash)
+        protected override Task<(bool IsOk, TransactionId MsgId)> RegisterGetPeersMessageAsync(byte[] infoHash, DhtNode node)
         {
+            var nodeId = node.CompactEndPoint().ToInt64();
+            var srcript = registerScript[(int)(nodeId % registerScript.Count)];
+            var localIndex = _index;
+            localIndex++;
+            if (localIndex >= _bucketArray.Length)
+            {
+                localIndex = 0;
+            }
+            var msgId = _bucketArray[localIndex];
+            return srcript.EvaluateAsync(database,
+                new { point = nodeId, hash = infoHash.ToHex(), msgId = ((byte[])msgId).ToHex() }).ContinueWith(
+                t =>
+                {
+                    if (t.IsFaulted || t.IsCanceled)
+                        return (false, null);
+                    var result = t.Result;
+                    if (!result.IsNull)
+                    {
+                        var resultInt = (int)result;
+                        if (resultInt == 1)
+                        {
+                            return (true, msgId);
+                        }
+                    }
+                    return (false, null);
+                });
 
-            return base.RequireGetPeersRegisteredInfoAsync(msgId, node, out infoHash);
+        }
+
+        protected override Task<(bool IsOk, byte[] InfoHash)> RequireGetPeersRegisteredInfoAsync(TransactionId msgId, DhtNode node)
+        {
+            var nodeId = node.CompactEndPoint().ToInt64();
+            var srcript = unRegisterScript[(int)(nodeId % registerScript.Count)];
+            return srcript.EvaluateAsync(database, new { point = nodeId, msgId = ((byte[])msgId).ToHex() }).ContinueWith(
+                t =>
+                {
+                    if (t.IsCanceled || t.IsFaulted)
+                        return (false, null);
+                    var result = t.Result;
+                    if (result.IsNull)
+                    {
+                        return (false, null);
+                    }
+                    var hash = (string)result;
+                    return (true, hash.HexStringToByteArray());
+                });
         }
     }
 }
