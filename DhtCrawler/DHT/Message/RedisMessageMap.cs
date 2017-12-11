@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Utils;
 using StackExchange.Redis;
@@ -65,7 +64,7 @@ namespace DhtCrawler.DHT.Message
                 }
                 msgId = _bucketArray[_index];
             }
-            var result = srcript.Evaluate(database, new { point = nodeId, hash = infoHash.ToHex(), msgId = ((byte[])msgId).ToHex() });
+            var result = srcript.Evaluate(database, new { point = nodeId, hash = infoHash, msgId = ((byte[])msgId) });
             if (result.IsNull)
             {
                 msgId = null;
@@ -84,14 +83,14 @@ namespace DhtCrawler.DHT.Message
         {
             var nodeId = node.CompactEndPoint().ToInt64();
             var srcript = unRegisterScript[(int)(nodeId % registerScript.Count)];
-            var result = srcript.Evaluate(database, new { point = nodeId, msgId = ((byte[])msgId).ToHex() });
+            var result = srcript.Evaluate(database, new { point = nodeId, msgId = ((byte[])msgId) });
             if (result.IsNull)
             {
                 infoHash = null;
                 return false;
             }
-            var hash = (string)result;
-            infoHash = hash.HexStringToByteArray();
+            var hash = (byte[])result;
+            infoHash = hash;
             return true;
         }
 
@@ -107,7 +106,7 @@ namespace DhtCrawler.DHT.Message
             }
             var msgId = _bucketArray[localIndex];
             return srcript.EvaluateAsync(database,
-                new { point = nodeId, hash = infoHash.ToHex(), msgId = ((byte[])msgId).ToHex() }).ContinueWith(
+                new { point = nodeId, hash = infoHash, msgId = ((byte[])msgId) }).ContinueWith(
                 t =>
                 {
                     if (t.IsFaulted || t.IsCanceled)
@@ -130,7 +129,7 @@ namespace DhtCrawler.DHT.Message
         {
             var nodeId = node.CompactEndPoint().ToInt64();
             var srcript = unRegisterScript[(int)(nodeId % registerScript.Count)];
-            return srcript.EvaluateAsync(database, new { point = nodeId, msgId = ((byte[])msgId).ToHex() }).ContinueWith(
+            return srcript.EvaluateAsync(database, new { point = nodeId, msgId = ((byte[])msgId) }).ContinueWith(
                 t =>
                 {
                     if (t.IsCanceled || t.IsFaulted)
@@ -140,8 +139,8 @@ namespace DhtCrawler.DHT.Message
                     {
                         return (false, null);
                     }
-                    var hash = (string)result;
-                    return (true, hash.HexStringToByteArray());
+                    var hash = (byte[])result;
+                    return (true, hash);
                 });
         }
     }

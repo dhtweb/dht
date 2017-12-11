@@ -11,6 +11,7 @@
     "ProcessWaitTime": 0,
     "KTableSize": 2048
   },
+  "redis.server": "127.0.0.1:6379",
   "BufferDownSize": 8192,
   "BatchDownSize": 128,
   "MaxDownThreadNum": 64,

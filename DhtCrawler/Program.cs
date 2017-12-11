@@ -19,6 +19,7 @@ using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
 using DhtCrawler.Common.Utils;
 using DhtCrawler.Configuration;
+using DhtCrawler.DHT.Message;
 using DhtCrawler.Store;
 using BitTorrentClient = BitTorrent.Listeners.BitTorrentClient;
 
@@ -46,7 +47,7 @@ namespace DhtCrawler
         private static volatile bool running = true;
         static void Main(string[] args)
         {
-            InitDownInfo();
+            Init();
             EnsureDirectory();
             InitLog();
             LoadDownInfoHash();
@@ -113,8 +114,8 @@ namespace DhtCrawler
                     {
                         if (meta.Item2)
                         {
-                            BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1),
-                                (ip, before) => DateTime.Now.AddHours(1));
+                            BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1),
+                                (ip, before) => DateTime.Now.AddDays(1));
                         }
                         return;
                     }
@@ -126,11 +127,11 @@ namespace DhtCrawler
             }
             catch (SocketException)
             {
-                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1), (ip, before) => DateTime.Now.AddHours(1));
+                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
             }
             catch (IOException)
             {
-                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1), (ip, before) => DateTime.Now.AddHours(1));
+                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
             }
             catch (Exception ex)
             {
@@ -201,8 +202,8 @@ namespace DhtCrawler
                                         {
                                             if (netError)
                                             {
-                                                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1),
-                                                    (ip, before) => DateTime.Now.AddHours(1));
+                                                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1),
+                                                    (ip, before) => DateTime.Now.AddDays(1));
                                             }
                                             continue;
                                         }
@@ -214,11 +215,11 @@ namespace DhtCrawler
                                 }
                                 catch (SocketException)
                                 {
-                                    BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1), (ip, before) => DateTime.Now.AddHours(1));
+                                    BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
                                 }
                                 catch (IOException)
                                 {
-                                    BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddHours(1), (ip, before) => DateTime.Now.AddHours(1));
+                                    BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
                                 }
                                 catch (Exception ex)
                                 {
@@ -359,7 +360,7 @@ namespace DhtCrawler
 
         #endregion
 
-        private static void InitDownInfo()
+        private static void Init()
         {
             InfoHashQueue = new ConcurrentQueue<string>();
             WriteTorrentQueue = new ConcurrentQueue<Torrent>();
@@ -367,6 +368,15 @@ namespace DhtCrawler
             DownlaodedSet = new ConcurrentHashSet<string>();
             BadAddress = new ConcurrentDictionary<long, DateTime>();
             InfoStore = new StoreManager<InfoHash>("infohash.store");
+            var redisServer = ConfigurationManager.Default.GetString("redis.server");
+            if (redisServer.IsBlank())
+            {
+                IocContainer.RegisterType<AbstractMessageMap>(MessageMap.Default);
+            }
+            else
+            {
+                IocContainer.RegisterType<AbstractMessageMap>(new RedisMessageMap(ConfigurationManager.Default.GetString("redis.server")));
+            }
         }
 
         private static void EnsureDirectory()
@@ -433,7 +443,7 @@ namespace DhtCrawler
                     watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},待写入磁盘种子数:{WriteTorrentQueue.Count}");
                     await Task.Delay(60 * 1000);
                 }
-            }, TaskCreationOptions.LongRunning);
+            });
             Task.Factory.StartNew(() =>
             {
                 while (true)

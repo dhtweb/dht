@@ -73,7 +73,7 @@ namespace DhtCrawler.DHT
             return targetId.Take(10).Concat(selfId.Skip(10)).ToArray();
         }
 
-        protected virtual AbstractMessageMap MessageMap => Message.MessageMap.Default;
+        protected virtual AbstractMessageMap MessageMap { get; }
 
         #region 事件
 
@@ -131,6 +131,7 @@ namespace DhtCrawler.DHT
             waitTime = config.ProcessWaitTime;
             _tasks = new List<Task>();
             _bootstrapNodes = new List<DhtNode>(DefaultBootstrapNodes);
+            MessageMap = IocContainer.GetService<AbstractMessageMap>();
         }
 
         #region 处理收到消息
