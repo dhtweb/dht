@@ -14,7 +14,7 @@ namespace DhtCrawler.Web
         public static IWebHost BuildWebHost(string[] args) =>
             WebHost.CreateDefaultBuilder(args).UseKestrel(kso =>
                 {
-                    kso.Listen(IPAddress.Any, 80);
+                    kso.Listen(IPAddress.Any, 5000);
                 })
                 .UseStartup<Startup>()
                 .Build();

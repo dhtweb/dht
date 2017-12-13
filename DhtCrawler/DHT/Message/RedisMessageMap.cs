@@ -27,34 +27,33 @@ namespace DhtCrawler.DHT.Message
                                                 redis.call('HDEL',@point,@msgId)
                                             end
                                             return hash";
-        private readonly IList<LoadedLuaScript> registerScript;
-        private readonly IList<LoadedLuaScript> unRegisterScript;
-        private readonly IDatabase database;
-        private string _storePath;
+        private readonly IList<LoadedLuaScript> _registerScript;
+        private readonly IList<LoadedLuaScript> _unRegisterScript;
+        private readonly IDatabase _database;
         private int _index;
-        private object[] locks;
+
         public RedisMessageMap(string serverUrl)
         {
             var client = ConnectionMultiplexer.Connect(serverUrl);
             var points = client.GetEndPoints();
-            database = client.GetDatabase();
+            _database = client.GetDatabase();
             var rScript = LuaScript.Prepare(RegisterLua);
             var uScript = LuaScript.Prepare(UnRegisterLua);
-            registerScript = new LoadedLuaScript[points.Length];
-            unRegisterScript = new LoadedLuaScript[points.Length];
+            _registerScript = new LoadedLuaScript[points.Length];
+            _unRegisterScript = new LoadedLuaScript[points.Length];
             for (var i = 0; i < points.Length; i++)
             {
                 var point = points[i];
                 var server = client.GetServer(point);
-                registerScript[i] = rScript.Load(server);
-                unRegisterScript[i] = uScript.Load(server);
+                _registerScript[i] = rScript.Load(server);
+                _unRegisterScript[i] = uScript.Load(server);
             }
         }
 
         protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId)
         {
             var nodeId = node.CompactEndPoint().ToInt64();
-            var srcript = registerScript[(int)(nodeId % registerScript.Count)];
+            var srcript = _registerScript[(int)(nodeId % _registerScript.Count)];
             lock (this)
             {
                 _index++;
@@ -64,7 +63,7 @@ namespace DhtCrawler.DHT.Message
                 }
                 msgId = _bucketArray[_index];
             }
-            var result = srcript.Evaluate(database, new { point = nodeId, hash = infoHash, msgId = ((byte[])msgId) });
+            var result = srcript.Evaluate(_database, new { point = nodeId, hash = infoHash, msgId = ((byte[])msgId) });
             if (result.IsNull)
             {
                 msgId = null;
@@ -82,8 +81,8 @@ namespace DhtCrawler.DHT.Message
         protected override bool RequireGetPeersRegisteredInfo(TransactionId msgId, DhtNode node, out byte[] infoHash)
         {
             var nodeId = node.CompactEndPoint().ToInt64();
-            var srcript = unRegisterScript[(int)(nodeId % registerScript.Count)];
-            var result = srcript.Evaluate(database, new { point = nodeId, msgId = ((byte[])msgId) });
+            var srcript = _unRegisterScript[(int)(nodeId % _registerScript.Count)];
+            var result = srcript.Evaluate(_database, new { point = nodeId, msgId = ((byte[])msgId) });
             if (result.IsNull)
             {
                 infoHash = null;
@@ -97,7 +96,7 @@ namespace DhtCrawler.DHT.Message
         protected override Task<(bool IsOk, TransactionId MsgId)> RegisterGetPeersMessageAsync(byte[] infoHash, DhtNode node)
         {
             var nodeId = node.CompactEndPoint().ToInt64();
-            var srcript = registerScript[(int)(nodeId % registerScript.Count)];
+            var srcript = _registerScript[(int)(nodeId % _registerScript.Count)];
             var localIndex = _index;
             localIndex++;
             if (localIndex >= _bucketArray.Length)
@@ -105,7 +104,7 @@ namespace DhtCrawler.DHT.Message
                 localIndex = 0;
             }
             var msgId = _bucketArray[localIndex];
-            return srcript.EvaluateAsync(database,
+            return srcript.EvaluateAsync(_database,
                 new { point = nodeId, hash = infoHash, msgId = ((byte[])msgId) }).ContinueWith(
                 t =>
                 {
@@ -128,8 +127,8 @@ namespace DhtCrawler.DHT.Message
         protected override Task<(bool IsOk, byte[] InfoHash)> RequireGetPeersRegisteredInfoAsync(TransactionId msgId, DhtNode node)
         {
             var nodeId = node.CompactEndPoint().ToInt64();
-            var srcript = unRegisterScript[(int)(nodeId % registerScript.Count)];
-            return srcript.EvaluateAsync(database, new { point = nodeId, msgId = ((byte[])msgId) }).ContinueWith(
+            var srcript = _unRegisterScript[(int)(nodeId % _registerScript.Count)];
+            return srcript.EvaluateAsync(_database, new { point = nodeId, msgId = ((byte[])msgId) }).ContinueWith(
                 t =>
                 {
                     if (t.IsCanceled || t.IsFaulted)

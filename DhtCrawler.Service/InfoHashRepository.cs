@@ -166,10 +166,19 @@ namespace DhtCrawler.Service
                 sql.Append(" AND updatetime>@start");
             }
             sql.Append(" order by id LIMIT @size");
+            var selectSql = sql.ToString();
             do
             {
                 var length = 0;
-                var hashs = Connection.Query<InfoHashModel>(sql.ToString(), new { id, start, size });
+                IEnumerable<InfoHashModel> hashs;
+                try
+                {
+                    hashs = Connection.Query<InfoHashModel>(selectSql, new { id, start, size });
+                }
+                catch (Exception ex)
+                {
+                    continue;
+                }
                 foreach (var model in hashs)
                 {
                     length++;
