@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using DhtCrawler.Common.Compare;
 using DhtCrawler.Common.Utils;
 
 namespace DhtCrawler.DHT.Message
@@ -41,6 +44,7 @@ namespace DhtCrawler.DHT.Message
 
         private readonly long _expireTimeSpan;
         private static readonly ConcurrentDictionary<long, NodeMapInfo> NodeMap = new ConcurrentDictionary<long, NodeMapInfo>();
+        private static readonly ConcurrentDictionary<byte[], HashSet<long>> InfoHashPeers = new ConcurrentDictionary<byte[], HashSet<long>>(new WrapperEqualityComparer<byte[]>((bytes1, bytes2) => bytes1.Length == bytes2.Length && bytes1.SequenceEqual(bytes2), bytes => bytes[0] << 24 | bytes[5] << 16 | bytes[10] << 8 | bytes[15]));
 
         private int _bucketIndex = 0;
         private DateTime _lastClearTime;
@@ -68,17 +72,32 @@ namespace DhtCrawler.DHT.Message
                     msgSize += mapInfo.Value.InfoHashMap.Count;
                 }
             }
+            InfoHashPeers.Clear();
             Log.Info($"清理过期的注册消息数:{removeSize},现有消息数:{msgSize},用时:{(DateTime.Now - startTime).TotalSeconds}");
         }
 
         protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId)
         {
+            var sendPeers = InfoHashPeers.GetOrAdd(infoHash, new HashSet<long>());
             var nodeKey = node.CompactEndPoint().ToInt64();
+            lock (sendPeers)
+            {
+                if (sendPeers.Contains(nodeKey))
+                {
+                    msgId = null;
+                    return false;
+                }
+                sendPeers.Add(nodeKey);
+            }
             var nodeMapInfo = NodeMap.GetOrAdd(nodeKey, new NodeMapInfo());
             if (nodeMapInfo.IsExpire(_expireTimeSpan))
             {
                 NodeMap.TryRemove(nodeKey, out nodeMapInfo);
                 msgId = null;
+                lock (sendPeers)
+                {
+                    sendPeers.Remove(nodeKey);
+                }
                 return false;
             }
             if (DateTime.Now >= _lastClearTime)
@@ -103,6 +122,10 @@ namespace DhtCrawler.DHT.Message
             if (nodeMapInfo.InfoHashMap.TryAdd(msgId, mapItem))
             {
                 return true;
+            }
+            lock (sendPeers)
+            {
+                sendPeers.Remove(nodeKey);
             }
             msgId = null;
             return false;

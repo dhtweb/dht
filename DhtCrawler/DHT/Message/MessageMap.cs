@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using DhtCrawler.Common.Collections;
 using DhtCrawler.Common.Compare;
 using DhtCrawler.Common.Utils;
 using log4net;
@@ -55,6 +56,7 @@ namespace DhtCrawler.DHT.Message
         private static readonly IEqualityComparer<byte[]> ByteArrayComparer =
             new WrapperEqualityComparer<byte[]>((x, y) => x.Length == y.Length && x.SequenceEqual(y),
                 x => x.Sum(b => b));
+        public static readonly MessageMap Default = new MessageMap(1200);
 
         private readonly BlockingCollection<TransactionId> _bucket = new BlockingCollection<TransactionId>();
 
@@ -63,9 +65,12 @@ namespace DhtCrawler.DHT.Message
 
         private readonly ConcurrentDictionary<byte[], IdMapInfo> _idMappingInfo =
             new ConcurrentDictionary<byte[], IdMapInfo>(ByteArrayComparer);
-        public static readonly MessageMap Default = new MessageMap();
-        public MessageMap()
+
+        private readonly int _expireSeconds;
+
+        public MessageMap(int expireSeconds)
         {
+            this._expireSeconds = expireSeconds;
             InitBucket();
         }
 
@@ -82,14 +87,19 @@ namespace DhtCrawler.DHT.Message
             var startTime = DateTime.Now;
             var removeItems = new HashSet<byte[]>(ByteArrayComparer);
             var snapshotMapInfo = _mappingInfo.ToArray();
-            Array.Sort(snapshotMapInfo,
+            var sortList = new SortTreeList<KeyValuePair<TransactionId, MapInfo>>(
                 new WrapperComparer<KeyValuePair<TransactionId, MapInfo>>((v1, v2) =>
-                    v1.Value.LastTime.CompareTo(v2.Value.LastTime)));
+                    v1.Value.LastTime.CompareTo(v2.Value.LastTime)));//早的时间早过期
             foreach (var item in snapshotMapInfo)
             {
                 var tuple = item.Value;
-                if (!((DateTime.Now - tuple.LastTime).TotalSeconds > 1200))
-                    break;
+                if (!((DateTime.Now - tuple.LastTime).TotalSeconds > _expireSeconds))
+                    continue;
+                sortList.Add(item);
+            }
+
+            foreach (var item in sortList)
+            {
                 _mappingInfo.TryRemove(item.Key, out var rm);
                 removeItems.Add(rm.InfoHash);
                 _bucket.Add(item.Key);

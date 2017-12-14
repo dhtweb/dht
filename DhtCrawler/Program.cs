@@ -17,6 +17,7 @@ using log4net;
 using log4net.Config;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
+using DhtCrawler.Common.Compare;
 using DhtCrawler.Common.Utils;
 using DhtCrawler.Configuration;
 using DhtCrawler.DHT.Message;
@@ -184,6 +185,10 @@ namespace DhtCrawler
                             {
                                 if (!running)
                                     return;
+                                if (DownlaodedSet.Contains(info.Value))
+                                {
+                                    break;
+                                }
                                 var longPeer = peer.ToInt64();
                                 try
                                 {
@@ -212,6 +217,7 @@ namespace DhtCrawler
                                         torrent.InfoHash = info.Value;
                                         WriteTorrentQueue.Enqueue(torrent);
                                     }
+                                    break;
                                 }
                                 catch (SocketException)
                                 {
@@ -371,7 +377,8 @@ namespace DhtCrawler
             var redisServer = ConfigurationManager.Default.GetString("redis.server");
             if (redisServer.IsBlank())
             {
-                IocContainer.RegisterType<AbstractMessageMap>(MessageMap.Default);
+                IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(500));
+                //IocContainer.RegisterType<AbstractMessageMap>(DefaultMessageMap.Instance);
             }
             else
             {
@@ -516,7 +523,7 @@ namespace DhtCrawler
 
         private static void RunRecordInfoHash()
         {
-            Task.Factory.StartNew(async () =>
+            Task.Factory.StartNew(() =>
             {
                 while (true)
                 {
@@ -529,11 +536,11 @@ namespace DhtCrawler
                     }
                     if (count > 0)
                     {
-                        await File.AppendAllTextAsync(Path.Combine(InfoPath, DateTime.Now.ToString("yyyy-MM-dd") + ".txt"), content.ToString());
+                        File.AppendAllText(Path.Combine(InfoPath, DateTime.Now.ToString("yyyy-MM-dd") + ".txt"), content.ToString());
                     }
                     else
                     {
-                        await Task.Delay(1000);
+                        Thread.Sleep(1000);
                     }
                 }
             }, TaskCreationOptions.LongRunning);
