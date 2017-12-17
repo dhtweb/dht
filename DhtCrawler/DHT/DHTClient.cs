@@ -49,8 +49,8 @@ namespace DhtCrawler.DHT
 
         private readonly BlockingCollection<DhtNode> _nodeQueue;
         private readonly BlockingCollection<DhtData> _recvMessageQueue;
-        private readonly BlockingCollection<Tuple<DhtMessage, IPEndPoint>> requestQueue;
-        private readonly BlockingCollection<Tuple<DhtMessage, IPEndPoint>> responseQueue;
+        private readonly BlockingCollection<Tuple<DhtMessage, IPEndPoint>> _requestQueue;
+        private readonly BlockingCollection<Tuple<DhtMessage, IPEndPoint>> _responseQueue;
         private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _sendMessageQueue;
         private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _replyMessageQueue;//
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -58,7 +58,8 @@ namespace DhtCrawler.DHT
         private readonly IList<Task> _tasks;
         private readonly IRateLimit _sendRateLimit;
         private readonly IRateLimit _receveRateLimit;
-        private readonly int _processThreadNum;
+        private readonly int _processResponseThreadNum;
+        private readonly int _processRequestThreadNum;
         private volatile bool running = false;
 
         private byte[] GetNeighborNodeId(byte[] targetId)
@@ -82,8 +83,10 @@ namespace DhtCrawler.DHT
         #endregion
 
         public int ReceviceMessageCount => _recvMessageQueue.Count;
+        public int RequestMessageCount => _requestQueue.Count;
+        public int ResponseMessageCount => _responseQueue.Count;
         public int SendMessageCount => _sendMessageQueue.Count;
-        public int ResponseMessageCount => _replyMessageQueue.Count;
+        public int ReplyMessageCount => _replyMessageQueue.Count;
         public int FindNodeCount => _nodeQueue.Count;
 
         public DhtClient() : this(new DhtConfig())
@@ -91,7 +94,7 @@ namespace DhtCrawler.DHT
 
         }
 
-        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 20, int sendRate = 100, int receiveRate = 100, int threadNum = 1) : this(new DhtConfig() { Port = port, NodeQueueMaxSize = nodeQueueSize, ReceiveQueueMaxSize = receiveQueueSize, SendQueueMaxSize = sendQueueSize, SendRateLimit = sendRate, ReceiveRateLimit = receiveRate, ProcessThreadNum = threadNum })
+        public DhtClient(ushort port = 0, int nodeQueueSize = 1024 * 20, int receiveQueueSize = 1024 * 20, int sendQueueSize = 1024 * 20, int sendRate = 100, int receiveRate = 100, int threadNum = 1) : this(new DhtConfig() { Port = port, NodeQueueMaxSize = nodeQueueSize, ReceiveQueueMaxSize = receiveQueueSize, SendQueueMaxSize = sendQueueSize, SendRateLimit = sendRate, ReceiveRateLimit = receiveRate, ProcessRequestThreadNum = threadNum, ProcessResponseThreadNum = threadNum })
         {
 
         }
@@ -115,14 +118,15 @@ namespace DhtCrawler.DHT
 
             _nodeQueue = new BlockingCollection<DhtNode>(config.NodeQueueMaxSize);
             _recvMessageQueue = new BlockingCollection<DhtData>(config.ReceiveQueueMaxSize);
-            requestQueue = new BlockingCollection<Tuple<DhtMessage, IPEndPoint>>();
-            responseQueue = new BlockingCollection<Tuple<DhtMessage, IPEndPoint>>();
+            _requestQueue = new BlockingCollection<Tuple<DhtMessage, IPEndPoint>>(config.RequestQueueMaxSize);
+            _responseQueue = new BlockingCollection<Tuple<DhtMessage, IPEndPoint>>(config.ResponseQueueMaxSize);
             _sendMessageQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>(config.SendQueueMaxSize);
             _replyMessageQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>();
 
             _sendRateLimit = new TokenBucketLimit(config.SendRateLimit * 1024, 1, TimeUnit.Second);
             _receveRateLimit = new TokenBucketLimit(config.ReceiveRateLimit * 1024, 1, TimeUnit.Second);
-            _processThreadNum = config.ProcessThreadNum;
+            _processResponseThreadNum = config.ProcessResponseThreadNum;
+            _processRequestThreadNum = config.ProcessRequestThreadNum;
             _cancellationTokenSource = new CancellationTokenSource();
 
             _tasks = new List<Task>();
@@ -239,8 +243,8 @@ namespace DhtCrawler.DHT
             switch (msg.CommandType)
             {
                 case CommandType.Find_Node:
-                    if (MessageMap.IsFull || !msg.Data.TryGetValue("nodes", out nodeInfo))
-                        break;
+                    if (_kTable.IsFull || MessageMap.IsFull || !msg.Data.TryGetValue("nodes", out nodeInfo))
+                        return;
                     nodes = DhtNode.ParseNode((byte[])nodeInfo);
                     break;
                 case CommandType.Get_Peers:
@@ -313,13 +317,14 @@ namespace DhtCrawler.DHT
                 {
                     var dic = (Dictionary<string, object>)BEncoder.Decode(dhtData.Data);
                     var msg = new DhtMessage(dic);
+                    var item = new Tuple<DhtMessage, IPEndPoint>(msg, dhtData.RemoteEndPoint);
                     switch (msg.MesageType)
                     {
                         case MessageType.Request:
-                            requestQueue.Add(new Tuple<DhtMessage, IPEndPoint>(msg, dhtData.RemoteEndPoint));
+                            _requestQueue.TryAdd(item);
                             break;
                         case MessageType.Response:
-                            responseQueue.Add(new Tuple<DhtMessage, IPEndPoint>(msg, dhtData.RemoteEndPoint));
+                            _responseQueue.TryAdd(item);
                             break;
                     }
                 }
@@ -350,7 +355,7 @@ namespace DhtCrawler.DHT
         {
             while (running)
             {
-                if (!requestQueue.TryTake(out var msgInfo))
+                if (!_requestQueue.TryTake(out var msgInfo))
                 {
                     await Task.Delay(1000, _cancellationTokenSource.Token);
                     continue;
@@ -370,7 +375,7 @@ namespace DhtCrawler.DHT
         {
             while (running)
             {
-                if (!responseQueue.TryTake(out var msgInfo))
+                if (!_responseQueue.TryTake(out var msgInfo))
                 {
                     await Task.Delay(1000, _cancellationTokenSource.Token);
                     continue;
@@ -547,12 +552,20 @@ namespace DhtCrawler.DHT
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
             _tasks.Add(Task.Factory.StartNew(ProcessMsgData, TaskCreationOptions.LongRunning).ContinueWith(t => { _logger.Info("Process Receive Task Completed"); }));
-            for (int i = 0; i < _processThreadNum; i++)
+            for (int i = 0; i < _processResponseThreadNum; i++)
             {
                 var local = i;
                 Task.Run(() =>
                 {
                     _tasks.Add(LoopProcessResponseMsg().ContinueWith(t => { _logger.InfoFormat("Process Response Msg Task {0} Completed", local); }));
+                });
+            }
+            for (int i = 0; i < _processRequestThreadNum; i++)
+            {
+                var local = i;
+                Task.Run(() =>
+                {
+                    _tasks.Add(LoopProcessRequestMsg().ContinueWith(t => { _logger.InfoFormat("Process Request Msg Task {0} Completed", local); }));
                 });
             }
             Task.Run(() =>

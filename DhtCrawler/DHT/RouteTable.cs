@@ -61,6 +61,8 @@ namespace DhtCrawler.DHT
 
         public int Count => _kTable.Count;
 
+        public bool IsFull => _kTable.Count >= _maxNodeSize && _minLastTime + RouteLife.Ticks > DateTime.Now.Ticks;
+
         public void AddNode(DhtNode node)
         {
             if (node.NodeId == null || _kTable.Count >= _maxNodeSize)
@@ -110,7 +112,7 @@ namespace DhtCrawler.DHT
 
         private void ClearExpireNode()
         {
-            var minTime = DateTime.MaxValue.Ticks;
+            var minTime = DateTime.Now.Ticks;
             foreach (var item in _kTable.Values)
             {
                 if (DateTime.Now.Ticks - item.LastTime > RouteLife.Ticks)

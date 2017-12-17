@@ -342,8 +342,6 @@ namespace DhtCrawler
 
         private static Task DhtClient_OnAnnouncePeer(InfoHash arg)
         {
-            if (DownlaodedSet.Contains(arg.Value))
-                return Task.CompletedTask;
             if (!DownLoadQueue.TryAdd(arg))
                 InfoStore.Add(arg);
             return Task.CompletedTask;
@@ -357,8 +355,6 @@ namespace DhtCrawler
 
         private static Task DhtClient_OnFindPeer(InfoHash arg)
         {
-            if (DownlaodedSet.Contains(arg.Value))
-                return Task.CompletedTask;
             if (!DownLoadQueue.TryAdd(arg))
                 InfoStore.Add(arg);
             return Task.CompletedTask;
@@ -428,11 +424,14 @@ namespace DhtCrawler
             {
                 NodeQueueMaxSize = dhtSection.GetInt("NodeQueueMaxSize", 10240),
                 Port = (ushort)dhtSection.GetInt("Port"),
-                ProcessThreadNum = dhtSection.GetInt("ProcessThreadNum", 1),
+                ProcessResponseThreadNum = dhtSection.GetInt("ProcessResponseThreadNum", 1),
+                ProcessRequestThreadNum = dhtSection.GetInt("ProcessRequestThreadNum", 1),
                 SendQueueMaxSize = dhtSection.GetInt("SendQueueMaxSize", 20480),
                 SendRateLimit = dhtSection.GetInt("SendRateLimit", 150),
                 ReceiveRateLimit = dhtSection.GetInt("ReceiveRateLimit", 150),
                 ReceiveQueueMaxSize = dhtSection.GetInt("ReceiveQueueMaxSize", 20480),
+                RequestQueueMaxSize = dhtSection.GetInt("RequestQueueMaxSize", 20480),
+                ResponseQueueMaxSize = dhtSection.GetInt("ResponseQueueMaxSize", 20480),
                 KTableSize = dhtSection.GetInt("KTableSize", 1024)
             };
             var dhtClient = new DhtClient(dhtConfig);
@@ -440,11 +439,11 @@ namespace DhtCrawler
             dhtClient.OnReceiveInfoHash += DhtClient_OnReceiveInfoHash;
             dhtClient.OnAnnouncePeer += DhtClient_OnAnnouncePeer;
             dhtClient.Run();
-            Task.Factory.StartNew(async () =>
+            Task.Run(async () =>
             {
                 while (true)
                 {
-                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},发送消息数:{dhtClient.SendMessageCount},响应消息数:{dhtClient.ResponseMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},待写入磁盘种子数:{WriteTorrentQueue.Count}");
+                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},收到请求消息数:{dhtClient.RequestMessageCount},收到回复消息数:{dhtClient.ResponseMessageCount},发送消息数:{dhtClient.SendMessageCount},回复消息数:{dhtClient.ReplyMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},待写入磁盘种子数:{WriteTorrentQueue.Count}");
                     await Task.Delay(60 * 1000);
                 }
             });

@@ -16,7 +16,14 @@
         /// 接收消息队列容量
         /// </summary>
         public int ReceiveQueueMaxSize { get; set; } = 10240;
-
+        /// <summary>
+        /// 请求消息队列容量
+        /// </summary>
+        public int RequestQueueMaxSize { get; set; } = 10240;
+        /// <summary>
+        /// 响应消息队列容量
+        /// </summary>
+        public int ResponseQueueMaxSize { get; set; } = 10240;
         /// <summary>
         /// 发送消息队列容量
         /// </summary>
@@ -32,14 +39,17 @@
         public int ReceiveRateLimit { get; set; } = 150;
 
         /// <summary>
-        /// 消息处理线程数
+        /// 请求消息处理线程数
         /// </summary>
-        public int ProcessThreadNum { get; set; } = 1;
-
+        public int ProcessRequestThreadNum { get; set; } = 1;
+        /// <summary>
+        /// 响应消息处理线程数
+        /// </summary>
+        public int ProcessResponseThreadNum { get; set; } = 1;
         /// <summary>
         /// KTable节点大小
         /// </summary>
         public int KTableSize { get; set; } = 2048;
-        
+
     }
 }
