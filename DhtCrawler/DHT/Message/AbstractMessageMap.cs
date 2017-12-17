@@ -66,6 +66,8 @@ namespace DhtCrawler.DHT.Message
             return Task.FromResult((result, infoHash));
         }
 
+        public virtual bool IsFull { get; } = false;
+
         public bool RegisterMessage(DhtMessage message, DhtNode node)
         {
             switch (message.CommandType)
@@ -125,7 +127,7 @@ namespace DhtCrawler.DHT.Message
             message.CommandType = CommandType.Get_Peers;
             if (RequireGetPeersRegisteredInfo(message.MessageId, node, out var infoHash))
             {
-                message.Data.Add("info_hash", infoHash);
+                message.Data["info_hash"] = infoHash;
                 return true;
             }
             return false;
@@ -142,7 +144,7 @@ namespace DhtCrawler.DHT.Message
             var result = await RequireGetPeersRegisteredInfoAsync(message.MessageId, node);
             if (result.IsOk)
             {
-                message.Data.Add("info_hash", result.InfoHash);
+                message.Data["info_hash"] = result.InfoHash;
                 return true;
             }
             return false;

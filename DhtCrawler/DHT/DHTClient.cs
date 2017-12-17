@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Threading;
+using DhtCrawler.Common;
 using DhtCrawler.Common.RateLimit;
 using DhtCrawler.Common.Utils;
 using DhtCrawler.DHT.Message;
@@ -48,8 +49,10 @@ namespace DhtCrawler.DHT
 
         private readonly BlockingCollection<DhtNode> _nodeQueue;
         private readonly BlockingCollection<DhtData> _recvMessageQueue;
+        private readonly BlockingCollection<Tuple<DhtMessage, IPEndPoint>> requestQueue;
+        private readonly BlockingCollection<Tuple<DhtMessage, IPEndPoint>> responseQueue;
         private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _sendMessageQueue;
-        private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _responseMessageQueue;//
+        private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _replyMessageQueue;//
         private readonly CancellationTokenSource _cancellationTokenSource;
 
         private readonly IList<Task> _tasks;
@@ -57,14 +60,7 @@ namespace DhtCrawler.DHT
         private readonly IRateLimit _receveRateLimit;
         private readonly int _processThreadNum;
         private volatile bool running = false;
-        /// <summary>
-        /// 消息处理时等待次数
-        /// </summary>
-        private readonly int waitSize;
-        /// <summary>
-        /// 等待时间（毫秒）
-        /// </summary>
-        private readonly int waitTime;
+
         private byte[] GetNeighborNodeId(byte[] targetId)
         {
             var selfId = _node.NodeId;
@@ -87,7 +83,7 @@ namespace DhtCrawler.DHT
 
         public int ReceviceMessageCount => _recvMessageQueue.Count;
         public int SendMessageCount => _sendMessageQueue.Count;
-        public int ResponseMessageCount => _responseMessageQueue.Count;
+        public int ResponseMessageCount => _replyMessageQueue.Count;
         public int FindNodeCount => _nodeQueue.Count;
 
         public DhtClient() : this(new DhtConfig())
@@ -119,16 +115,16 @@ namespace DhtCrawler.DHT
 
             _nodeQueue = new BlockingCollection<DhtNode>(config.NodeQueueMaxSize);
             _recvMessageQueue = new BlockingCollection<DhtData>(config.ReceiveQueueMaxSize);
+            requestQueue = new BlockingCollection<Tuple<DhtMessage, IPEndPoint>>();
+            responseQueue = new BlockingCollection<Tuple<DhtMessage, IPEndPoint>>();
             _sendMessageQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>(config.SendQueueMaxSize);
-            _responseMessageQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>();
+            _replyMessageQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>();
 
             _sendRateLimit = new TokenBucketLimit(config.SendRateLimit * 1024, 1, TimeUnit.Second);
             _receveRateLimit = new TokenBucketLimit(config.ReceiveRateLimit * 1024, 1, TimeUnit.Second);
             _processThreadNum = config.ProcessThreadNum;
             _cancellationTokenSource = new CancellationTokenSource();
 
-            waitSize = config.ProcessWaitSize;
-            waitTime = config.ProcessWaitTime;
             _tasks = new List<Task>();
             _bootstrapNodes = new List<DhtNode>(DefaultBootstrapNodes);
             MessageMap = IocContainer.GetService<AbstractMessageMap>();
@@ -224,7 +220,7 @@ namespace DhtCrawler.DHT
                 default:
                     return;
             }
-            _responseMessageQueue.TryAdd(new Tuple<DhtMessage, DhtNode>(response, new DhtNode(remotePoint)));
+            _replyMessageQueue.TryAdd(new Tuple<DhtMessage, DhtNode>(response, new DhtNode(remotePoint)));
         }
 
         private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
@@ -243,7 +239,7 @@ namespace DhtCrawler.DHT
             switch (msg.CommandType)
             {
                 case CommandType.Find_Node:
-                    if (!msg.Data.TryGetValue("nodes", out nodeInfo))
+                    if (MessageMap.IsFull || !msg.Data.TryGetValue("nodes", out nodeInfo))
                         break;
                     nodes = DhtNode.ParseNode((byte[])nodeInfo);
                     break;
@@ -304,21 +300,14 @@ namespace DhtCrawler.DHT
             }
         }
 
-        private async Task ProcessMsgData()
+        private void ProcessMsgData()
         {
-            var size = 0;
-            var canWait = waitTime > 0 && waitSize > 0;
             while (running)
             {
                 if (!_recvMessageQueue.TryTake(out DhtData dhtData))
                 {
-                    await Task.Delay(1000);
+                    Thread.Sleep(1000);
                     continue;
-                }
-                if (canWait && size > waitSize)
-                {
-                    await Task.Delay(waitTime);
-                    size = 0;
                 }
                 try
                 {
@@ -327,13 +316,12 @@ namespace DhtCrawler.DHT
                     switch (msg.MesageType)
                     {
                         case MessageType.Request:
-                            await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
+                            requestQueue.Add(new Tuple<DhtMessage, IPEndPoint>(msg, dhtData.RemoteEndPoint));
                             break;
                         case MessageType.Response:
-                            await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
+                            responseQueue.Add(new Tuple<DhtMessage, IPEndPoint>(msg, dhtData.RemoteEndPoint));
                             break;
                     }
-                    Interlocked.Increment(ref size);
                 }
                 catch (Exception ex)
                 {
@@ -357,6 +345,47 @@ namespace DhtCrawler.DHT
                 }
             }
         }
+
+        private async Task LoopProcessRequestMsg()
+        {
+            while (running)
+            {
+                if (!requestQueue.TryTake(out var msgInfo))
+                {
+                    await Task.Delay(1000, _cancellationTokenSource.Token);
+                    continue;
+                }
+                try
+                {
+                    await ProcessRequestAsync(msgInfo.Item1, msgInfo.Item2);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"ErrorData:{msgInfo.Item1.ToJson()}", ex);
+                }
+            }
+        }
+
+        private async Task LoopProcessResponseMsg()
+        {
+            while (running)
+            {
+                if (!responseQueue.TryTake(out var msgInfo))
+                {
+                    await Task.Delay(1000, _cancellationTokenSource.Token);
+                    continue;
+                }
+                try
+                {
+                    await ProcessResponseAsync(msgInfo.Item1, msgInfo.Item2);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"ErrorData:{msgInfo.Item1.ToJson()}", ex);
+                }
+            }
+        }
+
 
         #endregion
 
@@ -386,16 +415,16 @@ namespace DhtCrawler.DHT
         {
             while (running)
             {
-                var queue = _responseMessageQueue.Count <= 0 ? _sendMessageQueue : _responseMessageQueue;
+                var queue = _replyMessageQueue.Count <= 0 ? _sendMessageQueue : _replyMessageQueue;
                 if (!queue.TryTake(out var dhtData))
                 {
                     await Task.Delay(1000);
                     continue;
                 }
+                var msg = dhtData.Item1;
+                var node = dhtData.Item2;
                 try
                 {
-                    var msg = dhtData.Item1;
-                    var node = dhtData.Item2;
                     if (queue == _sendMessageQueue)
                     {
                         var regResult = MessageMap.RegisterMessage(msg, node);
@@ -418,6 +447,10 @@ namespace DhtCrawler.DHT
                 }
                 catch (Exception ex)
                 {
+                    if (ex is SocketException || ex is InvalidOperationException)
+                    {
+                        MessageMap.RequireRegisteredInfo(msg, node);
+                    }
                     _logger.Error(ex);
                 }
             }
@@ -513,26 +546,34 @@ namespace DhtCrawler.DHT
         {
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
+            _tasks.Add(Task.Factory.StartNew(ProcessMsgData, TaskCreationOptions.LongRunning).ContinueWith(t => { _logger.Info("Process Receive Task Completed"); }));
             for (int i = 0; i < _processThreadNum; i++)
             {
                 var local = i;
                 Task.Run(() =>
                 {
-                    _tasks.Add(ProcessMsgData().ContinueWith(t => { _logger.InfoFormat("ProcessMsg {0} Over", local); }));
+                    _tasks.Add(LoopProcessResponseMsg().ContinueWith(t => { _logger.InfoFormat("Process Response Msg Task {0} Completed", local); }));
                 });
             }
             Task.Run(() =>
             {
+                _tasks.Add(LoopProcessRequestMsg().ContinueWith(t =>
+                {
+                    _logger.Info("Process Request Msg Task Completed");
+                }));
+            });
+            Task.Run(() =>
+            {
                 _tasks.Add(LoopFindNodes().ContinueWith(t =>
                 {
-                    _logger.Info("Loop FindNode Over");
+                    _logger.Info("Loop FindNode Task Complete");
                 }));
             });
             Task.Run(() =>
             {
                 _tasks.Add(LoopSendMsg().ContinueWith(t =>
                 {
-                    _logger.Info("Loop SendMeg Over");
+                    _logger.Info("Loop SendMsg Task Completed");
                 }));
             });
             _logger.Info("starting");
@@ -546,7 +587,7 @@ namespace DhtCrawler.DHT
             ClearCollection(_nodeQueue);
             ClearCollection(_recvMessageQueue);
             ClearCollection(_sendMessageQueue);
-            ClearCollection(_responseMessageQueue);
+            ClearCollection(_replyMessageQueue);
             Task.WaitAll(_tasks.ToArray());
             _logger.Info("close success");
         }
@@ -565,7 +606,7 @@ namespace DhtCrawler.DHT
             _nodeQueue?.Dispose();
             _recvMessageQueue?.Dispose();
             _sendMessageQueue?.Dispose();
-            _responseMessageQueue?.Dispose();
+            _replyMessageQueue?.Dispose();
         }
     }
 }

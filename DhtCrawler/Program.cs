@@ -377,8 +377,7 @@ namespace DhtCrawler
             var redisServer = ConfigurationManager.Default.GetString("redis.server");
             if (redisServer.IsBlank())
             {
-                IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(500));
-                //IocContainer.RegisterType<AbstractMessageMap>(DefaultMessageMap.Instance);
+                IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(600));
             }
             else
             {
@@ -434,9 +433,7 @@ namespace DhtCrawler
                 SendRateLimit = dhtSection.GetInt("SendRateLimit", 150),
                 ReceiveRateLimit = dhtSection.GetInt("ReceiveRateLimit", 150),
                 ReceiveQueueMaxSize = dhtSection.GetInt("ReceiveQueueMaxSize", 20480),
-                KTableSize = dhtSection.GetInt("KTableSize", 1024),
-                ProcessWaitSize = dhtSection.GetInt("ProcessWaitSize"),
-                ProcessWaitTime = dhtSection.GetInt("ProcessWaitTime", 100)
+                KTableSize = dhtSection.GetInt("KTableSize", 1024)
             };
             var dhtClient = new DhtClient(dhtConfig);
             dhtClient.OnFindPeer += DhtClient_OnFindPeer;

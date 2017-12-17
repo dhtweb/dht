@@ -20,7 +20,7 @@ namespace DhtCrawler.DHT.Message
 
         private class IdMapInfo
         {
-            private HashSet<long> peers;
+            private readonly HashSet<long> peers;
             public TransactionId TransactionId { get; set; }
             public int Count
             {
@@ -49,6 +49,14 @@ namespace DhtCrawler.DHT.Message
                 lock (this)
                     return peers.Remove(peer);
             }
+
+            public IList<long> GetPeers()
+            {
+                lock (this)
+                {
+                    return peers.ToArray();
+                }
+            }
         }
 
         private static readonly ILog log = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
@@ -65,8 +73,10 @@ namespace DhtCrawler.DHT.Message
 
         private readonly ConcurrentDictionary<byte[], IdMapInfo> _idMappingInfo =
             new ConcurrentDictionary<byte[], IdMapInfo>(ByteArrayComparer);
-
+        private readonly ConcurrentHashSet<long> filterNode = new ConcurrentHashSet<long>();
         private readonly int _expireSeconds;
+
+        public override bool IsFull => _bucket.Count <= 0;
 
         public MessageMap(int expireSeconds)
         {
@@ -112,8 +122,18 @@ namespace DhtCrawler.DHT.Message
             {
                 foreach (var mapInfo in _idMappingInfo)
                 {
-                    if (mapInfo.Value.Count <= 0 || removeItems.Contains(mapInfo.Key))
+                    if (mapInfo.Value.Count <= 0)
+                    {
                         _idMappingInfo.TryRemove(mapInfo.Key, out var rm);
+                    }
+                    else if (removeItems.Contains(mapInfo.Key))
+                    {
+                        var badPeers = mapInfo.Value.GetPeers();
+                        foreach (var badPeer in badPeers)
+                        {
+                            filterNode.Add(badPeer);
+                        }
+                    }
                 }
             }
             log.Info($"清理过期的命令ID,清理后可用命令ID数:{_bucket.Count},用时:{(DateTime.Now - startTime).TotalSeconds}");
@@ -122,6 +142,11 @@ namespace DhtCrawler.DHT.Message
         protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId)
         {
             var nodeId = node.CompactEndPoint().ToInt64();
+            if (filterNode.Contains(nodeId))
+            {
+                msgId = null;
+                return false;
+            }
             TransactionId messageId;
             if (_idMappingInfo.TryGetValue(infoHash, out var idMap))
             {
@@ -181,18 +206,19 @@ namespace DhtCrawler.DHT.Message
                     {
                         var nodeId = node.CompactEndPoint().ToInt64();
                         idMap.Remove(nodeId);
+                        filterNode.Remove(nodeId);
                         if (idMap.Count <= 0)
                         {
                             _idMappingInfo.TryRemove(mapInfo.InfoHash, out var rm);
-                            if (_mappingInfo.TryRemove(msgId, out var obj))
-                                _bucket.Add(msgId);
+                            _mappingInfo.TryRemove(msgId, out var obj);
+                            _bucket.Add(msgId);
                         }
                     }
                 }
                 else
                 {
-                    if (_mappingInfo.TryRemove(msgId, out var obj))
-                        _bucket.Add(msgId);
+                    _mappingInfo.TryRemove(msgId, out var obj);
+                    _bucket.Add(msgId);
                 }
             }
             if (mapInfo?.InfoHash == null)
