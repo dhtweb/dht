@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using DhtCrawler.Common.Collections;
 using DhtCrawler.Common.Compare;
+using DhtCrawler.Common.Filters;
 using DhtCrawler.Common.Utils;
 using log4net;
 
@@ -63,8 +64,7 @@ namespace DhtCrawler.DHT.Message
 
         private static readonly IEqualityComparer<byte[]> ByteArrayComparer =
             new WrapperEqualityComparer<byte[]>((x, y) => x.Length == y.Length && x.SequenceEqual(y),
-                x => x.Sum(b => b));
-        public static readonly MessageMap Default = new MessageMap(1200);
+                x => x[0] << 8 | x[x.Length - 1]);
 
         private readonly BlockingCollection<TransactionId> _bucket = new BlockingCollection<TransactionId>();
 
@@ -73,8 +73,8 @@ namespace DhtCrawler.DHT.Message
 
         private readonly ConcurrentDictionary<byte[], IdMapInfo> _idMappingInfo =
             new ConcurrentDictionary<byte[], IdMapInfo>(ByteArrayComparer);
-        private readonly ConcurrentHashSet<long> filterNode = new ConcurrentHashSet<long>();
         private readonly int _expireSeconds;
+        private readonly IFilter<long> _filter;
 
         public override bool IsFull => _bucket.Count <= 0;
 
@@ -82,6 +82,7 @@ namespace DhtCrawler.DHT.Message
         {
             this._expireSeconds = expireSeconds;
             InitBucket();
+            _filter = IocContainer.GetService<IFilter<long>>();
         }
 
         private void InitBucket()
@@ -122,17 +123,14 @@ namespace DhtCrawler.DHT.Message
             {
                 foreach (var mapInfo in _idMappingInfo)
                 {
-                    if (mapInfo.Value.Count <= 0)
+                    if (mapInfo.Value.Count > 0 && !removeItems.Contains(mapInfo.Key))
+                        continue;
+                    _idMappingInfo.TryRemove(mapInfo.Key, out var rm);
+                    if (rm.Count <= 0)
+                        continue;
+                    foreach (var peer in rm.GetPeers())
                     {
-                        _idMappingInfo.TryRemove(mapInfo.Key, out var rm);
-                    }
-                    else if (removeItems.Contains(mapInfo.Key))
-                    {
-                        var badPeers = mapInfo.Value.GetPeers();
-                        foreach (var badPeer in badPeers)
-                        {
-                            filterNode.Add(badPeer);
-                        }
+                        _filter.Add(peer);
                     }
                 }
             }
@@ -142,7 +140,7 @@ namespace DhtCrawler.DHT.Message
         protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId)
         {
             var nodeId = node.CompactEndPoint().ToInt64();
-            if (filterNode.Contains(nodeId))
+            if (_filter.Contain(nodeId))
             {
                 msgId = null;
                 return false;
@@ -206,7 +204,6 @@ namespace DhtCrawler.DHT.Message
                     {
                         var nodeId = node.CompactEndPoint().ToInt64();
                         idMap.Remove(nodeId);
-                        filterNode.Remove(nodeId);
                         if (idMap.Count <= 0)
                         {
                             _idMappingInfo.TryRemove(mapInfo.InfoHash, out var rm);

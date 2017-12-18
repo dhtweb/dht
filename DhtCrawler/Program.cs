@@ -1,5 +1,6 @@
 ﻿using DhtCrawler.DHT;
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -18,6 +19,7 @@ using log4net.Config;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
 using DhtCrawler.Common.Compare;
+using DhtCrawler.Common.Filters;
 using DhtCrawler.Common.Utils;
 using DhtCrawler.Configuration;
 using DhtCrawler.DHT.Message;
@@ -379,6 +381,10 @@ namespace DhtCrawler
             {
                 IocContainer.RegisterType<AbstractMessageMap>(new RedisMessageMap(ConfigurationManager.Default.GetString("redis.server")));
             }
+            IocContainer.RegisterType<IFilter<long>>(new BloomFilter<long>(1000000, 16, (seed, item) =>
+            {
+                return (item << 16 | seed).GetHashCode();
+            }));
         }
 
         private static void EnsureDirectory()
