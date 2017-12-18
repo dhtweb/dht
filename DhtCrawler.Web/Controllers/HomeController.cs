@@ -8,24 +8,29 @@ using System.Threading.Tasks;
 using DhtCrawler.Common;
 using Microsoft.AspNetCore.Mvc;
 using DhtCrawler.Web.Models;
-using DhtCrawler.Common.Web.Mvc.Result;
 using DhtCrawler.Service;
 using DhtCrawler.Service.Model;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace DhtCrawler.Web.Controllers
 {
     public class HomeController : Controller
     {
-        private InfoHashRepository _infoHashRepository;
-
-        public HomeController(InfoHashRepository infoHashRepository)
+        private readonly InfoHashRepository _infoHashRepository;
+        private readonly IMemoryCache _cache;
+        public HomeController(InfoHashRepository infoHashRepository, IMemoryCache cache)
         {
             this._infoHashRepository = infoHashRepository;
+            _cache = cache;
         }
         public async Task<IActionResult> Index()
         {
-            ViewBag.TorrentNum = await _infoHashRepository.GetTorrentNumAsync();
+            ViewBag.TorrentNum = await _cache.GetOrCreateAsync("total", entry =>
+             {
+                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+                 return _infoHashRepository.GetTorrentNumAsync();
+             });
             return View();
         }
 
@@ -53,6 +58,11 @@ namespace DhtCrawler.Web.Controllers
                 {
                     var dicInfo = await System.IO.File.ReadAllTextAsync(file, Encoding.UTF8);
                     var model = dicInfo.ToObjectFromJson<InfoHashModel>();
+                    if (model == null)
+                    {
+                        Console.WriteLine(file);
+                        continue;
+                    }
                     model.CreateTime = System.IO.File.GetLastWriteTime(file);
                     model.IsDown = true;
                     if (model.Files != null && model.Files.Any(f => f.Name.IndexOf('/') > -1))

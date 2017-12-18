@@ -10,25 +10,40 @@ using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Text;
 using DhtCrawler.Common.Web.Mvc.Static;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace DhtCrawler.Web.Controllers
 {
     public class ListController : Controller
     {
         private const int PageSize = 15;
-        private InfoHashRepository _infoHashRepository;
-        private IndexSearchService _indexSearchService;
-        public ListController(InfoHashRepository infoHashRepository, IndexSearchService indexSearchService)
+        private readonly InfoHashRepository _infoHashRepository;
+        private readonly IndexSearchService _indexSearchService;
+        private readonly IMemoryCache _cache;
+        public ListController(InfoHashRepository infoHashRepository, IndexSearchService indexSearchService, IMemoryCache cache)
         {
             _infoHashRepository = infoHashRepository;
             _indexSearchService = indexSearchService;
+            _cache = cache;
         }
 
         public IActionResult List(string keyword, int index = 1)
         {
             ViewBag.SearchKey = keyword;
-            var list = _indexSearchService.GetList(index, PageSize, out int count, keyword);
-            return View(new PageModel<InfoHashModel>() { PageIndex = index, PageSize = PageSize, Total = count, List = list });
+            var key = keyword.ToLower() + ":" + index;
+            var page = _cache.GetOrCreate(key, entry =>
+             {
+                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30);
+                 var list = _indexSearchService.GetList(index, PageSize, out int count, keyword);
+                 return new PageModel<InfoHashModel>()
+                 {
+                     PageIndex = index,
+                     PageSize = PageSize,
+                     Total = count,
+                     List = list
+                 };
+             });
+            return View(page);
         }
 
         [ServiceFilter(typeof(StaticHtmlFilterAttribute), IsReusable = true)]

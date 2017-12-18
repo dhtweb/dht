@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using DhtCrawler.Common.Compare;
 using JiebaNet.Segmenter;
@@ -9,6 +8,7 @@ namespace DhtCrawler.Common.Index.Utils
 {
     public static class AnalyzerUtils
     {
+        public const int DefaultMaxWordLength = 15;
         public static IList<Token> MergeTokenList(this IList<Token> tokens)
         {
             var resultToken = new List<Token>(tokens.Count);

@@ -50,7 +50,7 @@ namespace DhtCrawler.Web.Controllers
                 while (queue.Count > 0)
                 {
                     var name = queue.Dequeue();
-                    var titleWords = name.CutForSearch().Union(name.Cut()).Union(name.Cut(false)).Where(w => w.Length > 1);
+                    var titleWords = name.CutForSearch().Union(name.Cut()).Union(name.Cut(false)).Where(w => w.Length > 1 && w.Length < AnalyzerUtils.DefaultMaxWordLength);
                     foreach (var word in titleWords)
                     {
                         if (!wordDic.ContainsKey(word))

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using DhtCrawler.Common.Index;
 using DhtCrawler.Common.Index.Analyzer;
+using DhtCrawler.Common.Index.Utils;
 using DhtCrawler.Service.Model;
 using Lucene.Net.Analysis;
 using Lucene.Net.Documents;
@@ -21,7 +22,7 @@ namespace DhtCrawler.Service.Index
 
         protected override string IndexDir { get; }
 
-        protected override Analyzer KeyWordAnalyzer => new JieBaAnalyzer();
+        protected override Analyzer KeyWordAnalyzer => new JieBaAnalyzer(0, AnalyzerUtils.DefaultMaxWordLength);
 
         protected override Document GetDocument(InfoHashModel item)
         {

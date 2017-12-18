@@ -375,16 +375,13 @@ namespace DhtCrawler
             var redisServer = ConfigurationManager.Default.GetString("redis.server");
             if (redisServer.IsBlank())
             {
+                IocContainer.RegisterType<IFilter<long>>(new BloomFilter<long>(10000000, 32, (seed, item) => (item << 16 | seed).GetHashCode() & int.MaxValue));
                 IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(600));
             }
             else
             {
                 IocContainer.RegisterType<AbstractMessageMap>(new RedisMessageMap(ConfigurationManager.Default.GetString("redis.server")));
             }
-            IocContainer.RegisterType<IFilter<long>>(new BloomFilter<long>(1000000, 16, (seed, item) =>
-            {
-                return (item << 16 | seed).GetHashCode();
-            }));
         }
 
         private static void EnsureDirectory()

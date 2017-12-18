@@ -51,7 +51,6 @@ namespace DhtCrawler.Web
             {
                 app.UseExceptionHandler("/Home/Error");
             }
-
             app.UseStaticFiles();
             app.UseMvc(routes =>
             {
