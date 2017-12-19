@@ -40,6 +40,7 @@ namespace DhtCrawler.DHT
         /// 默认入队等待时间（超时丢弃）
         /// </summary>
         private static readonly TimeSpan EnqueueWaitTime = TimeSpan.FromSeconds(10);
+
         private readonly ILog _logger = LogManager.GetLogger(typeof(DhtClient));
 
         private readonly UdpClient _client;
@@ -321,11 +322,11 @@ namespace DhtCrawler.DHT
                     switch (msg.MesageType)
                     {
                         case MessageType.Request:
-                            _requestQueue.TryAdd(item);
+                            _requestQueue.TryAdd(item, 1000);
                             //await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
                             break;
                         case MessageType.Response:
-                            _responseQueue.TryAdd(item);
+                            _responseQueue.TryAdd(item, 2000);
                             //await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
                             break;
                     }
@@ -493,8 +494,7 @@ namespace DhtCrawler.DHT
                 nodeSet.Clear();
                 if (!running)
                     return;
-                if (nodeSet.Count < 10 || (SendMessageCount > 0 && ReceviceMessageCount > 0))
-                    await Task.Delay(60 * 1000, _cancellationTokenSource.Token);
+                await Task.Delay(60 * 1000, _cancellationTokenSource.Token);
             }
         }
 
