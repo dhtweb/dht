@@ -232,7 +232,7 @@ namespace DhtCrawler.DHT
             if (msg.MessageId.Length != 2)
                 return;
             var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
-            var flag = MessageMap.RequireRegisteredInfo(msg, responseNode);
+            var flag = await MessageMap.RequireRegisteredInfoAsync(msg, responseNode);
             if (!flag)
             {
                 return;
@@ -304,13 +304,13 @@ namespace DhtCrawler.DHT
             }
         }
 
-        private void ProcessMsgData()
+        private async Task ProcessMsgData()
         {
             while (running)
             {
                 if (!_recvMessageQueue.TryTake(out DhtData dhtData))
                 {
-                    Thread.Sleep(1000);
+                    await Task.Delay(1000);
                     continue;
                 }
                 try
@@ -322,9 +322,11 @@ namespace DhtCrawler.DHT
                     {
                         case MessageType.Request:
                             _requestQueue.TryAdd(item);
+                            //await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
                             break;
                         case MessageType.Response:
                             _responseQueue.TryAdd(item);
+                            //await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
                             break;
                     }
                 }
@@ -432,7 +434,7 @@ namespace DhtCrawler.DHT
                 {
                     if (queue == _sendMessageQueue)
                     {
-                        var regResult = MessageMap.RegisterMessage(msg, node);
+                        var regResult = await MessageMap.RegisterMessageAsync(msg, node);
                         if (!regResult)
                         {
                             continue;
@@ -454,7 +456,7 @@ namespace DhtCrawler.DHT
                 {
                     if (ex is SocketException || ex is InvalidOperationException)
                     {
-                        MessageMap.RequireRegisteredInfo(msg, node);
+                        await MessageMap.RequireRegisteredInfoAsync(msg, node);
                     }
                     _logger.Error(ex);
                 }
@@ -551,7 +553,10 @@ namespace DhtCrawler.DHT
         {
             running = true;
             _client.BeginReceive(Recevie_Data, _client);
-            _tasks.Add(Task.Factory.StartNew(ProcessMsgData, TaskCreationOptions.LongRunning).ContinueWith(t => { _logger.Info("Process Receive Task Completed"); }));
+            Task.Run(() =>
+            {
+                _tasks.Add(ProcessMsgData().ContinueWith(t => { _logger.Info("Process Receive Task Completed"); }));
+            });
             for (int i = 0; i < _processResponseThreadNum; i++)
             {
                 var local = i;
@@ -568,13 +573,6 @@ namespace DhtCrawler.DHT
                     _tasks.Add(LoopProcessRequestMsg().ContinueWith(t => { _logger.InfoFormat("Process Request Msg Task {0} Completed", local); }));
                 });
             }
-            Task.Run(() =>
-            {
-                _tasks.Add(LoopProcessRequestMsg().ContinueWith(t =>
-                {
-                    _logger.Info("Process Request Msg Task Completed");
-                }));
-            });
             Task.Run(() =>
             {
                 _tasks.Add(LoopFindNodes().ContinueWith(t =>
