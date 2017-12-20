@@ -20,10 +20,25 @@ namespace DhtCrawler.Common.Filters
                 do
                 {
                     ri = rand.Next();
-                } while (_seeds.Contains(ri));
+                } while (_seeds.Contains(ri) || !IsSt(ri));
                 _seeds[i] = ri;
             }
             _hashFunc = hash;
+        }
+        /// <summary>
+        /// 是否素数
+        /// </summary>
+        /// <param name="n"></param>
+        /// <returns></returns>
+        private static bool IsSt(int n)
+        {
+            int m = (int)Math.Sqrt(n);
+            for (int i = 2; i <= m; i++)
+            {
+                if (n % i == 0 && i != n)
+                    return false;
+            }
+            return true;
         }
 
         public bool Contain(T item)

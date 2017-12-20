@@ -322,11 +322,11 @@ namespace DhtCrawler.DHT
                     switch (msg.MesageType)
                     {
                         case MessageType.Request:
-                            _requestQueue.TryAdd(item, 1000);
+                            _requestQueue.TryAdd(item);
                             //await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
                             break;
                         case MessageType.Response:
-                            _responseQueue.TryAdd(item, 2000);
+                            _responseQueue.TryAdd(item, 100);
                             //await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
                             break;
                     }
