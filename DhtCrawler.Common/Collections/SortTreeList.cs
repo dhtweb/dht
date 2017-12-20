@@ -97,12 +97,12 @@ namespace DhtCrawler.Common.Collections
 
         public void Clear()
         {
-            this.count = 0;
             if (root != null)
             {
                 root.Left = root.Right = null;
             }
             root = null;
+            this.count = 0;
         }
 
         public bool Contains(T item)
@@ -131,7 +131,74 @@ namespace DhtCrawler.Common.Collections
 
         public bool Remove(T item)
         {
-            throw new NotImplementedException();
+            if (root == null)
+            {
+                return false;
+            }
+
+            TreeNode<T> node = root, parent = null;
+            while (node != null)
+            {
+                var flag = comparer.Compare(item, node.Data);
+                if (flag == 0)
+                {
+                    if (parent == null)
+                    {
+                        //先不管
+                    }
+                    else
+                    {
+                        var isLeft = node == parent.Left;
+                        if (node.Right == null)
+                        {
+                            if (isLeft)
+                            {
+                                parent.Left = node.Left;
+                            }
+                            else
+                            {
+                                parent.Right = node.Left;
+                            }
+                        }
+                        else if (node.Left == null)
+                        {
+                            if (isLeft)
+                            {
+                                parent.Left = node.Right;
+                            }
+                            else
+                            {
+                                parent.Right = node.Right;
+                            }
+                        }
+                        else
+                        {
+                            TreeNode<T> mvNode = node, mvParent = parent;
+                            //找到右节点
+                            while (mvNode.Right != null)
+                            {
+                                mvParent = mvNode;
+                                mvNode = mvNode.Right;
+                            }
+                            if (isLeft)
+                            {
+                                parent.Left = mvNode;
+                            }
+                            else
+                            {
+                                parent.Right = mvNode;
+                            }
+                            mvParent.Right = mvNode.Left;
+                            mvNode.Left = node.Left;
+                            mvNode.Right = node.Right;
+                        }
+                        return true;
+                    }
+                }
+                parent = node;
+                node = flag > 0 ? node.Right : node.Left;
+            }
+            return false;
         }
 
         public int Count => count;

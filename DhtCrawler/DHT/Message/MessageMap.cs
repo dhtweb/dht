@@ -137,7 +137,8 @@ namespace DhtCrawler.DHT.Message
             {
                 if (mapInfo.Value.Count > 0 && !removeItems.Contains(mapInfo.Key))
                     continue;
-                _idMappingInfo.TryRemove(mapInfo.Key, out var rm);
+                if (!_idMappingInfo.TryRemove(mapInfo.Key, out var rm))
+                    continue;
                 if (rm.Count <= 0)
                     continue;
                 foreach (var peer in rm.GetPeers())
