@@ -157,11 +157,11 @@ namespace DhtCrawler.Web.Controllers
                 {
                     if (kv.Value <= 1)
                         continue;
-                    await Response.WriteAsync(kv.Key + Environment.NewLine);
                     list.AddLast(new InfoHashModel() { InfoHash = kv.Key, DownNum = kv.Value });
-                    if (list.Count > 1000)
+                    if (list.Count > 10000)
                     {
                         await _infoHashRepository.InsertOrUpdateAsync(list);
+                        await Response.WriteAsync(kv.Key + Environment.NewLine);
                         list.Clear();
                     }
                 }

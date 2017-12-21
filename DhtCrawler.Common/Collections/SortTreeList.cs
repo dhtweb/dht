@@ -17,20 +17,25 @@ namespace DhtCrawler.Common.Collections
             }
         }
 
-        private int count;
-        private IComparer<T> comparer;
-        private TreeNode<T> root;
+        private int _count;
+        private readonly IComparer<T> _comparer;
+        private TreeNode<T> _root;
+
+        public SortTreeList() : this(Comparer<T>.Default)
+        {
+
+        }
         public SortTreeList(IComparer<T> comparer)
         {
-            this.comparer = comparer;
+            this._comparer = comparer;
         }
         public IEnumerator<T> GetEnumerator()
         {
-            if (root == null)
+            if (_root == null)
             {
                 yield break;
             }
-            var node = root;
+            var node = _root;
             var stack = new Stack<TreeNode<T>>();
             stack.Push(node);
             while (stack.Count > 0)
@@ -65,7 +70,7 @@ namespace DhtCrawler.Common.Collections
         {
             while (true)
             {
-                if (comparer.Compare(item, node.Data) >= 0)
+                if (_comparer.Compare(item, node.Data) >= 0)
                 {
                     if (node.Right == null)
                     {
@@ -87,36 +92,38 @@ namespace DhtCrawler.Common.Collections
         }
         public void Add(T item)
         {
-            if (root == null)
+            if (_root == null)
             {
-                root = new TreeNode<T>(item);
+                _root = new TreeNode<T>(item);
+                _count++;
                 return;
             }
-            Add(root, item);
+            Add(_root, item);
+            _count++;
         }
 
         public void Clear()
         {
-            if (root != null)
+            if (_root != null)
             {
-                root.Left = root.Right = null;
+                _root.Left = _root.Right = null;
             }
-            root = null;
-            this.count = 0;
+            _root = null;
+            this._count = 0;
         }
 
         public bool Contains(T item)
         {
-            if (root == null)
+            if (_root == null)
                 return false;
-            var node = root;
+            var node = _root;
             while (node != null)
             {
-                if (comparer.Compare(item, node.Data) == 0)
+                if (_comparer.Compare(item, node.Data) == 0)
                 {
                     return true;
                 }
-                node = comparer.Compare(item, node.Data) > 0 ? node.Right : node.Left;
+                node = _comparer.Compare(item, node.Data) > 0 ? node.Right : node.Left;
             }
             return false;
         }
@@ -131,69 +138,65 @@ namespace DhtCrawler.Common.Collections
 
         public bool Remove(T item)
         {
-            if (root == null)
+            if (_root == null)
             {
                 return false;
             }
 
-            TreeNode<T> node = root, parent = null;
+            TreeNode<T> node = _root, parent = null;
             while (node != null)
             {
-                var flag = comparer.Compare(item, node.Data);
+                var flag = _comparer.Compare(item, node.Data);
                 if (flag == 0)
                 {
+                    TreeNode<T> nextNode;
+                    if (node.Right == null)
+                    {
+                        nextNode = node.Left;
+                    }
+                    else if (node.Left == null)
+                    {
+                        nextNode = node.Right;
+                    }
+                    else
+                    {
+                        TreeNode<T> mvNode = node.Right, mvParent = node;
+                        //找到右节点
+                        while (mvNode.Left != null)
+                        {
+                            mvParent = mvNode;
+                            mvNode = mvNode.Left;
+                        }
+                        node.Data = mvNode.Data;
+                        if (mvNode == mvParent.Left)
+                        {
+                            mvParent.Left = mvNode.Right;
+                        }
+                        else
+                        {
+                            mvParent.Right = mvNode.Right;
+                        }
+                        _count--;
+                        return true;
+                    }
                     if (parent == null)
                     {
-                        //先不管
+                        _root = nextNode;
                     }
                     else
                     {
                         var isLeft = node == parent.Left;
-                        if (node.Right == null)
+                        if (isLeft)
                         {
-                            if (isLeft)
-                            {
-                                parent.Left = node.Left;
-                            }
-                            else
-                            {
-                                parent.Right = node.Left;
-                            }
-                        }
-                        else if (node.Left == null)
-                        {
-                            if (isLeft)
-                            {
-                                parent.Left = node.Right;
-                            }
-                            else
-                            {
-                                parent.Right = node.Right;
-                            }
+                            parent.Left = nextNode;
                         }
                         else
                         {
-                            TreeNode<T> mvNode = node, mvParent = parent;
-                            //找到右节点
-                            while (mvNode.Right != null)
-                            {
-                                mvParent = mvNode;
-                                mvNode = mvNode.Right;
-                            }
-                            if (isLeft)
-                            {
-                                parent.Left = mvNode;
-                            }
-                            else
-                            {
-                                parent.Right = mvNode;
-                            }
-                            mvParent.Right = mvNode.Left;
-                            mvNode.Left = node.Left;
-                            mvNode.Right = node.Right;
+                            parent.Right = nextNode;
                         }
-                        return true;
                     }
+                    _count--;
+                    return true;
                 }
                 parent = node;
                 node = flag > 0 ? node.Right : node.Left;
@@ -201,16 +204,16 @@ namespace DhtCrawler.Common.Collections
             return false;
         }
 
-        public int Count => count;
+        public int Count => _count;
         public bool IsReadOnly => false;
         public int IndexOf(T item)
         {
-            if (root == null)
+            if (_root == null)
                 return -1;
             var index = 0;
             foreach (var it in this)
             {
-                if (comparer.Compare(it, item) == 0)
+                if (_comparer.Compare(it, item) == 0)
                 {
                     return index;
                 }
@@ -231,8 +234,24 @@ namespace DhtCrawler.Common.Collections
 
         public T this[int index]
         {
-            get { throw new NotImplementedException(); }
-            set { throw new NotImplementedException(); }
+            get
+            {
+                if (index >= _count)
+                {
+                    throw new IndexOutOfRangeException();
+                }
+                var i = 0;
+                foreach (var it in this)
+                {
+                    if (i == index)
+                    {
+                        return it;
+                    }
+                    i++;
+                }
+                return default(T);
+            }
+            set => throw new NotSupportedException("the list is sorted,not suport this operation");
         }
     }
 }
