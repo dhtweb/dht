@@ -203,7 +203,7 @@ namespace DhtCrawler.Common.Index
             {
                 var indexLocker = new object();
                 IndexWriter.DeleteAll();
-                Parallel.ForEach(list,
+                Parallel.ForEach(list, new ParallelOptions() { MaxDegreeOfParallelism = 10 },
                     () =>
                     {
                         var subIndex = Path.Combine(IndexDir, Guid.NewGuid().ToString());
@@ -236,7 +236,6 @@ namespace DhtCrawler.Common.Index
                                         IndexWriter.AddIndexes(reader);
                                     }
                                 }
-                                writer.DeleteAll();
                             }
                         }
                     });

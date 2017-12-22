@@ -375,7 +375,7 @@ namespace DhtCrawler
             var redisServer = ConfigurationManager.Default.GetString("redis.server");
             if (redisServer.IsBlank())
             {
-                IocContainer.RegisterType<IFilter<long>>(new BloomFilter<long>(10000000, 32, (seed, item) => (item << 16 | seed).GetHashCode() & int.MaxValue));
+                IocContainer.RegisterType<IFilter<long>>(new BloomFilter<long>(5000000, 32, (seed, item) => (item << 16 | seed).GetHashCode() & int.MaxValue));
                 IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(600));
             }
             else

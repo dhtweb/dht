@@ -159,7 +159,7 @@ namespace DhtCrawler.Service
         public IEnumerable<InfoHashModel> GetAllFullInfoHashModels(DateTime? start = null)
         {
             var id = 0L;
-            var size = 500;
+            var size = 1000;
             var sql = new StringBuilder("SELECT id, infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, files, isdanger FROM t_infohash WHERE isdown=TRUE AND id > @id");
             if (start.HasValue)
             {

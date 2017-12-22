@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text;
+using System.Threading.Tasks;
 using DhtCrawler.Service.Index;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,6 +27,16 @@ namespace DhtCrawler.Web.Controllers
                 }
             });
             return new EmptyResult();
+        }
+
+        public IActionResult MBuild()
+        {
+            var i = 0;
+            Task.Factory.StartNew(() =>
+            {
+                _indexSearchService.MultipleThreadReBuildIndex();
+            });
+            return Content("over");
         }
     }
 }

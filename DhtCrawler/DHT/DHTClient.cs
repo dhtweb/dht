@@ -459,7 +459,6 @@ namespace DhtCrawler.DHT
                     {
                         await MessageMap.RequireRegisteredInfoAsync(msg, node);
                     }
-                    _logger.Error(ex);
                 }
             }
         }

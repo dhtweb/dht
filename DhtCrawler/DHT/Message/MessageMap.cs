@@ -96,55 +96,31 @@ namespace DhtCrawler.DHT.Message
         private void ClearExpireMessage(int clearSize = 1000)
         {
             var startTime = DateTime.Now;
-            var removeItems = new HashSet<byte[]>(ByteArrayComparer);
-            var snapshotMapInfo = _mappingInfo.ToArray();
-            var sortList = new SortTreeList<KeyValuePair<TransactionId, MapInfo>>(
-                new WrapperComparer<KeyValuePair<TransactionId, MapInfo>>((v1, v2) =>
-                    v1.Value.LastTime.CompareTo(v2.Value.LastTime)));//早的时间早过期
-            foreach (var item in snapshotMapInfo)
+            var rmList = _mappingInfo.OrderBy(t => t.Value.LastTime).Take(clearSize).ToDictionary(kv => kv.Value.InfoHash, kv => new { kv.Key, kv.Value.LastTime });
+            foreach (var kv in rmList)
             {
-                var tuple = item.Value;
-                if (!((DateTime.Now - tuple.LastTime).TotalSeconds > _expireSeconds))
-                    continue;
-                sortList.Add(item);
-            }
-
-            foreach (var item in sortList)
-            {
-                _mappingInfo.TryRemove(item.Key, out var rm);
-                removeItems.Add(rm.InfoHash);
-                _bucket.Add(item.Key);
-                if (removeItems.Count >= clearSize)
+                var infohash = kv.Key;
+                var msgId = kv.Value;
+                if (_mappingInfo.TryRemove(msgId.Key, out var map))
                 {
-                    break;
+                    _bucket.Add(msgId.Key);
+                }
+                if (_idMappingInfo.TryRemove(infohash, out var idMap))
+                {
+                    if (idMap.Count > 0 && (DateTime.Now - msgId.LastTime).TotalSeconds > _expireSeconds)//过期了的消息节点过滤
+                    {
+                        foreach (var peer in idMap.GetPeers())
+                        {
+                            _filter.Add(peer);
+                        }
+                    }
                 }
             }
-            //if (removeItems.Count <= 0)
-            //{
-            //    clearSize = clearSize / 10;
-            //    foreach (var item in sortList)
-            //    {
-            //        if (removeItems.Count >= clearSize)
-            //        {
-            //            break;
-            //        }
-            //        _mappingInfo.TryRemove(item.Key, out var rm);
-            //        removeItems.Add(rm.InfoHash);
-            //        _bucket.Add(item.Key);
-            //    }
-            //}
             foreach (var mapInfo in _idMappingInfo)
             {
-                if (mapInfo.Value.Count > 0 && !removeItems.Contains(mapInfo.Key))
-                    continue;
-                if (!_idMappingInfo.TryRemove(mapInfo.Key, out var rm))
-                    continue;
-                if (rm.Count <= 0)
-                    continue;
-                foreach (var peer in rm.GetPeers())
-                {
-                    _filter.Add(peer);
-                }
+                if (mapInfo.Value.Count <= 0)
+                    _idMappingInfo.TryRemove(mapInfo.Key, out var rm);
+
             }
             log.Info($"清理过期的命令ID,清理后可用命令ID数:{_bucket.Count},用时:{(DateTime.Now - startTime).TotalSeconds}");
         }
