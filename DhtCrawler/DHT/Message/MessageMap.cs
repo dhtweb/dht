@@ -191,12 +191,17 @@ namespace DhtCrawler.DHT.Message
                     lock (idMap)
                     {
                         var nodeId = node.CompactEndPoint().ToInt64();
-                        idMap.Remove(nodeId);
+                        var isok = idMap.Remove(nodeId);
                         if (idMap.Count <= 0)
                         {
                             _idMappingInfo.TryRemove(mapInfo.InfoHash, out var rm);
                             _mappingInfo.TryRemove(msgId, out var obj);
                             _bucket.Add(msgId);
+                        }
+                        if (!isok)
+                        {
+                            infoHash = null;
+                            return false;
                         }
                     }
                 }

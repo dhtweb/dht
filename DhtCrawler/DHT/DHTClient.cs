@@ -361,7 +361,14 @@ namespace DhtCrawler.DHT
             {
                 if (!_requestQueue.TryTake(out var msgInfo))
                 {
-                    await Task.Delay(1000, _cancellationTokenSource.Token);
+                    if (_sendMessageQueue.TryTake(out var resItem))
+                    {
+                        await ProcessResponseAsync(resItem.Item1, resItem.Item2);
+                    }
+                    else
+                    {
+                        await Task.Delay(1000, _cancellationTokenSource.Token);
+                    }
                     continue;
                 }
                 try
