@@ -1,6 +1,5 @@
 ﻿using DhtCrawler.DHT;
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -18,7 +17,6 @@ using log4net;
 using log4net.Config;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Collections;
-using DhtCrawler.Common.Compare;
 using DhtCrawler.Common.Filters;
 using DhtCrawler.Common.Utils;
 using DhtCrawler.Configuration;
@@ -182,7 +180,7 @@ namespace DhtCrawler
                             }
                             if (DownlaodedSet.Contains(info.Value))
                                 continue;
-                            Console.WriteLine($"thread {taskId} downloading {info.Value}");
+                            Console.WriteLine($"thread {taskId:x2} downloading {info.Value}");
                             foreach (var peer in info.Peers.Where(p => p.Address.IsPublic()))
                             {
                                 if (!running)
@@ -375,7 +373,8 @@ namespace DhtCrawler
             var redisServer = ConfigurationManager.Default.GetString("redis.server");
             if (redisServer.IsBlank())
             {
-                IocContainer.RegisterType<IFilter<long>>(new BloomFilter<long>(5000000, 32, (seed, item) => (item << 16 | seed).GetHashCode() & int.MaxValue));
+                //IocContainer.RegisterType<IFilter<long>>(new BloomFilter<long>(5000000, 32, (seed, item) => (item << 16 | seed).GetHashCode() & int.MaxValue));
+                IocContainer.RegisterType<IFilter<long>>(new EmptyFilter<long>());
                 IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(600));
             }
             else

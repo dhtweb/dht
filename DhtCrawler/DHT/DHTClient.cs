@@ -51,7 +51,7 @@ namespace DhtCrawler.DHT
         private readonly BlockingCollection<DhtNode> _nodeQueue;
         private readonly BlockingCollection<DhtData> _recvMessageQueue;
         private readonly BlockingCollection<Tuple<DhtMessage, IPEndPoint>> _requestQueue;
-        private readonly BlockingCollection<Tuple<DhtMessage, IPEndPoint>> _responseQueue;
+        private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _responseQueue;
         private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _sendMessageQueue;
         private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _replyMessageQueue;//
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -120,7 +120,7 @@ namespace DhtCrawler.DHT
             _nodeQueue = new BlockingCollection<DhtNode>(config.NodeQueueMaxSize);
             _recvMessageQueue = new BlockingCollection<DhtData>(config.ReceiveQueueMaxSize);
             _requestQueue = new BlockingCollection<Tuple<DhtMessage, IPEndPoint>>(config.RequestQueueMaxSize);
-            _responseQueue = new BlockingCollection<Tuple<DhtMessage, IPEndPoint>>(config.ResponseQueueMaxSize);
+            _responseQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>(config.ResponseQueueMaxSize);
             _sendMessageQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>(config.SendQueueMaxSize);
             _replyMessageQueue = new BlockingCollection<Tuple<DhtMessage, DhtNode>>();
 
@@ -228,23 +228,15 @@ namespace DhtCrawler.DHT
             _replyMessageQueue.TryAdd(new Tuple<DhtMessage, DhtNode>(response, new DhtNode(remotePoint)));
         }
 
-        private async Task ProcessResponseAsync(DhtMessage msg, IPEndPoint remotePoint)
+        private async Task ProcessResponseAsync(DhtMessage msg, DhtNode responseNode)
         {
-            if (msg.MessageId.Length != 2)
-                return;
-            var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
-            var flag = await MessageMap.RequireRegisteredInfoAsync(msg, responseNode);
-            if (!flag)
-            {
-                return;
-            }
             _kTable.AddOrUpdateNode(responseNode);
             object nodeInfo;
             ISet<DhtNode> nodes = null;
             switch (msg.CommandType)
             {
                 case CommandType.Find_Node:
-                    if (_kTable.IsFull || MessageMap.IsFull || !msg.Data.TryGetValue("nodes", out nodeInfo))
+                    if (_kTable.IsFull || !msg.Data.TryGetValue("nodes", out nodeInfo))
                         return;
                     nodes = DhtNode.ParseNode((byte[])nodeInfo);
                     break;
@@ -318,16 +310,25 @@ namespace DhtCrawler.DHT
                 {
                     var dic = (Dictionary<string, object>)BEncoder.Decode(dhtData.Data);
                     var msg = new DhtMessage(dic);
-                    var item = new Tuple<DhtMessage, IPEndPoint>(msg, dhtData.RemoteEndPoint);
                     switch (msg.MesageType)
                     {
                         case MessageType.Request:
+                            var item = new Tuple<DhtMessage, IPEndPoint>(msg, dhtData.RemoteEndPoint);
                             _requestQueue.TryAdd(item);
-                            //await ProcessRequestAsync(msg, dhtData.RemoteEndPoint);
                             break;
                         case MessageType.Response:
-                            _responseQueue.TryAdd(item, 100);
-                            //await ProcessResponseAsync(msg, dhtData.RemoteEndPoint);
+                            if (msg.MessageId.Length != 2)
+                            {
+                                continue;
+                            }
+                            var remotePoint = dhtData.RemoteEndPoint;
+                            var responseNode = new DhtNode() { NodeId = (byte[])msg.Data["id"], Host = remotePoint.Address, Port = (ushort)remotePoint.Port };
+                            var flag = await MessageMap.RequireRegisteredInfoAsync(msg, responseNode);
+                            if (!flag)
+                            {
+                                continue;
+                            }
+                            _responseQueue.TryAdd(new Tuple<DhtMessage, DhtNode>(msg, responseNode), 10);
                             break;
                     }
                 }
@@ -458,6 +459,10 @@ namespace DhtCrawler.DHT
                     if (ex is SocketException || ex is InvalidOperationException)
                     {
                         await MessageMap.RequireRegisteredInfoAsync(msg, node);
+                    }
+                    else
+                    {
+                        _logger.Error("消息发送失败", ex);
                     }
                 }
             }
