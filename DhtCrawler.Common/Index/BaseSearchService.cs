@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Index.Analyzer;
 using DhtCrawler.Common.Index.Utils;
@@ -13,7 +14,6 @@ using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Search.Highlight;
 using Lucene.Net.Store;
-using Lucene.Net.Support;
 using Directory = Lucene.Net.Store.Directory;
 
 namespace DhtCrawler.Common.Index
@@ -220,6 +220,7 @@ namespace DhtCrawler.Common.Index
                     {
                         if (state.IsExceptional)
                             state.Break();
+                        Console.WriteLine("处理：" + Thread.CurrentThread.ManagedThreadId);
                         var doc = GetDocument(item);
                         writer.AddDocument(doc);
                         return writer;

@@ -1,42 +1,33 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
+using DhtCrawler.Common.Collections.Tree;
 
 namespace DhtCrawler.Common.Collections
 {
-    public enum Balance
+    public enum Balance : byte
     {
         EH, LH, RH
     }
-    public class TreeNode<T>
+     class AvlTreeNode<T> : TreeNode<T>
     {
-        public TreeNode<T> Left { get; set; }
-        public TreeNode<T> Right { get; set; }
-        public T Value { get; set; }
         public Balance Balance { get; set; }
+
+        public AvlTreeNode(T val) : base(val)
+        {
+        }
     }
-    public class AVLTreeSet<T> : ISet<T>
+    public class AVLTreeSet<T> : AbstractBinaryTree<T>, ISet<T>
     {
-        private TreeNode<T> _root;
         private IComparer<T> _comparer;
-        private int _count;
+
         public AVLTreeSet(IComparer<T> comparer)
         {
-            this._comparer = comparer;
+            _comparer = comparer;
         }
 
         public AVLTreeSet() : this(Comparer<T>.Default)
         {
 
-        }
-        public IEnumerator<T> GetEnumerator()
-        {
-            throw new NotImplementedException();
-        }
-
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return GetEnumerator();
         }
 
         void ICollection<T>.Add(T item)
@@ -94,25 +85,25 @@ namespace DhtCrawler.Common.Collections
             throw new NotImplementedException();
         }
 
-        public static TreeNode<T> LeftRotate(TreeNode<T> node)
+        private static AvlTreeNode<T> LeftRotate(AvlTreeNode<T> node)
         {
             var next = node.Right;
             node.Right = next.Left;
             next.Left = node;
-            return next;
+            return (AvlTreeNode<T>)next;
         }
 
-        public static TreeNode<T> RightRotate(TreeNode<T> node)
+        private static AvlTreeNode<T> RightRotate(AvlTreeNode<T> node)
         {
             var next = node.Left;
             node.Left = next.Right;
             next.Right = node;
-            return next;
+            return (AvlTreeNode<T>)next;
         }
 
-        private static TreeNode<T> RightRotateTree(TreeNode<T> node)
+        private static AvlTreeNode<T> RightRotateTree(AvlTreeNode<T> node)
         {
-            var left = node.Left;
+            var left = (AvlTreeNode<T>)node.Left;
             switch (left.Balance)
             {
                 case Balance.LH:
@@ -120,21 +111,37 @@ namespace DhtCrawler.Common.Collections
                     return RightRotate(node);
                 case Balance.RH:
                     //左旋后右旋
-                    left.Balance = Balance.LH;
-                    node.Left = LeftRotate(node.Left);
+                    node.Balance = left.Balance = Balance.EH;
+                    node.Left = LeftRotate((AvlTreeNode<T>)node.Left);
                     return RightRotate(node);
             }
             throw new ArgumentException("树结构错误");
         }
 
-        public bool InsertNode(TreeNode<T> node, TreeNode<T> parent, T item)
+        private static AvlTreeNode<T> LeftRotateTree(AvlTreeNode<T> node)
         {
-            var flag = _comparer.Compare(node.Value, item);
+            var right = (AvlTreeNode<T>)node.Right;
+            switch (right.Balance)
+            {
+                case Balance.RH:
+                    node.Balance = right.Balance = Balance.EH;
+                    return LeftRotate(node);
+                case Balance.LH:
+                    //左旋后右旋
+                    node.Balance = right.Balance = Balance.EH;
+                    node.Right = RightRotate((AvlTreeNode<T>)node.Right);
+                    return LeftRotate(node);
+            }
+            throw new ArgumentException("树结构错误");
+        }
+
+        private bool InsertNode(AvlTreeNode<T> node, AvlTreeNode<T> parent, T item, ref bool isHigh)
+        {
+            var flag = _comparer.Compare(item, node.Value);
             if (flag == 0)
             {
                 return false;
             }
-            TreeNode<T> addNode;
             bool isLeft = false;
             if (flag > 0)
             {
@@ -152,10 +159,10 @@ namespace DhtCrawler.Common.Collections
                             node.Balance = Balance.RH;
                             break;
                     }
-                    node.Right = new TreeNode<T>() { Value = item, Balance = Balance.EH };
+                    isHigh = node.Balance != Balance.EH;
+                    node.Right = new AvlTreeNode<T>(item) { Balance = Balance.EH };
                     return true;
                 }
-                addNode = node.Right;
             }
             else
             {
@@ -173,163 +180,103 @@ namespace DhtCrawler.Common.Collections
                             node.Balance = Balance.EH;
                             break;
                     }
-                    node.Left = new TreeNode<T>() { Value = item };
+                    isHigh = node.Balance != Balance.EH;
+                    node.Left = new AvlTreeNode<T>(item);
                     return true;
                 }
-                addNode = node.Left;
                 isLeft = true;
             }
-            var result = InsertNode(node.Right, parent, item);
+            var result = InsertNode((AvlTreeNode<T>)(isLeft ? node.Left : node.Right), node, item, ref isHigh);
             if (result)
             {
-                switch (addNode.Balance)
+                if (isHigh)
                 {
-                    case Balance.EH:
-                        break;
-                    case Balance.LH:
-                        switch (node.Balance)
-                        {
-                            case Balance.EH: //
-                                node.Balance = isLeft ? Balance.LH : Balance.RH;
-                                break;
-                            case Balance.LH:
-                                if (isLeft)
+                    isHigh = false;
+                    switch (node.Balance)//长高，需要平衡（需要判断长高的是左节点还是右节点）
+                    {
+                        case Balance.EH: //
+                            node.Balance = isLeft ? Balance.LH : Balance.RH;
+                            isHigh = true;
+                            break;
+                        case Balance.LH:
+                            if (isLeft)
+                            {
+                                //右旋平衡
+                                if (parent == null)
                                 {
-                                    //右旋平衡
-                                    RightRotateTree(node);
+                                    _root = RightRotateTree(node);
                                 }
                                 else
                                 {
-                                    node.Balance = Balance.EH;
+                                    parent.Left = RightRotateTree(node);
                                 }
-                                break;
-                            case Balance.RH:
-                                if (isLeft)
-                                {
-                                    node.Balance = Balance.EH;
-                                }
-                                else
-                                {
-                                    //左旋平衡
-                                }
-                                break;
-                        }
-                        break;
-                    case Balance.RH:
-                        switch (node.Balance)
-                        {
-                            case Balance.EH:
-                                node.Balance = Balance.RH;
-                                break;
-                            case Balance.LH:
+                            }
+                            else
+                            {
                                 node.Balance = Balance.EH;
-                                break;
-                            case Balance.RH:
-                                //左旋进行平衡
-                                break;
-                        }
-                        break;
+                            }
+                            break;
+                        case Balance.RH:
+                            if (isLeft)
+                            {
+                                node.Balance = Balance.EH;
+                            }
+                            else
+                            {
+                                //左旋平衡
+                                if (parent == null)
+                                {
+                                    _root = LeftRotateTree(node);
+                                }
+                                else
+                                {
+                                    parent.Right = LeftRotateTree(node);
+                                }
+                            }
+                            break;
+                    }
                 }
             }
             return result;
         }
 
-        public bool Add(T item)
+        public override bool Add(T item)
         {
             if (_root == null)
             {
-                _root = new TreeNode<T>() { Value = item, Balance = 0 };
+                _root = new AvlTreeNode<T>(item) { Balance = Balance.EH };
                 return true;
             }
-            TreeNode<T> node = _root, parent = null, rotate = null;
-            while (node != null)
+            bool top = false;
+            if (InsertNode((AvlTreeNode<T>)_root, null, item, ref top))
             {
-                var flag = _comparer.Compare(item, node.Value);
-                if (flag == 0)
-                {
-                    return false;
-                }
-                if (flag > 0)
-                {
-                    if (node.Right == null)
-                    {
-                        if (parent != null)
-                        {
-                            parent.Balance--;
-                        }
-                        node.Balance--;
-                        node.Right = new TreeNode<T>() { Value = item };
-                        break;
-                    }
-                    rotate = parent;
-                    parent = node;
-                    node = node.Right;
-                }
-                else
-                {
-                    if (node.Left == null)
-                    {
-                        if (parent != null)
-                        {
-                            parent.Balance++;
-                        }
-                        node.Balance++;
-                        node.Left = new TreeNode<T>() { Value = item };
-                        break;
-                    }
-                    rotate = parent;
-                    parent = node;
-                    node = node.Left;
-                }
-            }
-            if (parent == null)
-            {
+                _count++;
                 return true;
             }
-            //if (parent.Balance == 2 || parent.Balance == -2)
-            //{
-            //    if (rotate == null)
-            //    {
-            //        _root = RotateTree(parent);
-            //    }
-            //    else
-            //    {
-            //        if (rotate.Left == parent)
-            //        {
-            //            rotate.Left = RotateTree(parent);
-            //        }
-            //        else
-            //        {
-            //            rotate.Right = RotateTree(parent);
-            //        }
-            //    }
-            //}
-            return true;
-        }
-
-        public void Clear()
-        {
-            throw new NotImplementedException();
+            return false;
         }
 
         public bool Contains(T item)
         {
-            throw new NotImplementedException();
+            if (_root == null)
+                return false;
+            var node = _root;
+            while (node != null)
+            {
+                if (_comparer.Compare(item, node.Value) == 0)
+                {
+                    return true;
+                }
+                node = _comparer.Compare(item, node.Value) > 0 ? node.Right : node.Left;
+            }
+            return false;
         }
 
-        public void CopyTo(T[] array, int arrayIndex)
-        {
-            throw new NotImplementedException();
-        }
-
-        public bool Remove(T item)
+        public override bool Remove(T item)
         {
             _count--;
             throw new NotImplementedException();
         }
 
-        public int Count => _count;
-
-        public bool IsReadOnly => false;
     }
 }

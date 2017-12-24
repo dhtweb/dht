@@ -1,25 +1,12 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
+using DhtCrawler.Common.Collections.Tree;
 
 namespace DhtCrawler.Common.Collections
 {
-    public class SortTreeList<T> : IList<T>
+    public class SortTreeList<T> : AbstractBinaryTree<T>, IList<T>
     {
-        private class TreeNode<TN>
-        {
-            public TN Data { get; set; }
-            public TreeNode<TN> Left { get; set; }
-            public TreeNode<TN> Right { get; set; }
-            public TreeNode(TN data)
-            {
-                this.Data = data;
-            }
-        }
-
-        private int _count;
         private readonly IComparer<T> _comparer;
-        private TreeNode<T> _root;
 
         public SortTreeList() : this(Comparer<T>.Default)
         {
@@ -29,48 +16,12 @@ namespace DhtCrawler.Common.Collections
         {
             this._comparer = comparer;
         }
-        public IEnumerator<T> GetEnumerator()
-        {
-            if (_root == null)
-            {
-                yield break;
-            }
-            var node = _root;
-            var stack = new Stack<TreeNode<T>>();
-            stack.Push(node);
-            while (stack.Count > 0)
-            {
-                while (node.Left != null)
-                {
-                    stack.Push(node.Left);
-                    node = node.Left;
-                }
-                node = stack.Pop();
-                yield return node.Data;
-                while (stack.Count > 0 && node.Right == null)
-                {
-                    node = stack.Pop();
-                    yield return node.Data;
-                }
-                if (node.Right == null)
-                {
-                    break;
-                }
-                stack.Push(node.Right);
-                node = node.Right;
-            }
-        }
-
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
 
         private void Add(TreeNode<T> node, T item)
         {
             while (true)
             {
-                if (_comparer.Compare(item, node.Data) >= 0)
+                if (_comparer.Compare(item, node.Value) >= 0)
                 {
                     if (node.Right == null)
                     {
@@ -90,26 +41,23 @@ namespace DhtCrawler.Common.Collections
                 }
             }
         }
-        public void Add(T item)
+
+        public override bool Add(T item)
         {
             if (_root == null)
             {
                 _root = new TreeNode<T>(item);
                 _count++;
-                return;
+                return true;
             }
             Add(_root, item);
             _count++;
+            return true;
         }
 
-        public void Clear()
+        void ICollection<T>.Add(T item)
         {
-            if (_root != null)
-            {
-                _root.Left = _root.Right = null;
-            }
-            _root = null;
-            this._count = 0;
+            Add(item);
         }
 
         public bool Contains(T item)
@@ -119,24 +67,16 @@ namespace DhtCrawler.Common.Collections
             var node = _root;
             while (node != null)
             {
-                if (_comparer.Compare(item, node.Data) == 0)
+                if (_comparer.Compare(item, node.Value) == 0)
                 {
                     return true;
                 }
-                node = _comparer.Compare(item, node.Data) > 0 ? node.Right : node.Left;
+                node = _comparer.Compare(item, node.Value) > 0 ? node.Right : node.Left;
             }
             return false;
         }
 
-        public void CopyTo(T[] array, int arrayIndex)
-        {
-            foreach (var node in this)
-            {
-                array[arrayIndex++] = node;
-            }
-        }
-
-        public bool Remove(T item)
+        public override bool Remove(T item)
         {
             if (_root == null)
             {
@@ -146,7 +86,7 @@ namespace DhtCrawler.Common.Collections
             TreeNode<T> node = _root, parent = null;
             while (node != null)
             {
-                var flag = _comparer.Compare(item, node.Data);
+                var flag = _comparer.Compare(item, node.Value);
                 if (flag == 0)
                 {
                     TreeNode<T> nextNode;
@@ -167,7 +107,7 @@ namespace DhtCrawler.Common.Collections
                             mvParent = mvNode;
                             mvNode = mvNode.Left;
                         }
-                        node.Data = mvNode.Data;
+                        node.Value = mvNode.Value;
                         if (mvNode == mvParent.Left)
                         {
                             mvParent.Left = mvNode.Right;
@@ -204,8 +144,6 @@ namespace DhtCrawler.Common.Collections
             return false;
         }
 
-        public int Count => _count;
-        public bool IsReadOnly => false;
         public int IndexOf(T item)
         {
             if (_root == null)
@@ -229,6 +167,10 @@ namespace DhtCrawler.Common.Collections
 
         public void RemoveAt(int index)
         {
+            if (index >= _count)
+            {
+                throw new IndexOutOfRangeException();
+            }
             throw new NotImplementedException();
         }
 
