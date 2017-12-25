@@ -18,6 +18,16 @@ namespace DhtCrawler.Configuration
                 return File.ReadAllText(path).ToObjectFromJson<ConfigurationManager>();
             }
         }
+
+        public bool GetBool(string key, bool defVal = false)
+        {
+            if (ContainsKey(key))
+            {
+                return Convert.ToBoolean(this[key]);
+            }
+            return defVal;
+        }
+
         public int GetInt(string key, int defVal = 0)
         {
             if (ContainsKey(key))

@@ -19,5 +19,5 @@
   "MaxDownThreadNum": 64,
   "DownMode": "Task",
   "filter": "hash",
-  "TryNoDownHash": false  
+  "ReTryDownHash": false
 }

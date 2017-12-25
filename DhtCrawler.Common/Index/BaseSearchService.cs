@@ -197,54 +197,80 @@ namespace DhtCrawler.Common.Index
 
         public void MultipleThreadReBuildIndex()
         {
-            var list = GetAllModels();
-            var rmPaths = new List<string>();
             lock (IndexWriter)
             {
-                var indexLocker = new object();
                 IndexWriter.DeleteAll();
-                Parallel.ForEach(list, new ParallelOptions() { MaxDegreeOfParallelism = 10 },
-                    () =>
+                var list = GetAllModels();
+                var tasks = new Task[10];
+                using (var enumerator = list.GetEnumerator())
+                {
+                    object indexLocker = new object(), mergeLocker = new object();
+                    for (var i = 0; i < tasks.Length; i++)
                     {
-                        var subIndex = Path.Combine(IndexDir, Guid.NewGuid().ToString());
-                        rmPaths.Add(subIndex);
-                        var subDirectory = GetIndexDirectory(subIndex);
-                        return new IndexWriter(subDirectory,
-                            new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
-                            {
-                                IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                                OpenMode = OpenMode.CREATE
-                            });
-                    },
-                    (item, state, writer) =>
-                    {
-                        if (state.IsExceptional)
-                            state.Break();
-                        Console.WriteLine("处理：" + Thread.CurrentThread.ManagedThreadId);
-                        var doc = GetDocument(item);
-                        writer.AddDocument(doc);
-                        return writer;
-                    }, writer =>
-                    {
-                        using (writer.Directory)
+                        tasks[i] = Task.Factory.StartNew(() =>
                         {
-                            using (writer)
+                            var subDic = Path.Combine(IndexDir, Guid.NewGuid().ToString());
+                            using (var subDirectory = GetIndexDirectory(subDic))
                             {
-                                lock (indexLocker)
-                                {
-                                    using (var reader = writer.GetReader(true))
+                                using (var writer = new IndexWriter(subDirectory,
+                                    new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
                                     {
-                                        IndexWriter.AddIndexes(reader);
+                                        IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
+                                        OpenMode = OpenMode.CREATE
+                                    }))
+                                {
+                                    var count = 0;
+                                    while (true)
+                                    {
+                                        lock (indexLocker)
+                                        {
+                                            T item;
+                                            if (enumerator.MoveNext())
+                                            {
+                                                item = enumerator.Current;
+                                            }
+                                            else
+                                            {
+                                                break;
+                                            }
+                                            var doc = GetDocument(item);
+                                            writer.AddDocument(doc);
+                                            if (count > 10000)
+                                            {
+                                                writer.Commit();
+                                                count = 0;
+                                            }
+                                        }
+                                    }
+                                    if (count > 0)
+                                    {
+                                        writer.Commit();
+                                    }
+                                    lock (mergeLocker)
+                                    {
+                                        using (var reader = writer.GetReader(true))
+                                        {
+                                            IndexWriter.AddIndexes(reader);
+                                        }
                                     }
                                 }
                             }
-                        }
-                    });
-                IndexWriter.Commit();
-                foreach (var rmPath in rmPaths)
-                {
-                    System.IO.Directory.Delete(rmPath);
+                        });
+                    }
                 }
+                Task.WhenAll(tasks).ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        Console.WriteLine(t.Exception);
+                    }
+                    IndexWriter.Commit();
+                });
+            }
+            var rmPaths = System.IO.Directory.GetDirectories(IndexDir);
+            foreach (var rmPath in rmPaths)
+            {
+                System.IO.Directory.Delete(rmPath);
             }
         }
 

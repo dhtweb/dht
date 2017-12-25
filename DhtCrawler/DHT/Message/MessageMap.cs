@@ -96,7 +96,7 @@ namespace DhtCrawler.DHT.Message
         private void ClearExpireMessage(int clearSize = 1000)
         {
             var startTime = DateTime.Now;
-            var rmList = _mappingInfo.OrderBy(t => t.Value.LastTime).Take(clearSize).ToDictionary(kv => kv.Value.InfoHash, kv => new { kv.Key, kv.Value.LastTime });
+            var rmList = _mappingInfo.ToArray().OrderBy(t => t.Value.LastTime).Take(clearSize).ToDictionary(kv => kv.Value.InfoHash, kv => new { kv.Key, kv.Value.LastTime });
             foreach (var kv in rmList)
             {
                 var infohash = kv.Key;

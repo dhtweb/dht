@@ -460,37 +460,41 @@ namespace DhtCrawler
                     await Task.Delay(60 * 1000);
                 }
             });
-            Task.Factory.StartNew(() =>
+            var reTryDown = ConfigurationManager.Default.GetBool("ReTryDownHash");
+            if (reTryDown)
             {
-                while (true)
+                Task.Factory.StartNew(() =>
                 {
-                    var infoHashFiles = Directory.GetFiles(InfoPath, "*.txt");
-                    foreach (var hashFile in infoHashFiles)
+                    while (true)
                     {
-                        using (var stream = File.OpenRead(hashFile))
+                        var infoHashFiles = Directory.GetFiles(InfoPath, "*.txt");
+                        foreach (var hashFile in infoHashFiles)
                         {
-                            using (var reader = new StreamReader(stream))
+                            using (var stream = File.OpenRead(hashFile))
                             {
-                                while (reader.Peek() > 0)
+                                using (var reader = new StreamReader(stream))
                                 {
-                                    var line = reader.ReadLine();
-                                    if (line.IsBlank() || DownlaodedSet.Contains(line))
+                                    while (reader.Peek() > 0)
                                     {
-                                        continue;
+                                        var line = reader.ReadLine();
+                                        if (line.IsBlank() || DownlaodedSet.Contains(line))
+                                        {
+                                            continue;
+                                        }
+                                        var hashBytes = line.HexStringToByteArray();
+                                        while (dhtClient.SendMessageCount >= dhtConfig.SendQueueMaxSize)
+                                        {
+                                            Thread.Sleep(2000);
+                                        }
+                                        dhtClient.GetPeers(hashBytes);
                                     }
-                                    var hashBytes = line.HexStringToByteArray();
-                                    while (dhtClient.SendMessageCount >= dhtConfig.SendQueueMaxSize)
-                                    {
-                                        Thread.Sleep(2000);
-                                    }
-                                    dhtClient.GetPeers(hashBytes);
                                 }
                             }
                         }
+                        Thread.Sleep(TimeSpan.FromHours(12));
                     }
-                    Thread.Sleep(TimeSpan.FromHours(12));
-                }
-            }, TaskCreationOptions.LongRunning);
+                }, TaskCreationOptions.LongRunning);
+            }
             Console.CancelKeyPress += (sender, e) =>
             {
                 dhtClient.ShutDown();
@@ -530,18 +534,26 @@ namespace DhtCrawler
         {
             Task.Factory.StartNew(() =>
             {
+                var set = new Dictionary<string, int>();
                 while (true)
                 {
-                    var count = 0;
                     var content = new StringBuilder();
-                    while (InfoHashQueue.TryDequeue(out var info) && count < 1000)
+                    while (InfoHashQueue.TryDequeue(out var info) && set.Count < 1000)
                     {
-                        content.Append(info).Append(Environment.NewLine);
-                        count++;
+                        if (!set.ContainsKey(info))
+                        {
+                            set[info] = 0;
+                        }
+                        set[info]++;
                     }
-                    if (count > 0)
+                    foreach (var kv in set)
                     {
-                        File.AppendAllText(Path.Combine(InfoPath, DateTime.Now.ToString("yyyy-MM-dd") + ".txt"), content.ToString());
+                        content.AppendLine($"{kv.Value}:{kv.Value}");
+                    }
+                    if (set.Count > 0)
+                    {
+                        File.AppendAllText(Path.Combine(InfoPath, DateTime.Now.ToString("yyyy-MM-dd-HH") + ".txt"), content.ToString());
+                        set.Clear();
                     }
                     else
                     {
