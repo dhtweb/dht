@@ -17,5 +17,7 @@
   "BufferDownSize": 8192,
   "BatchDownSize": 128,
   "MaxDownThreadNum": 64,
-  "DownMode": "Task"
+  "DownMode": "Task",
+  "filter": "hash",
+  "TryNoDownHash": false  
 }

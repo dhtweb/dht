@@ -505,7 +505,8 @@ namespace DhtCrawler.DHT
                 nodeSet.Clear();
                 if (!running)
                     return;
-                await Task.Delay(60 * 1000, _cancellationTokenSource.Token);
+                if (_recvMessageQueue.Count > 0 && _requestQueue.Count > 0 && _responseQueue.Count > 0)
+                    await Task.Delay(60 * 1000, _cancellationTokenSource.Token);
             }
         }
 

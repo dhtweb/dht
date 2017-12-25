@@ -1,14 +1,14 @@
-﻿using System.Collections.Generic;
+﻿using DhtCrawler.Common.Collections;
 
 namespace DhtCrawler.Common.Filters
 {
     public class HashFilter<T> : IFilter<T>
     {
-        private readonly HashSet<T> _hashSet;
+        private readonly ConcurrentHashSet<T> _hashSet;
 
         public HashFilter()
         {
-            _hashSet = new HashSet<T>();
+            _hashSet = new ConcurrentHashSet<T>();
         }
 
         public bool Contain(T item)

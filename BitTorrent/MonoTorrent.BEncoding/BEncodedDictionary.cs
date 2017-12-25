@@ -100,7 +100,7 @@ namespace BitTorrent.MonoTorrent.BEncoding
         {
             BEncodedString key = null;
             BEncodedValue value = null;
-            BEncodedString oldkey = null;
+            //BEncodedString oldkey = null;
 
             if (reader.ReadByte() != 'd')
                 throw new BEncodingException("Invalid data found. Aborting"); // Remove the leading 'd'
@@ -109,13 +109,12 @@ namespace BitTorrent.MonoTorrent.BEncoding
             {
                 key = (BEncodedString)BEncodedValue.Decode(reader);         // keys have to be BEncoded strings
 
-                if (oldkey != null && oldkey.CompareTo(key) > 0)
-                    if (strictDecoding)
-                        throw new BEncodingException(String.Format(
-                            "Illegal BEncodedDictionary. The attributes are not ordered correctly. Old key: {0}, New key: {1}",
-                            oldkey, key));
-
-                oldkey = key;
+                //if (oldkey != null && oldkey.CompareTo(key) > 0)
+                //    if (strictDecoding)
+                //        throw new BEncodingException(String.Format(
+                //            "Illegal BEncodedDictionary. The attributes are not ordered correctly. Old key: {0}, New key: {1}",
+                //            oldkey, key));
+                //oldkey = key;
                 value = BEncodedValue.Decode(reader);                     // the value is a BEncoded value
                 dictionary.Add(key, value);
             }

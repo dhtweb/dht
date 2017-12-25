@@ -373,8 +373,19 @@ namespace DhtCrawler
             var redisServer = ConfigurationManager.Default.GetString("redis.server");
             if (redisServer.IsBlank())
             {
-                //IocContainer.RegisterType<IFilter<long>>(new BloomFilter<long>(5000000, 32, (seed, item) => (item << 16 | seed).GetHashCode() & int.MaxValue));
-                IocContainer.RegisterType<IFilter<long>>(new EmptyFilter<long>());
+                var filterType = ConfigurationManager.Default.GetString("filter").ToLower();
+                switch (filterType)
+                {
+                    case "hash":
+                        IocContainer.RegisterType<IFilter<long>>(new HashFilter<long>());
+                        break;
+                    case "bloom":
+                        IocContainer.RegisterType<IFilter<long>>(new BloomFilter<long>(2 << 24, 32, (seed, item) => (item << 16 | seed).GetHashCode() & int.MaxValue));
+                        break;
+                    default:
+                        IocContainer.RegisterType<IFilter<long>>(new EmptyFilter<long>());
+                        break;
+                }
                 IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(600));
             }
             else
@@ -467,21 +478,17 @@ namespace DhtCrawler
                                     {
                                         continue;
                                     }
+                                    var hashBytes = line.HexStringToByteArray();
                                     while (dhtClient.SendMessageCount >= dhtConfig.SendQueueMaxSize)
                                     {
                                         Thread.Sleep(2000);
-                                    }
-                                    var hashBytes = new byte[20];
-                                    for (var i = 0; i < hashBytes.Length; i++)
-                                    {
-                                        hashBytes[i] = Convert.ToByte(line.Substring(i * 2, 2), 16);
                                     }
                                     dhtClient.GetPeers(hashBytes);
                                 }
                             }
                         }
                     }
-                    Thread.Sleep(60000 * 60);
+                    Thread.Sleep(TimeSpan.FromHours(12));
                 }
             }, TaskCreationOptions.LongRunning);
             Console.CancelKeyPress += (sender, e) =>
