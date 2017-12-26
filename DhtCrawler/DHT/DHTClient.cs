@@ -407,7 +407,7 @@ namespace DhtCrawler.DHT
 
         #region 发送请求
 
-        private void SendMsg(CommandType command, IDictionary<string, object> data, DhtNode node)
+        private bool SendMsg(CommandType command, IDictionary<string, object> data, DhtNode node)
         {
             var msg = new DhtMessage
             {
@@ -417,14 +417,7 @@ namespace DhtCrawler.DHT
             };
             msg.Data.Add("id", GetNeighborNodeId(node.NodeId));
             var dhtItem = new Tuple<DhtMessage, DhtNode>(msg, node);
-            if (msg.CommandType == CommandType.Get_Peers)
-            {
-                _sendMessageQueue.TryAdd(dhtItem, EnqueueWaitTime);
-            }
-            else
-            {
-                _sendMessageQueue.TryAdd(dhtItem);
-            }
+            return msg.CommandType == CommandType.Get_Peers ? _sendMessageQueue.TryAdd(dhtItem, EnqueueWaitTime) : _sendMessageQueue.TryAdd(dhtItem);
         }
 
         private async Task LoopSendMsg()
@@ -505,7 +498,7 @@ namespace DhtCrawler.DHT
                 nodeSet.Clear();
                 if (!running)
                     return;
-                if (_recvMessageQueue.Count > 0 && _requestQueue.Count > 0 && _responseQueue.Count > 0)
+                if (_recvMessageQueue.Count > 0 || (_requestQueue.Count > 0 && _responseQueue.Count > 0))
                     await Task.Delay(60 * 1000, _cancellationTokenSource.Token);
             }
         }
@@ -513,21 +506,21 @@ namespace DhtCrawler.DHT
         #endregion
 
         #region dht协议命令
-        public void FindNode(DhtNode node)
+        public bool FindNode(DhtNode node)
         {
             var data = new Dictionary<string, object> { { "target", GenerateRandomNodeId() } };
-            SendMsg(CommandType.Find_Node, data, node);
+            return SendMsg(CommandType.Find_Node, data, node);
         }
 
-        public void Ping(DhtNode node)
+        public bool Ping(DhtNode node)
         {
-            SendMsg(CommandType.Ping, null, node);
+            return SendMsg(CommandType.Ping, null, node);
         }
 
-        public void GetPeers(DhtNode node, byte[] infoHash)
+        public bool GetPeers(DhtNode node, byte[] infoHash)
         {
             var data = new Dictionary<string, object> { { "info_hash", infoHash } };
-            SendMsg(CommandType.Get_Peers, data, node);
+            return SendMsg(CommandType.Get_Peers, data, node);
         }
 
         public void GetPeers(byte[] infoHash)

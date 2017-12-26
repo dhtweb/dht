@@ -548,7 +548,7 @@ namespace DhtCrawler
                     }
                     foreach (var kv in set)
                     {
-                        content.AppendLine($"{kv.Value}:{kv.Value}");
+                        content.AppendLine($"{kv.Key}:{kv.Value}");
                     }
                     if (set.Count > 0)
                     {
