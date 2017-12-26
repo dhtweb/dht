@@ -1,10 +1,12 @@
 ﻿using System;
 using System.IO;
+using System.Threading.Tasks;
 using DhtCrawler.Common.Db;
 using DhtCrawler.Common.Queue;
 using DhtCrawler.Common.Web.Mvc.Static;
 using DhtCrawler.Service;
 using DhtCrawler.Service.Index;
+using DhtCrawler.Service.Model;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -28,6 +30,8 @@ namespace DhtCrawler.Web
             services.AddMemoryCache();
             services.AddMvc();
             services.AddSingleton<IQueue<PageStaticHtmlItem>, DefaultQueue<PageStaticHtmlItem>>();
+            services.AddSingleton<IQueue<string>, DefaultQueue<string>>();
+            services.AddSingleton<IQueue<VisitedModel>, DefaultQueue<VisitedModel>>();
             services.AddSingleton(provider => new StaticHtmlFilterAttribute(provider.GetService<IQueue<PageStaticHtmlItem>>()));
             services.AddSingleton(new DbFactory(Configuration["postgresql.url"], NpgsqlFactory.Instance));
             services.AddTransient<InfoHashRepository>();
@@ -75,6 +79,23 @@ namespace DhtCrawler.Web
                 using (var writer = fileInfo.OpenWrite())
                 {
                     await writer.WriteAsync(pageItem.Content, 0, pageItem.Content.Length);
+                }
+            });
+            Task.Run(async () =>
+            {
+                var wordQueue = app.ApplicationServices.GetService<IQueue<string>>();
+                while (true)
+                {
+                    var searchWord = await wordQueue.DequeueAsync();
+                }
+            });
+            Task.Run(async () =>
+            {
+                var visitQueue = app.ApplicationServices.GetService<IQueue<VisitedModel>>();
+                while (true)
+                {
+                    var item = await visitQueue.DequeueAsync();
+
                 }
             });
         }

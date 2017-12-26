@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 
 namespace DhtCrawler.Common.Queue
 {
@@ -8,5 +9,6 @@ namespace DhtCrawler.Common.Queue
         void Enqueue(T item);
         T Dequeue();
         Task<T> DequeueAsync();
+        Task<T> DequeueAsync(TimeSpan timeout);
     }
 }

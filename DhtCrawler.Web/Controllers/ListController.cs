@@ -9,27 +9,37 @@ using DhtCrawler.Service.Model;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Text;
+using DhtCrawler.Common.Queue;
+using DhtCrawler.Common.Utils;
 using DhtCrawler.Common.Web.Mvc.Static;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace DhtCrawler.Web.Controllers
 {
-    public class ListController : Controller
+    public class ListController : BaseController
     {
         private const int PageSize = 15;
         private readonly InfoHashRepository _infoHashRepository;
         private readonly IndexSearchService _indexSearchService;
         private readonly IMemoryCache _cache;
-        public ListController(InfoHashRepository infoHashRepository, IndexSearchService indexSearchService, IMemoryCache cache)
+        private readonly IQueue<string> _searchKeyQueue;
+        private readonly IQueue<VisitedModel> _visiteQueue;
+        public ListController(InfoHashRepository infoHashRepository, IndexSearchService indexSearchService, IMemoryCache cache, IQueue<string> queue, IQueue<VisitedModel> visiteQueue)
         {
             _infoHashRepository = infoHashRepository;
             _indexSearchService = indexSearchService;
             _cache = cache;
+            _searchKeyQueue = queue;
+            _visiteQueue = visiteQueue;
         }
 
         public IActionResult List(string keyword, int index = 1)
         {
             ViewBag.SearchKey = keyword;
+            if (!keyword.IsBlank() && index == 1)
+            {
+                _searchKeyQueue.Enqueue(keyword);
+            }
             var key = keyword.ToLower() + ":" + index;
             var page = _cache.GetOrCreate(key, entry =>
              {
@@ -55,7 +65,17 @@ namespace DhtCrawler.Web.Controllers
                 return RedirectToAction("List");
             }
             item.KeyWords = new HashSet<string>(item.Name.Cut().Union(item.Name.Cut(false)).Where(k => k.Length > 1));//.Take(10)
+            _visiteQueue.Enqueue(new VisitedModel() { Hash = hash, UserId = UserId });
             return View(item);
+        }
+
+        public IActionResult History(string hash)
+        {
+            if (!hash.IsBlank())
+            {
+                _visiteQueue.Enqueue(new VisitedModel() { Hash = hash, UserId = UserId });
+            }
+            return new EmptyResult();
         }
 
         public async Task<IActionResult> Lastlist(DateTime date, int index = 1)

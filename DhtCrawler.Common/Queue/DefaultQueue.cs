@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
 namespace DhtCrawler.Common.Queue
@@ -26,6 +27,11 @@ namespace DhtCrawler.Common.Queue
         public async Task<T> DequeueAsync()
         {
             return await _queue.ReceiveAsync();
+        }
+
+        public async Task<T> DequeueAsync(TimeSpan timeout)
+        {
+            return await _queue.ReceiveAsync(timeout);
         }
     }
 }
