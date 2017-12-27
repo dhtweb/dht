@@ -197,81 +197,98 @@ namespace DhtCrawler.Common.Index
 
         public void MultipleThreadReBuildIndex()
         {
-            lock (IndexWriter)
+            try
             {
-                IndexWriter.DeleteAll();
-                var list = GetAllModels();
-                var tasks = new Task[10];
-                using (var enumerator = list.GetEnumerator())
+                lock (IndexWriter)
                 {
-                    object indexLocker = new object(), mergeLocker = new object();
-                    for (var i = 0; i < tasks.Length; i++)
+                    var tasks = new Task[10];
+                    var subDics = new string[tasks.Length];
+                    for (var i = 0; i < subDics.Length; i++)
                     {
-                        tasks[i] = Task.Factory.StartNew(() =>
+                        subDics[i] = Path.Combine(IndexDir, Guid.NewGuid().ToString());
+                    }
+                    var queue = new ConcurrentQueue<T>();
+                    var list = GetAllModels();
+                    foreach (var item in list)
+                    {
+                        queue.Enqueue(item);
+                        if (queue.Count < 10000)
+                            continue;
+                        for (var i = 0; i < tasks.Length; i++)
                         {
-                            var subDic = Path.Combine(IndexDir, Guid.NewGuid().ToString());
-                            using (var subDirectory = GetIndexDirectory(subDic))
+                            tasks[i] = Task.Factory.StartNew(subDic =>
                             {
-                                using (var writer = new IndexWriter(subDirectory,
-                                    new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
-                                    {
-                                        IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                                        OpenMode = OpenMode.CREATE
-                                    }))
+                                var directory = (string)subDic;
+                                using (var subDirectory = GetIndexDirectory(directory))
                                 {
-                                    var count = 0;
-                                    while (true)
-                                    {
-                                        lock (indexLocker)
+                                    using (var writer = new IndexWriter(subDirectory,
+                                        new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
                                         {
-                                            T item;
-                                            if (enumerator.MoveNext())
-                                            {
-                                                item = enumerator.Current;
-                                            }
-                                            else
-                                            {
-                                                break;
-                                            }
-                                            var doc = GetDocument(item);
-                                            writer.AddDocument(doc);
-                                            if (count > 10000)
-                                            {
-                                                writer.Commit();
-                                                count = 0;
-                                            }
-                                        }
-                                    }
-                                    if (count > 0)
+                                            IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
+                                            OpenMode = OpenMode.CREATE_OR_APPEND
+                                        }))
                                     {
+                                        while (queue.TryDequeue(out var it))
+                                        {
+                                            var doc = GetDocument(it);
+                                            writer.AddDocument(doc);
+                                        }
                                         writer.Commit();
                                     }
-                                    lock (mergeLocker)
-                                    {
-                                        using (var reader = writer.GetReader(true))
-                                        {
-                                            IndexWriter.AddIndexes(reader);
-                                        }
-                                    }
+
                                 }
-                            }
-                        });
+                            }, subDics[i]);
+                        }
+                        Task.WhenAll(tasks);
+                    }
+                    if (queue.Count > 0)
+                    {
+                        for (var i = 0; i < tasks.Length; i++)
+                        {
+                            tasks[i] = Task.Factory.StartNew(subDic =>
+                            {
+                                var directory = (string)subDic;
+                                using (var subDirectory = GetIndexDirectory(directory))
+                                {
+                                    using (var writer = new IndexWriter(subDirectory,
+                                        new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
+                                        {
+                                            IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
+                                            OpenMode = OpenMode.CREATE_OR_APPEND
+                                        }))
+                                    {
+                                        while (queue.TryDequeue(out var it))
+                                        {
+                                            var doc = GetDocument(it);
+                                            writer.AddDocument(doc);
+                                        }
+                                        writer.Commit();
+                                    }
+
+                                }
+                            }, subDics[i]);
+                        }
+                        Task.WhenAll(tasks);
+                    }
+                    IndexWriter.DeleteAll();
+                    var subIndexDirs = subDics.Select(GetIndexDirectory).ToArray();
+                    IndexWriter.AddIndexes(subIndexDirs);
+                    foreach (var subIndexDir in subIndexDirs)
+                    {
+                        subIndexDir.Dispose();
+                    }
+                    var rmPaths = System.IO.Directory.GetDirectories(IndexDir);
+                    foreach (var rmPath in rmPaths)
+                    {
+                        System.IO.Directory.Delete(rmPath);
                     }
                 }
-                Task.WhenAll(tasks).ContinueWith(t =>
-                {
-                    if (t.IsFaulted)
-                    {
-                        Console.WriteLine(t.Exception);
-                    }
-                    IndexWriter.Commit();
-                });
             }
-            var rmPaths = System.IO.Directory.GetDirectories(IndexDir);
-            foreach (var rmPath in rmPaths)
+            catch (Exception ex)
             {
-                System.IO.Directory.Delete(rmPath);
+                Console.WriteLine(ex);
             }
+
         }
 
         public void DeleteIndex(T model)
