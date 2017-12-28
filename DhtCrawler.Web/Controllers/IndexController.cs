@@ -35,7 +35,7 @@ namespace DhtCrawler.Web.Controllers
             Task.Factory.StartNew(() =>
             {
                 _indexSearchService.MultipleThreadReBuildIndex();
-            });
+            }, TaskCreationOptions.LongRunning);
             return Content("over");
         }
     }

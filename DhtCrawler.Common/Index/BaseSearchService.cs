@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Index.Analyzer;
 using DhtCrawler.Common.Index.Utils;
@@ -14,6 +13,7 @@ using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Search.Highlight;
 using Lucene.Net.Store;
+using Lucene.Net.Util;
 using Directory = Lucene.Net.Store.Directory;
 
 namespace DhtCrawler.Common.Index
@@ -51,7 +51,7 @@ namespace DhtCrawler.Common.Index
                              if (_writer != null)
                                  return _writer;
                              _writer = new IndexWriter(IndexDirectory,
-                                 new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
+                                 new IndexWriterConfig(LuceneVersion.LUCENE_48, KeyWordAnalyzer)
                                  {
                                      OpenMode = OpenMode.CREATE_OR_APPEND
                                  });
@@ -155,7 +155,15 @@ namespace DhtCrawler.Common.Index
             var resultToken = contentWords.MergeTokenList();
             foreach (var token in resultToken)
             {
-                newContent.Append(content.Substring(index, token.StartIndex - index));
+                var length = token.StartIndex - index;
+                if (length > 0)
+                {
+                    newContent.Append(content.Substring(index, length));
+                }
+                else if (length < 0 && index < token.EndIndex)
+                {
+                    token.Word = index < token.EndIndex ? content.Substring(index, token.EndIndex - index) : "";
+                }
                 newContent.Append(preTag);
                 newContent.Append(token.Word);
                 newContent.Append(endTag);
@@ -202,10 +210,18 @@ namespace DhtCrawler.Common.Index
                 lock (IndexWriter)
                 {
                     var tasks = new Task[10];
-                    var subDics = new string[tasks.Length];
+                    var subDics = new IndexWriter[tasks.Length];
                     for (var i = 0; i < subDics.Length; i++)
                     {
-                        subDics[i] = Path.Combine(IndexDir, Guid.NewGuid().ToString());
+                        var path = Path.Combine(IndexDir, Guid.NewGuid().ToString("N"));
+                        var directory = GetIndexDirectory(path);
+                        subDics[i] = new IndexWriter(directory,
+                                new IndexWriterConfig(LuceneVersion.LUCENE_48, KeyWordAnalyzer)
+                                {
+                                    IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
+                                    OpenMode = OpenMode.CREATE_OR_APPEND
+                                });
+
                     }
                     var queue = new ConcurrentQueue<T>();
                     var list = GetAllModels();
@@ -216,28 +232,22 @@ namespace DhtCrawler.Common.Index
                             continue;
                         for (var i = 0; i < tasks.Length; i++)
                         {
-                            tasks[i] = Task.Factory.StartNew(subDic =>
+                            tasks[i] = Task.Factory.StartNew(index =>
                             {
-                                var directory = (string)subDic;
-                                using (var subDirectory = GetIndexDirectory(directory))
+                                var writer = (IndexWriter)index;
+                                while (queue.TryDequeue(out var it))
                                 {
-                                    using (var writer = new IndexWriter(subDirectory,
-                                        new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
-                                        {
-                                            IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                                            OpenMode = OpenMode.CREATE_OR_APPEND
-                                        }))
-                                    {
-                                        while (queue.TryDequeue(out var it))
-                                        {
-                                            var doc = GetDocument(it);
-                                            writer.AddDocument(doc);
-                                        }
-                                        writer.Commit();
-                                    }
-
+                                    var doc = GetDocument(it);
+                                    writer.AddDocument(doc);
                                 }
-                            }, subDics[i]);
+                                writer.Commit();
+                            }, subDics[i]).ContinueWith(t =>
+                            {
+                                if (t.IsFaulted)
+                                {
+                                    Console.WriteLine(t.Exception);
+                                }
+                            });
                         }
                         Task.WhenAll(tasks);
                     }
@@ -245,42 +255,59 @@ namespace DhtCrawler.Common.Index
                     {
                         for (var i = 0; i < tasks.Length; i++)
                         {
-                            tasks[i] = Task.Factory.StartNew(subDic =>
+                            tasks[i] = Task.Factory.StartNew(index =>
                             {
-                                var directory = (string)subDic;
-                                using (var subDirectory = GetIndexDirectory(directory))
+                                var writer = (IndexWriter)index;
+                                while (queue.TryDequeue(out var it))
                                 {
-                                    using (var writer = new IndexWriter(subDirectory,
-                                        new IndexWriterConfig(Lucene.Net.Util.LuceneVersion.LUCENE_48, KeyWordAnalyzer)
-                                        {
-                                            IndexDeletionPolicy = new KeepOnlyLastCommitDeletionPolicy(),
-                                            OpenMode = OpenMode.CREATE_OR_APPEND
-                                        }))
-                                    {
-                                        while (queue.TryDequeue(out var it))
-                                        {
-                                            var doc = GetDocument(it);
-                                            writer.AddDocument(doc);
-                                        }
-                                        writer.Commit();
-                                    }
-
+                                    var doc = GetDocument(it);
+                                    writer.AddDocument(doc);
                                 }
-                            }, subDics[i]);
+                                writer.Commit();
+                            }, subDics[i]).ContinueWith(t =>
+                            {
+                                if (t.IsFaulted)
+                                {
+                                    Console.WriteLine(t.Exception);
+                                }
+                            });
                         }
                         Task.WhenAll(tasks);
                     }
                     IndexWriter.DeleteAll();
-                    var subIndexDirs = subDics.Select(GetIndexDirectory).ToArray();
-                    IndexWriter.AddIndexes(subIndexDirs);
-                    foreach (var subIndexDir in subIndexDirs)
+                    foreach (var writer in subDics)
                     {
-                        subIndexDir.Dispose();
+                        try
+                        {
+                            using (var reader = writer.GetReader(false))
+                            {
+                                IndexWriter.AddIndexes(reader);
+                            }
+                            IndexWriter.Commit();
+                            writer.Dispose();
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine(e);
+                        }
+                        finally
+                        {
+                            if (IndexWriter.IsLocked(writer.Directory))
+                            {
+                                IndexWriter.Unlock(writer.Directory);
+                            }
+                        }
                     }
+                    //var subIndexDirs = subDics.Select(GetIndexDirectory).ToArray();
+                    //IndexWriter.AddIndexes(subIndexDirs);
+                    //foreach (var subIndexDir in subIndexDirs)
+                    //{
+                    //    subIndexDir.Dispose();
+                    //}
                     var rmPaths = System.IO.Directory.GetDirectories(IndexDir);
                     foreach (var rmPath in rmPaths)
                     {
-                        System.IO.Directory.Delete(rmPath);
+                        System.IO.Directory.Delete(rmPath, true);
                     }
                 }
             }
