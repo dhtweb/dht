@@ -91,9 +91,10 @@ namespace DhtCrawler.Service
             {
                 Connection.Open();
             }
-            var trans = Connection.BeginTransaction();
+            IDbTransaction trans = null;
             try
             {
+                trans = Connection.BeginTransaction();
                 foreach (var model in models)
                 {
                     await InsertOrUpdateAsync(model, trans);
@@ -104,12 +105,12 @@ namespace DhtCrawler.Service
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
-                trans.Rollback();
+                trans?.Rollback();
                 return false;
             }
             finally
             {
-                trans.Dispose();
+                trans?.Dispose();
             }
 
         }

@@ -1,6 +1,7 @@
 ﻿using System.Threading.Tasks;
 using DhtCrawler.Common.IO;
 using DhtCrawler.Common.Queue;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace DhtCrawler.Common.Web.Mvc.Static
@@ -19,8 +20,11 @@ namespace DhtCrawler.Common.Web.Mvc.Static
             var bufferStream = new BufferArrayStream(response.Body);
             response.Body = bufferStream;
             await next();
-            var byteArray = bufferStream.GetBufferContent();
-            _queue.Enqueue(new PageStaticHtmlItem() { RequestPath = request.Path.ToUriComponent(), Content = byteArray });
+            if (context.Result is ViewResult)
+            {
+                var byteArray = bufferStream.GetBufferContent();
+                _queue.Enqueue(new PageStaticHtmlItem() { RequestPath = request.Path.ToUriComponent(), Content = byteArray });
+            }
         }
     }
 }

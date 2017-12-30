@@ -128,52 +128,63 @@ namespace DhtCrawler.Web.Controllers
         }
 
 
-        public async Task ImportInfo(string importPath)
+        public IActionResult ImportInfo(string importPath)
         {
-            Response.ContentType = "text/plain";
-            if (!Directory.Exists(importPath))
+            if (Directory.Exists(importPath))
             {
-                await Response.WriteAsync("");
-                return;
-            }
-            var files = Directory.GetFiles(importPath, "*.txt");
-            var dic = new Dictionary<string, int>();
-            foreach (var filePath in files)
-            {
-                var reader = System.IO.File.OpenText(filePath);
-                do
+                Task.Factory.StartNew(async () =>
                 {
-                    var line = await reader.ReadLineAsync();
-                    if (string.IsNullOrWhiteSpace(line))
-                        break;
-                    if (!dic.ContainsKey(line))
+                    var files = Directory.GetFiles(importPath, "*.txt");
+                    var dic = new Dictionary<string, int>();
+                    foreach (var filePath in files)
                     {
-                        dic[line] = 0;
-                    }
-                    dic[line]++;
-                } while (true);
-                var list = new LinkedList<InfoHashModel>();
-                foreach (var kv in dic)
-                {
-                    if (kv.Value <= 1)
-                        continue;
-                    list.AddLast(new InfoHashModel() { InfoHash = kv.Key, DownNum = kv.Value });
-                    if (list.Count > 10000)
-                    {
-                        await _infoHashRepository.InsertOrUpdateAsync(list);
-                        await Response.WriteAsync(kv.Key + Environment.NewLine);
+                        using (var reader = System.IO.File.OpenText(filePath))
+                        {
+                            do
+                            {
+                                var line = await reader.ReadLineAsync();
+                                if (string.IsNullOrWhiteSpace(line))
+                                    break;
+                                var info = line.Split(':');
+                                dic[info[0]] = int.Parse(info[1]);
+                            } while (true);
+                        }
+                        var size = 0;
+                        var list = new LinkedList<InfoHashModel>();
+                        foreach (var kv in dic)
+                        {
+                            list.AddLast(new InfoHashModel() { InfoHash = kv.Key, DownNum = kv.Value });
+                            if (list.Count > 100)
+                            {
+                                var flag = await _infoHashRepository.InsertOrUpdateAsync(list);
+                                if (flag)
+                                {
+                                    size += list.Count;
+                                    list.Clear();
+                                    Console.WriteLine("已导入{0}", size);
+                                }
+                            }
+                        }
+                        if (list.Count > 0)
+                        {
+                            while (true)
+                            {
+                                var flag = await _infoHashRepository.InsertOrUpdateAsync(list);
+                                if (flag)
+                                {
+                                    size += list.Count;
+                                    Console.WriteLine("已导入{0}", size);
+                                    break;
+                                }
+                            }
+                        }
                         list.Clear();
+                        dic.Clear();
+                        System.IO.File.Delete(filePath);
                     }
-                }
-                if (list.Count > 0)
-                {
-                    await _infoHashRepository.InsertOrUpdateAsync(list);
-                }
-                list.Clear();
-                dic.Clear();
-                reader.Close();
-                System.IO.File.Delete(filePath);
+                }, TaskCreationOptions.LongRunning);
             }
+            return new EmptyResult();
         }
 
         public IActionResult Error()
