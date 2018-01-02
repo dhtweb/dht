@@ -1,12 +1,11 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Db;
 using DhtCrawler.Common.Queue;
 using DhtCrawler.Common.Web.Mvc.Static;
-using DhtCrawler.Service;
 using DhtCrawler.Service.Index;
 using DhtCrawler.Service.Model;
+using DhtCrawler.Service.Repository;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;

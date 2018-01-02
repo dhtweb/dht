@@ -85,7 +85,15 @@ namespace DhtCrawler
                     {
                         if (!running)
                             return;
-                        await DownTorrentAsync(new DownInfoHash() { Peer = peer, Bytes = info.Bytes, Value = info.Value });
+                        if (DownlaodedSet.Contains(info.Value))
+                        {
+                            break;
+                        }
+                        var flag = await DownTorrentAsync(new DownInfoHash() { Peer = peer, Bytes = info.Bytes, Value = info.Value });
+                        if (flag)
+                        {
+                            break;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -95,7 +103,7 @@ namespace DhtCrawler
             }
         }
 
-        static async Task DownTorrentAsync(DownInfoHash infoHash)
+        static async Task<bool> DownTorrentAsync(DownInfoHash infoHash)
         {
             var longPeer = infoHash.Peer.ToInt64();
             try
@@ -104,7 +112,7 @@ namespace DhtCrawler
                 {
                     if (expireTime > DateTime.Now)
                     {
-                        return;
+                        return false;
                     }
                     BadAddress.TryRemove(longPeer, out expireTime);
                 }
@@ -118,12 +126,13 @@ namespace DhtCrawler
                             BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1),
                                 (ip, before) => DateTime.Now.AddDays(1));
                         }
-                        return;
+                        return false;
                     }
                     DownlaodedSet.Add(infoHash.Value);
                     var torrent = ParseBitTorrent(meta.Item1);
                     torrent.InfoHash = infoHash.Value;
                     WriteTorrentQueue.Enqueue(torrent);
+                    return true;
                 }
             }
             catch (SocketException)
@@ -138,6 +147,7 @@ namespace DhtCrawler
             {
                 log.Error("下载失败", ex);
             }
+            return false;
         }
 
         private static void RunDown()
@@ -253,10 +263,20 @@ namespace DhtCrawler
             for (int i = 0; i < parallelDownSize; i++)
             {
                 var local = i;
-                downTasks[local] = Task.Factory.StartNew(async () =>
+                Task.Run(() =>
                 {
-                    await LoopDownload(local);
-                }, TaskCreationOptions.LongRunning);
+                    downTasks[local] = LoopDownload(local).ContinueWith(t =>
+                      {
+                          if (t.IsFaulted)
+                          {
+                              log.Error($"downlaod task {local} error", t.Exception);
+                          }
+                          else
+                          {
+                              log.Info($"download task {local} complete");
+                          }
+                      });
+                });
             }
             Console.CancelKeyPress += (sender, e) =>
             {
@@ -491,6 +511,7 @@ namespace DhtCrawler
                                 }
                             }
                         }
+                        Console.WriteLine("LOOP COMPLETE");
                         Thread.Sleep(TimeSpan.FromHours(12));
                     }
                 }, TaskCreationOptions.LongRunning);
@@ -511,9 +532,14 @@ namespace DhtCrawler
                 {
                     while (WriteTorrentQueue.TryDequeue(out var item))
                     {
+                        var content = item.ToJson();
+                        if (content.IsBlank())
+                        {
+                            continue;
+                        }
                         var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
                         var path = Path.Combine(subdirectory.FullName, item.InfoHash + ".json");
-                        await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), item.ToJson());
+                        await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), content);
                         await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
                         Console.WriteLine($"download {item.InfoHash} success");
                     }

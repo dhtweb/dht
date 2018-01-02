@@ -3,7 +3,7 @@ using System.Data;
 using DhtCrawler.Common.Db;
 using DhtCrawler.Service.Model;
 
-namespace DhtCrawler.Service
+namespace DhtCrawler.Service.Repository
 {
     public abstract class BaseRepository<T, TId> : IDisposable where T : BaseModel<TId>
     {

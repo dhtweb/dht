@@ -8,8 +8,8 @@ using System.Threading.Tasks;
 using DhtCrawler.Common;
 using Microsoft.AspNetCore.Mvc;
 using DhtCrawler.Web.Models;
-using DhtCrawler.Service;
 using DhtCrawler.Service.Model;
+using DhtCrawler.Service.Repository;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -60,7 +60,6 @@ namespace DhtCrawler.Web.Controllers
                     var model = dicInfo.ToObjectFromJson<InfoHashModel>();
                     if (model == null)
                     {
-                        Console.WriteLine(file);
                         continue;
                     }
                     model.CreateTime = System.IO.File.GetLastWriteTime(file);
@@ -107,10 +106,13 @@ namespace DhtCrawler.Web.Controllers
                     if (list.Count > 200)
                     {
                         await Response.WriteAsync((++size) + Environment.NewLine);
-                        await _infoHashRepository.InsertOrUpdateAsync(list.Select(kv => kv.Key));
-                        foreach (var kv in list)
+                        var flag = await _infoHashRepository.InsertOrUpdateAsync(list.Select(kv => kv.Key));
+                        if (flag)
                         {
-                            System.IO.File.Delete(kv.Value);
+                            foreach (var kv in list)
+                            {
+                                System.IO.File.Delete(kv.Value);
+                            }
                         }
                         list.Clear();
                     }
@@ -118,10 +120,13 @@ namespace DhtCrawler.Web.Controllers
                 if (list.Count > 0)
                 {
                     await Response.WriteAsync((++size) + Environment.NewLine);
-                    await _infoHashRepository.InsertOrUpdateAsync(list.Select(kv => kv.Key));
-                    foreach (var kv in list)
+                    var flag = await _infoHashRepository.InsertOrUpdateAsync(list.Select(kv => kv.Key));
+                    if (flag)
                     {
-                        System.IO.File.Delete(kv.Value);
+                        foreach (var kv in list)
+                        {
+                            System.IO.File.Delete(kv.Value);
+                        }
                     }
                 }
             }
@@ -161,7 +166,7 @@ namespace DhtCrawler.Web.Controllers
                                 {
                                     size += list.Count;
                                     list.Clear();
-                                    Console.WriteLine("已导入{0}", size);
+                                    Console.WriteLine("已导入{0},完成比例{0:F2}", size, size * 1.0 / dic.Count);
                                 }
                             }
                         }
@@ -173,7 +178,7 @@ namespace DhtCrawler.Web.Controllers
                                 if (flag)
                                 {
                                     size += list.Count;
-                                    Console.WriteLine("已导入{0}", size);
+                                    Console.WriteLine("已导入{0},完成比例{0:F2}", size, size * 1.0 / dic.Count);
                                     break;
                                 }
                             }

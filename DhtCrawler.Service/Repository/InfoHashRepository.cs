@@ -6,14 +6,15 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Dapper;
-using DhtCrawler.Service.Model;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Db;
+using DhtCrawler.Common.Utils;
 using DhtCrawler.Service.Maps;
+using DhtCrawler.Service.Model;
 using Npgsql;
 using NpgsqlTypes;
 
-namespace DhtCrawler.Service
+namespace DhtCrawler.Service.Repository
 {
     public class InfoHashRepository : BaseRepository<InfoHashModel, long>
     {
@@ -38,7 +39,6 @@ namespace DhtCrawler.Service
             if (model.CreateTime != default(DateTime))
             {
                 list.Add(new NpgsqlParameter("createtime", model.CreateTime));
-                //updateSql.Append("createtime = @createtime,");
             }
             if (model.IsDown)
             {
@@ -65,19 +65,53 @@ namespace DhtCrawler.Service
                 list.Add(new NpgsqlParameter("filesize", model.FileSize));
                 updateSql.Append("filesize = @filesize,");
             }
+            if (!model.Files.IsEmpty())
+            {
+                list.Add(new NpgsqlParameter("hasfile", true));
+                updateSql.Append("hasfile = True,");
+            }
             if (model.Name != null)
             {
                 list.Add(new NpgsqlParameter("name", model.Name));
                 updateSql.Append("name = @name,");
             }
-            if (model.Files != null && model.Files.Count > 0)
+
+            if (transaction != null)
+                return await DoInsert(model, transaction, list, updateSql);
+            if (Connection.State != ConnectionState.Open)
             {
-                var param = new NpgsqlParameter("files", NpgsqlDbType.Jsonb) { Value = model.Files.ToJson() };
-                list.Add(param);
-                updateSql.Append("files = @files,");
+                Connection.Open();
             }
-            var paramater = new InfoHashParamter(list);
-            return await Connection.ExecuteAsync(string.Format("INSERT INTO t_infohash AS ti ({0}) VALUES ({1}) ON CONFLICT  (infohash) DO UPDATE SET {2}", string.Join(",", list.Select(l => l.ParameterName)), string.Join(",", list.Select(l => "@" + l.ParameterName)), updateSql.ToString().TrimEnd(',')), paramater, transaction) > 0;
+            using (transaction = Connection.BeginTransaction())
+            {
+                return await DoInsert(model, transaction, list, updateSql);
+            }
+        }
+
+        private async Task<bool> DoInsert(InfoHashModel model, IDbTransaction transaction, List<DbParameter> list, StringBuilder updateSql)
+        {
+            var hashId = await Connection.ExecuteScalarAsync<long>(
+                string.Format(
+                    "INSERT INTO t_infohash AS ti ({0}) VALUES ({1}) ON CONFLICT  (infohash) DO UPDATE SET {2} RETURNING id",
+                    string.Join(",", list.Select(l => l.ParameterName)),
+                    string.Join(",", list.Select(l => "@" + l.ParameterName)), updateSql.ToString().TrimEnd(',')), new InfoHashParamter(list),
+                transaction);
+            if (hashId <= 0)
+            {
+                return false;
+            }
+            if (model.Files == null || model.Files.Count <= 0)
+            {
+                return true;
+            }
+            IList<DbParameter> fileParams = new DbParameter[]
+            {
+                new NpgsqlParameter("files", NpgsqlDbType.Jsonb) {Value = model.Files.ToJson()},
+                new NpgsqlParameter("hashId", DbType.Int64) {Value = hashId},
+            };
+            await Connection.ExecuteAsync("INSERT INTO t_infohash_file (info_hash_id, files) VALUES (@hashId,@files) ON CONFLICT (info_hash_id) DO UPDATE SET files=@files;",
+                new InfoHashParamter(fileParams), transaction);
+            return true;
         }
 
         public async Task<bool> InsertOrUpdateAsync(InfoHashModel model)
@@ -120,6 +154,11 @@ namespace DhtCrawler.Service
             return await Connection.ExecuteScalarAsync<uint>("select count(id) from t_infohash where isdown=@flag ", new { flag = true });
         }
 
+        public async Task<bool> HasDownInfoHash(string infohash)
+        {
+            return await Connection.ExecuteScalarAsync<int>("select count(id) from t_infohash where isdown=True AND infohash=@hash", new { hash = infohash }) > 0;
+        }
+
         public async Task<IList<string>> GetDownloadInfoHashAsync()
         {
             var result = new List<string>();
@@ -148,13 +187,33 @@ namespace DhtCrawler.Service
             }
             var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
             var count = await result.ReadFirstAsync<long>();
-            var list = await result.ReadAsync<InfoHashModel>();
-            return (list.ToArray(), count);
+            var list = (await result.ReadAsync<InfoHashModel>()).ToArray();
+            //var fileIds = list.Where(l => l.HasFile).ToDictionary(l => l.Id, l => l);
+            //if (fileIds.Count > 0)
+            //{
+            //    using (var reader = await Connection.ExecuteReaderAsync("SELECT info_hash_id,files FROM t_infohash_file WHERE info_hash_id IN @ids", new { ids = fileIds.Keys.ToArray() }))
+            //    {
+            //        while (reader.Read())
+            //        {
+            //            var hashId = reader.GetInt64(0);
+            //            if (fileIds.ContainsKey(hashId))
+            //            {
+            //                fileIds[hashId].Files = reader.GetString(0).ToObjectFromJson<IList<TorrentFileModel>>();
+            //            }
+            //        }
+            //    }
+            //}
+            return (list, count);
         }
 
         public async Task<InfoHashModel> GetInfoHashDetailAsync(string hash)
         {
-            return await Connection.QuerySingleAsync<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
+            var item = await Connection.QueryFirstAsync<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
+            if (item != null && item.HasFile)
+            {
+                item.Files = await Connection.QueryFirstAsync<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = item.Id });
+            }
+            return item;
         }
 
         public IEnumerable<InfoHashModel> GetAllFullInfoHashModels(DateTime? start = null)
@@ -184,6 +243,10 @@ namespace DhtCrawler.Service
                 {
                     length++;
                     id = model.Id;
+                    if (model.HasFile)
+                    {
+                        model.Files = Connection.QueryFirst<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = model.Id });
+                    }
                     yield return model;
                 }
                 if (length < size)

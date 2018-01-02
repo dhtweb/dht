@@ -7,8 +7,8 @@ namespace DhtCrawler.Service.Maps
 {
     public class InfoHashParamter : SqlMapper.IDynamicParameters
     {
-        private List<DbParameter> _parameters;
-        public InfoHashParamter(List<DbParameter> parameters)
+        private readonly IList<DbParameter> _parameters;
+        public InfoHashParamter(IList<DbParameter> parameters)
         {
             _parameters = parameters;
         }

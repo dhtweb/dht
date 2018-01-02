@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
 using Dapper;
-using DhtCrawler.Service.Model;
 using DhtCrawler.Common.Db;
+using DhtCrawler.Service.Model;
 
-namespace DhtCrawler.Service
+namespace DhtCrawler.Service.Repository
 {
     public class KeyWordRepository : BaseRepository<KeyWordModel, string>
     {
@@ -19,7 +19,7 @@ namespace DhtCrawler.Service
         public async Task<bool> InsertOrUpdateAsync(KeyWordModel model, IDbTransaction transaction)
         {
             var sql = "INSERT INTO t_keyword AS t (word, num, isdanger) VALUES (@word,@num,@danger) ON CONFLICT(word) DO UPDATE SET num=t.num + excluded.num ,isdanger=excluded.isdanger;";
-            return await Connection.ExecuteAsync(sql, new { word = model.Word, num = model.Num, danger = model.IsDanger }, transaction) > 0;
+            return await SqlMapper.ExecuteAsync(Connection, sql, new { word = model.Word, num = model.Num, danger = model.IsDanger }, transaction) > 0;
         }
 
         public async Task<bool> InsertOrUpdateAsync(IEnumerable<KeyWordModel> models)

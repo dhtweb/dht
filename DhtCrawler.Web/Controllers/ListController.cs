@@ -3,15 +3,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Index.Utils;
 using DhtCrawler.Common.Web.Model;
-using DhtCrawler.Service;
 using DhtCrawler.Service.Index;
 using DhtCrawler.Service.Model;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
-using System.Text;
 using DhtCrawler.Common.Queue;
 using DhtCrawler.Common.Utils;
 using DhtCrawler.Common.Web.Mvc.Static;
+using DhtCrawler.Service.Repository;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace DhtCrawler.Web.Controllers
@@ -64,7 +63,7 @@ namespace DhtCrawler.Web.Controllers
             {
                 return RedirectToAction("List");
             }
-            item.KeyWords = new HashSet<string>(item.Name.Cut().Union(item.Name.Cut(false)).Where(k => k.Length > 1));//.Take(10)
+            item.KeyWords = new HashSet<string>(item.Name.Cut().Union(item.Name.Cut(false)).Where(k => k.Length > 1 && k.Length < 40));//.Take(10)
             _visiteQueue.Enqueue(new VisitedModel() { Hash = hash, UserId = UserId });
             return View(item);
         }

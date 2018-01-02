@@ -4,8 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Index.Utils;
 using DhtCrawler.Common.Utils;
-using DhtCrawler.Service;
 using DhtCrawler.Service.Model;
+using DhtCrawler.Service.Repository;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 

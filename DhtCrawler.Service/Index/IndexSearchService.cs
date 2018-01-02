@@ -4,6 +4,7 @@ using DhtCrawler.Common.Index;
 using DhtCrawler.Common.Index.Analyzer;
 using DhtCrawler.Common.Index.Utils;
 using DhtCrawler.Service.Model;
+using DhtCrawler.Service.Repository;
 using Lucene.Net.Analysis;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
