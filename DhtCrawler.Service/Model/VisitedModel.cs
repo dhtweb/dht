@@ -4,7 +4,7 @@
     {
         public override string Id { get; set; }
         public string UserId { get; set; }
-        public string Hash { get; set; }
+        public long HashId { get; set; }
 
     }
 }

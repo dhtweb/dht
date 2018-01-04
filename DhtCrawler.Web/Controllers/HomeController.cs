@@ -166,7 +166,7 @@ namespace DhtCrawler.Web.Controllers
                                 {
                                     size += list.Count;
                                     list.Clear();
-                                    Console.WriteLine("已导入{0},完成比例{0:F2}", size, size * 1.0 / dic.Count);
+                                    Console.WriteLine("已导入{0},完成比例{1:F2}", size, size * 1.0 / dic.Count);
                                 }
                             }
                         }
@@ -178,7 +178,7 @@ namespace DhtCrawler.Web.Controllers
                                 if (flag)
                                 {
                                     size += list.Count;
-                                    Console.WriteLine("已导入{0},完成比例{0:F2}", size, size * 1.0 / dic.Count);
+                                    Console.WriteLine("已导入{0},完成比例{1:F2}", size, size * 1.0 / dic.Count);
                                     break;
                                 }
                             }

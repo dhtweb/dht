@@ -220,7 +220,7 @@ namespace DhtCrawler.Service.Repository
         {
             var id = 0L;
             var size = 500;
-            var sql = new StringBuilder("SELECT id, infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, files, isdanger FROM t_infohash WHERE isdown=TRUE AND id > @id");
+            var sql = new StringBuilder("SELECT id, infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, hasfile, isdanger FROM t_infohash WHERE isdown=TRUE AND id > @id");
             if (start.HasValue)
             {
                 sql.Append(" AND updatetime>@start");

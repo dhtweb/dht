@@ -40,8 +40,6 @@ namespace DhtCrawler.Service.Repository
                 return;
             _connection.Dispose();
             _connection = null;
-            Console.WriteLine("dispose db connection");
-
         }
     }
 }
