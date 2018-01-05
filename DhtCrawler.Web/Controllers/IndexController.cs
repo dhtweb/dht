@@ -14,18 +14,12 @@ namespace DhtCrawler.Web.Controllers
             _indexSearchService = indexSearchService;
         }
 
-        public IActionResult BuildAll()
+        public IActionResult IncrementBuild(DateTime updateTime)
         {
-            var i = 0;
-            _indexSearchService.ReBuildIndex(it =>
+            Task.Factory.StartNew(() =>
             {
-                i++;
-                if (i % 1000 == 0)
-                {
-                    var codings = Encoding.UTF8.GetBytes(i.ToString() + Environment.NewLine);
-                    Response.Body.Write(codings, 0, codings.Length);
-                }
-            });
+                _indexSearchService.IncrementBuild(updateTime);
+            }, TaskCreationOptions.LongRunning);
             return new EmptyResult();
         }
 

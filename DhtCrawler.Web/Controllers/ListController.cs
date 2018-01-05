@@ -64,15 +64,15 @@ namespace DhtCrawler.Web.Controllers
                 return RedirectToAction("List");
             }
             item.KeyWords = new HashSet<string>(item.Name.Cut().Union(item.Name.Cut(false)).Where(k => k.Length > 1 && k.Length < 40));//.Take(10)
-            _visiteQueue.Enqueue(new VisitedModel() { Hash = hash, UserId = UserId });
+            _visiteQueue.Enqueue(new VisitedModel() { HashId = item.Id, UserId = UserId });
             return View(item);
         }
 
-        public IActionResult History(string hash)
+        public IActionResult History(long hashId)
         {
-            if (!hash.IsBlank())
+            if (hashId > 0)
             {
-                _visiteQueue.Enqueue(new VisitedModel() { Hash = hash, UserId = UserId });
+                _visiteQueue.Enqueue(new VisitedModel() { HashId = hashId, UserId = UserId });
             }
             return new EmptyResult();
         }

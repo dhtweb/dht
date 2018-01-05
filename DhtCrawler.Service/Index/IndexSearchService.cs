@@ -108,5 +108,30 @@ namespace DhtCrawler.Service.Index
                 return query;
             }, () => new Sort(SortField.FIELD_SCORE, new SortField("CreateTime", SortFieldType.INT64, true)));
         }
+
+        public void IncrementBuild(DateTime start)
+        {
+            var list = _infoHashRepository.GetAllFullInfoHashModels(start);
+            var batch = new List<InfoHashModel>(1000);
+            var size = 0;
+            foreach (var item in list)
+            {
+                batch.Add(item);
+                if (batch.Count > 1000)
+                {
+                    UpdateIndex(batch);
+                    size += batch.Count;
+                    batch.Clear();
+                    Console.WriteLine("已更新{0}条数据", size);
+                }
+            }
+            if (batch.Count > 0)
+            {
+                UpdateIndex(batch);
+                size += batch.Count;
+                batch.Clear();
+                Console.WriteLine("已更新{0}条数据", size);
+            }
+        }
     }
 }
