@@ -356,6 +356,22 @@ namespace DhtCrawler
             }
             return torrent;
         }
+
+        private static Torrent ParseBitTorrent(string file)
+        {
+            using (var stream = File.OpenRead(file))
+            {
+                var torrent = BEncodedDictionary.DecodeTorrent(stream);
+                var it = ParseBitTorrent((BEncodedDictionary)torrent["info"]);
+                using (var sha1 = new System.Security.Cryptography.SHA1CryptoServiceProvider())
+                {
+                    var rawBytes = ((BEncodedDictionary)torrent["info"]).Encode();
+                    byte[] infohash = sha1.ComputeHash(rawBytes);
+                    it.InfoHash = infohash.ToHex();
+                    return it;
+                }
+            }
+        }
         #endregion
 
         #region DHT事件
@@ -497,7 +513,15 @@ namespace DhtCrawler
                                     while (reader.Peek() > 0)
                                     {
                                         var line = reader.ReadLine();
-                                        if (line.IsBlank() || DownlaodedSet.Contains(line))
+                                        if (line.IsBlank())
+                                        {
+                                            break;
+                                        }
+                                        if (line.IndexOf(':') > 0)
+                                        {
+                                            line = line.Substring(0, 40);
+                                        }
+                                        if (DownlaodedSet.Contains(line))
                                         {
                                             continue;
                                         }
@@ -511,7 +535,7 @@ namespace DhtCrawler
                                 }
                             }
                         }
-                        Console.WriteLine("LOOP COMPLETE");
+                        log.Info("LOOP COMPLETE");
                         Thread.Sleep(TimeSpan.FromHours(12));
                     }
                 }, TaskCreationOptions.LongRunning);
@@ -538,8 +562,8 @@ namespace DhtCrawler
                             continue;
                         }
                         var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                        var path = Path.Combine(subdirectory.FullName, item.InfoHash + ".json");
-                        await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), content);
+                        var path = Path.Combine(TorrentPath, subdirectory.FullName, item.InfoHash + ".json");
+                        await File.WriteAllTextAsync(path, content);
                         await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
                         Console.WriteLine($"download {item.InfoHash} success");
                     }

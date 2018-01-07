@@ -138,8 +138,7 @@ namespace BitTorrent.Listeners
                     BitArray flags = new BitArray(piecesNum);
                     for (int i = 0; i < piecesNum && tryed < 10;)
                     {
-                        ExtData data = new ExtData();
-                        data = ReceiveMessage<ExtData>();
+                        var data = ReceiveMessage<ExtData>();
                         if (data.Legal)
                         {
                             if (data.Data.Length > 0 && !flags[data.PieceID])

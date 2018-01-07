@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using DhtCrawler.Common.Index;
 using DhtCrawler.Common.Index.Analyzer;
 using DhtCrawler.Common.Index.Utils;
+using DhtCrawler.Common.Utils;
 using DhtCrawler.Service.Model;
 using DhtCrawler.Service.Repository;
 using Lucene.Net.Analysis;
@@ -54,7 +56,7 @@ namespace DhtCrawler.Service.Index
                         names.Add(file.Name);
                     }
                 }
-                doc.AddTextField("Files", string.Join(",", names), Field.Store.NO);
+                doc.AddTextField("Files", string.Join(",", names), Field.Store.YES);
             }
             return doc;
         }
@@ -64,12 +66,37 @@ namespace DhtCrawler.Service.Index
             var item = new InfoHashModel
             {
                 InfoHash = doc.Get("InfoHash"),
-                Name = SetHighKeyWord(doc.Get("Name"), keyWords),//doc.Get("Name"),//
                 DownNum = doc.GetField("DownNum").GetInt32ValueOrDefault(),
                 FileNum = doc.GetField("FileNum").GetInt32ValueOrDefault(),
                 FileSize = doc.GetField("FileSize").GetInt64ValueOrDefault(),
                 CreateTime = new DateTime(doc.GetField("CreateTime").GetInt64ValueOrDefault())
             };
+            var name = doc.Get("Name");
+            if (!name.IsBlank())
+            {
+                var newName = SetHighKeyWord(doc.Get("Name"), keyWords);
+                item.Name = newName;
+                if (name.Length != newName.Length)
+                {
+                    return item;
+                }
+            }
+            var files = doc.Get("Files");
+            if (files.IsBlank())
+                return item;
+            item.ShowFiles = new List<string>();
+            var lines = files.Split(',');
+            foreach (var line in lines)
+            {
+                var newline = SetHighKeyWord(line, keyWords);
+                if (newline.Length == line.Length)
+                    continue;
+                item.ShowFiles.Add(newline);
+                if (item.ShowFiles.Count > 2)
+                {
+                    break;
+                }
+            }
             return item;
         }
 
@@ -106,7 +133,7 @@ namespace DhtCrawler.Service.Index
                 if (query.Clauses.Count <= 0)
                     query.Add(new MatchAllDocsQuery(), Occur.MUST);
                 return query;
-            }, () => new Sort(SortField.FIELD_SCORE, new SortField("CreateTime", SortFieldType.INT64, true)));
+            }, () => new Sort(new SortField("CreateTime", SortFieldType.INT64, true), SortField.FIELD_SCORE));
         }
 
         public void IncrementBuild(DateTime start)

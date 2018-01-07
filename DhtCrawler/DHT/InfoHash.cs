@@ -19,7 +19,7 @@ namespace DhtCrawler.DHT
             this.Bytes = bytes;
         }
         public byte[] Bytes { get; private set; }
-        public string Value => BitConverter.ToString(Bytes).Replace("-", "");
+        public string Value => Bytes.ToHex();
         public ISet<IPEndPoint> Peers { get; set; }
         public bool IsDown { get; set; }
 

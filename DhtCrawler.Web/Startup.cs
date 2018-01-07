@@ -83,18 +83,22 @@ namespace DhtCrawler.Web
             Task.Run(async () =>
             {
                 var wordQueue = app.ApplicationServices.GetService<IQueue<string>>();
+                var searchRepo = app.ApplicationServices.GetService<SearchWordRepository>();
                 while (true)
                 {
                     var searchWord = await wordQueue.DequeueAsync();
+                    var item = new SearchWordModel() { Word = searchWord, Num = 1 };
+                    await searchRepo.InsertOrUpdateAsync(item);
                 }
             });
             Task.Run(async () =>
             {
                 var visitQueue = app.ApplicationServices.GetService<IQueue<VisitedModel>>();
+                var visiteRepo = app.ApplicationServices.GetService<VisitedHistoryRepository>();
                 while (true)
                 {
                     var item = await visitQueue.DequeueAsync();
-
+                    await visiteRepo.InsertOrUpdateAsync(item);
                 }
             });
         }

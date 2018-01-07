@@ -66,6 +66,7 @@ namespace DhtCrawler.Service.Model
 
         public int DownNum { get; set; }
         public IList<TorrentFileModel> Files { get; set; }
+        public IList<string> ShowFiles { get; set; }
         public bool HasFile { get; set; }
         public bool IsDown { get; set; }
         public bool IsDanger { get; set; }

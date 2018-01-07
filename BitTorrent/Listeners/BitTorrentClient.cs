@@ -23,8 +23,8 @@ namespace BitTorrent.Listeners
         {
             client = new TcpClient()
             {
-                SendTimeout = 10000,
-                ReceiveTimeout = 10000,
+                SendTimeout = 5000,
+                ReceiveTimeout = 5000,
             };
             EndPoint = endpoint;
         }
@@ -40,13 +40,6 @@ namespace BitTorrent.Listeners
 
         public async Task<(BEncodedDictionary, bool)> GetMetaDataAsync(InfoHash hash)
         {
-            WireMessage message;
-            ExtHandShack exths;
-            long metadataSize;
-            int piecesNum;
-            byte[] metadata;
-            byte ut_metadata;
-
             try
             {
                 //连接
@@ -54,60 +47,49 @@ namespace BitTorrent.Listeners
                 await Task.WhenAny(waitTask, connectTask);
                 if (!connectTask.IsCompleted || connectTask.Status != TaskStatus.RanToCompletion)
                 {
-                    Trace.WriteLine("Connect Timeout", "Socket");
                     return (null, true);
                 }
                 stream = client.GetStream();
-
                 //发送握手
-                message = new HandShack(hash);
+                WireMessage message = new HandShack(hash);
                 await SendMessageAsync(message);
-
                 //接受握手
                 message = await ReceiveMessageAsync<HandShack>(1);
-                if (!message.Legal || !(message as HandShack).SupportExtend)
+                if (!message.Legal || !((HandShack) message).SupportExtend)
                 {
-                    Trace.WriteLine(EndPoint, "HandShack Fail");
                     return (null, true);
                 }
-
                 //发送拓展握手
                 message = new ExtHandShack() { SupportUtMetadata = true };
                 await SendMessageAsync(message);
-
                 //接受拓展
-                exths = await ReceiveMessageAsync<ExtHandShack>();
+                var exths = await ReceiveMessageAsync<ExtHandShack>();
                 if (!exths.Legal || !exths.CanGetMetadate || exths.MetadataSize > MaxMetadataSize || exths.MetadataSize <= 0)
                 {
-                    Trace.WriteLine(EndPoint, "ExtendHandShack Fail");
                     return (null, true);
                 }
-                metadataSize = exths.MetadataSize;
-                ut_metadata = exths.UtMetadata;
-                piecesNum = (int)Math.Ceiling(metadataSize / (decimal)PieceLength);
-
+                var metadataSize = exths.MetadataSize;
+                var utMetadata = exths.UtMetadata;
+                var piecesNum = (int)Math.Ceiling(metadataSize / (decimal)PieceLength);
                 var metaTask = ReceivePiecesAsync(metadataSize, piecesNum);
                 //开始发送piece请求
                 for (int i = 0; i < piecesNum; i++)
                 {
-                    message = new ExtQueryPiece(ut_metadata, i);
+                    message = new ExtQueryPiece(utMetadata, i);
                     await SendMessageAsync(message);
                 }
                 //等待pieces接收完毕
-                metadata = await metaTask;
+                var metadata = await metaTask;
                 if (metadata == null)
                     return (null, false);
                 //检查hash值是否正确
                 using (var sha1 = new System.Security.Cryptography.SHA1CryptoServiceProvider())
                 {
                     byte[] infohash = sha1.ComputeHash(metadata);
-                    if (!infohash.SequenceEqual(hash.Hash))
-                    {
-                        Trace.WriteLine(EndPoint, "Hash Wrong");
-                        return (null, false);
-                    }
+                    if (infohash.SequenceEqual(hash.Hash))
+                        return (BEncodedDictionary.DecodeTorrent(metadata), false);
+                    return (null, false);
                 }
-                return (BEncodedDictionary.DecodeTorrent(metadata), false);
             }
             catch (AggregateException ex)
             {
@@ -129,8 +111,7 @@ namespace BitTorrent.Listeners
                 BitArray flags = new BitArray(piecesNum);
                 for (int i = 0; i < piecesNum && tryed < 10;)
                 {
-                    ExtData data = new ExtData();
-                    data = await ReceiveMessageAsync<ExtData>();
+                    var data = await ReceiveMessageAsync<ExtData>();
                     if (data.Legal)
                     {
                         if (data.Data.Length > 0 && !flags[data.PieceID])
@@ -143,7 +124,6 @@ namespace BitTorrent.Listeners
                         }
                         else
                         {
-                            Trace.WriteLine(EndPoint, "Received Empty Data");
                             return null;
                         }
                     }
@@ -157,7 +137,6 @@ namespace BitTorrent.Listeners
                 {
                     if (!flags[i])
                     {
-                        Trace.WriteLine(EndPoint, "Not Received All pieces");
                         return null;
                     }
                 }
@@ -165,7 +144,6 @@ namespace BitTorrent.Listeners
             }
             catch (System.IO.IOException)
             {
-                Trace.WriteLine(EndPoint, "Socket Closed");
                 return null;
             }
         }
@@ -179,14 +157,13 @@ namespace BitTorrent.Listeners
         public async Task<T> ReceiveMessageAsync<T>(int head = 4) where T : WireMessage, new()
         {
             T msg = new T();
-            int tmp;
             byte[] buffer;
 
             while (true)
             {
                 //获取数据长度头
                 buffer = new byte[head];
-                tmp = await stream.ReadAsync(buffer, 0, head);
+                var tmp = await stream.ReadAsync(buffer, 0, head);
                 if (tmp == 0)//未获得数据长度头 返回
                 {
                     Trace.WriteLine(EndPoint, "No Message to Get");
@@ -219,8 +196,6 @@ namespace BitTorrent.Listeners
             }
 
             msg.Decode(buffer, 0, buffer.Length);
-            Trace.WriteLineIf(!msg.Legal, new { Length = msg.Length, ID = buffer[0], Endpoint = EndPoint }, "No Required Message");
-
             return msg;
         }
 

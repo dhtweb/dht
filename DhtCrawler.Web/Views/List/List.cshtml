@@ -1,4 +1,5 @@
-﻿@model DhtCrawler.Common.Web.Model.PageModel<DhtCrawler.Service.Model.InfoHashModel>
+﻿@using DhtCrawler.Common.Utils
+@model DhtCrawler.Common.Web.Model.PageModel<DhtCrawler.Service.Model.InfoHashModel>
 @{
     if (ViewBag.SearchKey != null)
     {
@@ -68,6 +69,13 @@ else
                     <div class="media-body">
 
                         <h4><a class="title" target="_blank" href="@Url.RouteUrl("detail", new { hash = item.InfoHash })">@Html.Raw(item.Name)</a></h4>
+                        @if (!item.ShowFiles.IsEmpty())
+                        {
+                            foreach (var file in item.ShowFiles)
+                            {
+                                <h5>@Html.Raw(file)</h5>
+                            }
+                        }
                         <div class="media-more">
                             <cite>创建日期：</cite><span class="label label-success">@item.CreateTime.ToShortDateString()</span>&nbsp;&nbsp;&nbsp;
                             <cite>文件大小：</cite><span class="label label-warning">@item.ShowFileSize</span>&nbsp;&nbsp;&nbsp;
