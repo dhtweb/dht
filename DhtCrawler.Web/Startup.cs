@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Db;
 using DhtCrawler.Common.Queue;
@@ -10,6 +11,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace DhtCrawler.Web
@@ -35,6 +37,8 @@ namespace DhtCrawler.Web
             services.AddSingleton(new DbFactory(Configuration["postgresql.url"], NpgsqlFactory.Instance));
             services.AddTransient<InfoHashRepository>();
             services.AddTransient<KeyWordRepository>();
+            services.AddTransient<SearchWordRepository>();
+            services.AddTransient<VisitedHistoryRepository>();
             services.AddSingleton(provider =>
             {
                 var infoHashRepo = provider.GetService<InfoHashRepository>();
@@ -80,16 +84,30 @@ namespace DhtCrawler.Web
                     await writer.WriteAsync(pageItem.Content, 0, pageItem.Content.Length);
                 }
             });
+            var logger = (ILogger)app.ApplicationServices.GetService(typeof(ILogger));
+            System.Console.WriteLine("get logger over");
             Task.Run(async () =>
+                       {
+                           var wordQueue = app.ApplicationServices.GetService<IQueue<string>>();
+                           var searchRepo = app.ApplicationServices.GetService<SearchWordRepository>();
+                           while (true)
+                           {
+                               try
+                               {
+                                   var searchWord = await wordQueue.DequeueAsync();
+                                   var item = new SearchWordModel() { Word = searchWord, Num = 1 };
+                                   await searchRepo.InsertOrUpdateAsync(item);
+                               }
+                               catch (Exception ex)
+                               {
+                                   logger.LogError(ex, "记录用户搜索关键字失败");
+                               }
+
+                           }
+                       }).ContinueWith(t =>
             {
-                var wordQueue = app.ApplicationServices.GetService<IQueue<string>>();
-                var searchRepo = app.ApplicationServices.GetService<SearchWordRepository>();
-                while (true)
-                {
-                    var searchWord = await wordQueue.DequeueAsync();
-                    var item = new SearchWordModel() { Word = searchWord, Num = 1 };
-                    await searchRepo.InsertOrUpdateAsync(item);
-                }
+                if (t.Exception != null)
+                    logger.LogError(t.Exception, "记录用户搜索关键字启动失败");
             });
             Task.Run(async () =>
             {
@@ -97,9 +115,20 @@ namespace DhtCrawler.Web
                 var visiteRepo = app.ApplicationServices.GetService<VisitedHistoryRepository>();
                 while (true)
                 {
-                    var item = await visitQueue.DequeueAsync();
-                    await visiteRepo.InsertOrUpdateAsync(item);
+                    try
+                    {
+                        var item = await visitQueue.DequeueAsync();
+                        await visiteRepo.InsertOrUpdateAsync(item);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        logger.LogError(ex, "记录用户浏览历史失败");
+                    }
                 }
+            }).ContinueWith(t =>
+            {
+                if (t.Exception != null)
+                    logger.LogError(t.Exception, "记录用户浏览历史任务启动失败");
             });
         }
     }
