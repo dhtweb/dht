@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using DhtCrawler.Common.Db;
 using DhtCrawler.Common.Queue;
 using DhtCrawler.Common.Web.Mvc.Static;
+using DhtCrawler.Common.Web.Mvc.Log;
 using DhtCrawler.Service.Index;
 using DhtCrawler.Service.Model;
 using DhtCrawler.Service.Repository;
@@ -11,8 +12,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Npgsql;
+using log4net;
 
 namespace DhtCrawler.Web
 {
@@ -58,6 +59,7 @@ namespace DhtCrawler.Web
             {
                 app.UseExceptionHandler("/Home/Error");
             }
+            app.UseLog4Net();
             app.UseStaticFiles();
             app.UseMvc(routes =>
             {
@@ -83,9 +85,8 @@ namespace DhtCrawler.Web
                 {
                     await writer.WriteAsync(pageItem.Content, 0, pageItem.Content.Length);
                 }
-            });
-            var logger = (ILogger)app.ApplicationServices.GetService(typeof(ILogger));
-            System.Console.WriteLine("get logger over");
+            });            
+            var logger = LogManager.GetLogger(typeof(Startup));
             Task.Run(async () =>
                        {
                            var wordQueue = app.ApplicationServices.GetService<IQueue<string>>();
@@ -100,15 +101,11 @@ namespace DhtCrawler.Web
                                }
                                catch (Exception ex)
                                {
-                                   logger.LogError(ex, "记录用户搜索关键字失败");
+                                   logger.Error("记录用户搜索关键字失败", ex);
                                }
 
                            }
-                       }).ContinueWith(t =>
-            {
-                if (t.Exception != null)
-                    logger.LogError(t.Exception, "记录用户搜索关键字启动失败");
-            });
+                       });
             Task.Run(async () =>
             {
                 var visitQueue = app.ApplicationServices.GetService<IQueue<VisitedModel>>();
@@ -122,13 +119,9 @@ namespace DhtCrawler.Web
                     }
                     catch (System.Exception ex)
                     {
-                        logger.LogError(ex, "记录用户浏览历史失败");
+                        logger.Error("记录用户浏览历史失败", ex);
                     }
                 }
-            }).ContinueWith(t =>
-            {
-                if (t.Exception != null)
-                    logger.LogError(t.Exception, "记录用户浏览历史任务启动失败");
             });
         }
     }

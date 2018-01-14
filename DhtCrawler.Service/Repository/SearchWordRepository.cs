@@ -46,6 +46,7 @@ namespace DhtCrawler.Service.Repository
             }
             catch (Exception ex)
             {
+                log.Error("添加失败", ex);
                 trans.Rollback();
                 return false;
             }

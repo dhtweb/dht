@@ -15,6 +15,7 @@ using Lucene.Net.Search.Highlight;
 using Lucene.Net.Store;
 using Lucene.Net.Util;
 using Directory = Lucene.Net.Store.Directory;
+using log4net;
 
 namespace DhtCrawler.Common.Index
 {
@@ -84,10 +85,14 @@ namespace DhtCrawler.Common.Index
                  });  // 取得索引存储的文件夹
             }
         }
+        protected readonly ILog log;
         protected abstract string IndexDir { get; }
         protected virtual int BatchCommitNum => 10000;
         protected abstract Lucene.Net.Analysis.Analyzer KeyWordAnalyzer { get; }
-
+        public BaseSearchService()
+        {
+            this.log = LogManager.GetLogger(GetType());
+        }
         /// <summary>
         /// 获取lucene文档对象
         /// </summary>
@@ -286,9 +291,9 @@ namespace DhtCrawler.Common.Index
                             IndexWriter.Commit();
                             writer.Dispose();
                         }
-                        catch (Exception e)
+                        catch (Exception ex)
                         {
-                            Console.WriteLine(e);
+                            log.Error("合并索引失败", ex);
                         }
                         finally
                         {
@@ -298,12 +303,6 @@ namespace DhtCrawler.Common.Index
                             }
                         }
                     }
-                    //var subIndexDirs = subDics.Select(GetIndexDirectory).ToArray();
-                    //IndexWriter.AddIndexes(subIndexDirs);
-                    //foreach (var subIndexDir in subIndexDirs)
-                    //{
-                    //    subIndexDir.Dispose();
-                    //}
                     var rmPaths = System.IO.Directory.GetDirectories(IndexDir);
                     foreach (var rmPath in rmPaths)
                     {
@@ -313,7 +312,7 @@ namespace DhtCrawler.Common.Index
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
+                log.Error("索引构建失败", ex);
             }
 
         }

@@ -3,7 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using DhtCrawler.Common.Queue;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.Logging;
+using log4net;
 
 namespace DhtCrawler.Common.Web.Mvc.Static
 {
@@ -38,7 +38,7 @@ namespace DhtCrawler.Common.Web.Mvc.Static
             if (service == null)
                 throw new InvalidOperationException($"UnableToFindServices {nameof(service)}");
             var queue = (IQueue<PageStaticHtmlItem>)service;
-            var logger = (ILogger)app.ApplicationServices.GetService(typeof(ILogger));
+            var logger = LogManager.GetLogger(typeof(PageStaticHtmlBuilder));
             Task.Run(async () =>
             {
                 while (true)
@@ -50,7 +50,7 @@ namespace DhtCrawler.Common.Web.Mvc.Static
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "静态文件写入错误");
+                        logger.Error("静态文件写入错误", ex);
                     }
                 }
             });

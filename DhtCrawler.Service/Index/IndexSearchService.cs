@@ -149,7 +149,7 @@ namespace DhtCrawler.Service.Index
                     UpdateIndex(batch);
                     size += batch.Count;
                     batch.Clear();
-                    Console.WriteLine("已更新{0}条数据", size);
+                    log.InfoFormat("已更新{0}条数据", size);
                 }
             }
             if (batch.Count > 0)
@@ -157,7 +157,7 @@ namespace DhtCrawler.Service.Index
                 UpdateIndex(batch);
                 size += batch.Count;
                 batch.Clear();
-                Console.WriteLine("已更新{0}条数据", size);
+                log.InfoFormat("已更新{0}条数据", size);
             }
         }
     }

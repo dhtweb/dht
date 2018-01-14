@@ -12,6 +12,7 @@ using DhtCrawler.Service.Model;
 using DhtCrawler.Service.Repository;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
+using log4net;
 
 namespace DhtCrawler.Web.Controllers
 {
@@ -19,6 +20,7 @@ namespace DhtCrawler.Web.Controllers
     {
         private readonly InfoHashRepository _infoHashRepository;
         private readonly IMemoryCache _cache;
+        private static ILog log = LogManager.GetLogger(typeof(HomeController));
         public HomeController(InfoHashRepository infoHashRepository, IMemoryCache cache)
         {
             this._infoHashRepository = infoHashRepository;
@@ -166,7 +168,7 @@ namespace DhtCrawler.Web.Controllers
                                 {
                                     size += list.Count;
                                     list.Clear();
-                                    Console.WriteLine("已导入{0},完成比例{1:F2}", size, size * 1.0 / dic.Count);
+                                    log.InfoFormat("已导入{0},完成比例{1:F2}", size, size * 1.0 / dic.Count);
                                 }
                             }
                         }
@@ -178,7 +180,7 @@ namespace DhtCrawler.Web.Controllers
                                 if (flag)
                                 {
                                     size += list.Count;
-                                    Console.WriteLine("已导入{0},完成比例{1:F2}", size, size * 1.0 / dic.Count);
+                                    log.InfoFormat("已导入{0},完成比例{1:F2}", size, size * 1.0 / dic.Count);
                                     break;
                                 }
                             }

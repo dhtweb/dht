@@ -13,8 +13,8 @@
     <div class="row-fluid tor-magnet">
         <textarea id="magnetLink" name="magnetLink" class="magnet-link" onClick="jQuery(this).select();" readonly>magnet:?xt=urn:btih:@Model.InfoHash</textarea>
         <div class="tor-button hidden-xs">
-            <a id="AndroidPlayNow" href="http://www.lixianhezi.com/yun/" target="_blank" class="btn btn-default btn-detail" title="在线观看"><i class="icon-play icon-white"></i> 在线观看</a>
-            <a id="playNow" href="http://www.lixianhezi.com/yun/" target="_blank" class="btn btn-danger btn-detail" title="@Model.Name"><i class="icon-play icon-white"></i> 网盘播放</a>
+            @*<a id="AndroidPlayNow" href="http://www.lixianhezi.com/yun/" target="_blank" class="btn btn-default btn-detail" title="在线观看"><i class="icon-play icon-white"></i> 在线观看</a>
+            <a id="playNow" href="http://www.lixianhezi.com/yun/" target="_blank" class="btn btn-danger btn-detail" title="@Model.Name"><i class="icon-play icon-white"></i> 网盘播放</a>*@
             <a id="copyToClipboard" data-clipboard-target="magnetLink" class="copy-button btn btn-primary btn-detail"><i class="icon-share icon-white"></i> 复制磁力链接</a>
             <a id="magnetDownload" href="magnet:?xt=urn:btih:@Model.InfoHash" class="btn btn-success btn-detail" title="使用迅雷、旋风、电驴等BT软件下载"><i class="icon-magnet icon-white"></i> 在迅雷/旋风/bitcomet中打开</a>
             <a id="QRCodeButton" class="btn btn-info btn-detail" data-toggle="modal" data-target="#QRModal" title="扫描二维码 @Model.Name"><i class="icon-qrcode"></i> 扫描二维码/手机迅雷</a>

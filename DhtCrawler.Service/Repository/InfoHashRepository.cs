@@ -138,7 +138,7 @@ namespace DhtCrawler.Service.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
+                log.Error("添加失败", ex);
                 trans?.Rollback();
                 return false;
             }
@@ -188,21 +188,6 @@ namespace DhtCrawler.Service.Repository
             var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
             var count = await result.ReadFirstAsync<long>();
             var list = (await result.ReadAsync<InfoHashModel>()).ToArray();
-            //var fileIds = list.Where(l => l.HasFile).ToDictionary(l => l.Id, l => l);
-            //if (fileIds.Count > 0)
-            //{
-            //    using (var reader = await Connection.ExecuteReaderAsync("SELECT info_hash_id,files FROM t_infohash_file WHERE info_hash_id IN @ids", new { ids = fileIds.Keys.ToArray() }))
-            //    {
-            //        while (reader.Read())
-            //        {
-            //            var hashId = reader.GetInt64(0);
-            //            if (fileIds.ContainsKey(hashId))
-            //            {
-            //                fileIds[hashId].Files = reader.GetString(0).ToObjectFromJson<IList<TorrentFileModel>>();
-            //            }
-            //        }
-            //    }
-            //}
             return (list, count);
         }
 
@@ -237,6 +222,7 @@ namespace DhtCrawler.Service.Repository
                 }
                 catch (Exception ex)
                 {
+                    log.Error(ex);
                     continue;
                 }
                 foreach (var model in hashs)

@@ -2,11 +2,14 @@
 using System.Data;
 using DhtCrawler.Common.Db;
 using DhtCrawler.Service.Model;
+using log4net;
 
 namespace DhtCrawler.Service.Repository
 {
     public abstract class BaseRepository<T, TId> : IDisposable where T : BaseModel<TId>
     {
+        protected readonly ILog log;
+
         protected DbFactory Factory { get; }
 
         private IDbConnection _connection;
@@ -23,6 +26,7 @@ namespace DhtCrawler.Service.Repository
         protected BaseRepository(DbFactory factory)
         {
             this.Factory = factory;
+            this.log = LogManager.GetLogger(GetType());
         }
 
         protected IDbTransaction BeginTransaction()
