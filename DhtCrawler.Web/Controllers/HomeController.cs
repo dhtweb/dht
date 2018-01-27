@@ -45,6 +45,7 @@ namespace DhtCrawler.Web.Controllers
                 return;
             }
             var queue = new Queue<string>(new[] { sourcePath });
+            var set = new HashSet<string>();
             while (queue.Count > 0)
             {
                 var dir = queue.Dequeue();
@@ -100,10 +101,12 @@ namespace DhtCrawler.Web.Controllers
                         }
 
                     }
-                    if (string.IsNullOrWhiteSpace(model.InfoHash))
+                    if (string.IsNullOrWhiteSpace(model.InfoHash) || set.Contains(model.InfoHash))
                     {
-                        model.InfoHash = Path.GetFileNameWithoutExtension(file);
+                        continue;
+                        // model.InfoHash = Path.GetFileNameWithoutExtension(file);
                     }
+                    set.Add(model.InfoHash);
                     list.Add(new KeyValuePair<InfoHashModel, string>(model, file));
                     if (list.Count > 200)
                     {
