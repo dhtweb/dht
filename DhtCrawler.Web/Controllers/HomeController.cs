@@ -155,8 +155,22 @@ namespace DhtCrawler.Web.Controllers
                                 var line = await reader.ReadLineAsync();
                                 if (string.IsNullOrWhiteSpace(line))
                                     break;
-                                var info = line.Split(':');
-                                dic[info[0]] = int.Parse(info[1]);
+                                var key = line;
+                                var num = 1;
+                                if (line.IndexOf(':') > -1)
+                                {
+                                    var info = line.Split(':');
+                                    key = info[0];
+                                    num = int.Parse(info[1]);
+                                }
+                                if (dic.ContainsKey(key))
+                                {
+                                    dic[key] += num;
+                                }
+                                else
+                                {
+                                    dic[key] = num;
+                                }
                             } while (true);
                         }
                         var size = 0;
