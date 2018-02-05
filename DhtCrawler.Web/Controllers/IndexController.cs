@@ -25,7 +25,6 @@ namespace DhtCrawler.Web.Controllers
 
         public IActionResult MBuild()
         {
-            var i = 0;
             Task.Factory.StartNew(() =>
             {
                 _indexSearchService.MultipleThreadReBuildIndex();

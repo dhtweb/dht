@@ -138,10 +138,11 @@ namespace DhtCrawler.Web.Controllers
         }
 
 
-        public IActionResult ImportInfo(string importPath)
+        public IActionResult ImportInfo(string importPath, int num = 1000)
         {
             if (Directory.Exists(importPath))
             {
+                num = Math.Abs(num);
                 Task.Factory.StartNew(async () =>
                 {
                     var files = Directory.GetFiles(importPath, "*.txt");
@@ -156,20 +157,20 @@ namespace DhtCrawler.Web.Controllers
                                 if (string.IsNullOrWhiteSpace(line))
                                     break;
                                 var key = line;
-                                var num = 1;
+                                var n = 1;
                                 if (line.IndexOf(':') > -1)
                                 {
                                     var info = line.Split(':');
                                     key = info[0];
-                                    num = int.Parse(info[1]);
+                                    n = int.Parse(info[1]);
                                 }
                                 if (dic.ContainsKey(key))
                                 {
-                                    dic[key] += num;
+                                    dic[key] += n;
                                 }
                                 else
                                 {
-                                    dic[key] = num;
+                                    dic[key] = n;
                                 }
                             } while (true);
                         }
@@ -178,7 +179,7 @@ namespace DhtCrawler.Web.Controllers
                         foreach (var kv in dic)
                         {
                             list.AddLast(new InfoHashModel() { InfoHash = kv.Key, DownNum = kv.Value });
-                            if (list.Count > 100)
+                            if (list.Count > num)
                             {
                                 var flag = await _infoHashRepository.InsertOrUpdateAsync(list);
                                 if (flag)
