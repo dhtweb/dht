@@ -15,12 +15,9 @@
     }
 }
 
-
 @section PagerHeader{
     @Html.Partial("_DefaultHeader")
 }
-
-
 
 <div class="top-search clearfix">
     <div class="row">
@@ -58,7 +55,6 @@ else
     <div class="sort">
         <ol class="breadcrumb">
             <span class="hidden-xs">磁力云为您搜索到的 <b class="blue">@ViewBag.SearchKey</b> 磁力链接资源结果</span>
-            <li>@*<a href="http://www.lixianhezi.com/" target="_blank" class="highlight">离线网盘</a>*@</li>
         </ol>
     </div>
     <div class="search-list col-md-12">
@@ -88,7 +84,6 @@ else
             }
         </ul>
     </div>
-
     <ul class="pagination">
         @if (Model.PageIndex == 1)
         {

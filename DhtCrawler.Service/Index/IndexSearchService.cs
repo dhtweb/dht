@@ -133,7 +133,7 @@ namespace DhtCrawler.Service.Index
                 if (query.Clauses.Count <= 0)
                     query.Add(new MatchAllDocsQuery(), Occur.MUST);
                 return query;
-            }, () => new Sort(new SortField("CreateTime", SortFieldType.INT64, true), SortField.FIELD_SCORE));
+            }, () => new Sort(SortField.FIELD_SCORE, new SortField("CreateTime", SortFieldType.INT64, true)));
         }
 
         public void IncrementBuild(DateTime start)

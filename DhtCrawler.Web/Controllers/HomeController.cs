@@ -181,12 +181,12 @@ namespace DhtCrawler.Web.Controllers
                             list.AddLast(new InfoHashModel() { InfoHash = kv.Key, DownNum = kv.Value });
                             if (list.Count > num)
                             {
-                                var flag = await _infoHashRepository.InsertOrUpdateAsync(list);
+                                var flag = await _infoHashRepository.BatchInsertOrUpdateAsync(list);
                                 if (flag)
                                 {
                                     size += list.Count;
                                     list.Clear();
-                                    log.InfoFormat("已导入{0},完成比例{1:F2}", size, size * 1.0 / dic.Count);
+                                    log.InfoFormat("已导入{0},完成比例{1:F4}", size, size * 1.0 / dic.Count);
                                 }
                             }
                         }
@@ -217,13 +217,25 @@ namespace DhtCrawler.Web.Controllers
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
         }
 
-        public IActionResult DownFile(string path)
+        [ResponseCache(Duration = int.MaxValue, Location = ResponseCacheLocation.Any)]
+        public IActionResult About()
         {
-            if (System.IO.File.Exists(path))
-            {
-                return File(path, "application/octet-stream");
-            }
-            return Content("");
+            ViewBag.Index = 0;
+            return View();
+        }
+
+        [ResponseCache(Duration = int.MaxValue, Location = ResponseCacheLocation.Any)]
+        public IActionResult Term()
+        {
+            ViewBag.Index = 1;
+            return View();
+        }
+
+        [ResponseCache(Duration = int.MaxValue, Location = ResponseCacheLocation.Any)]
+        public IActionResult Dmca()
+        {
+            ViewBag.Index = 2;
+            return View();
         }
     }
 }
