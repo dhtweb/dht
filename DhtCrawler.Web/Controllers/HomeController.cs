@@ -36,7 +36,7 @@ namespace DhtCrawler.Web.Controllers
             return View();
         }
 
-        public async Task Contact(string sourcePath)
+        public async Task Contact(string sourcePath, int num = 200)
         {
             Response.ContentType = "text/plain";
             if (sourcePath == null || !Directory.Exists(sourcePath))
@@ -104,11 +104,10 @@ namespace DhtCrawler.Web.Controllers
                     if (string.IsNullOrWhiteSpace(model.InfoHash) || set.Contains(model.InfoHash))
                     {
                         continue;
-                        // model.InfoHash = Path.GetFileNameWithoutExtension(file);
                     }
                     set.Add(model.InfoHash);
                     list.Add(new KeyValuePair<InfoHashModel, string>(model, file));
-                    if (list.Count > 200)
+                    if (list.Count > num)
                     {
                         await Response.WriteAsync((++size) + Environment.NewLine);
                         var flag = await _infoHashRepository.InsertOrUpdateAsync(list.Select(kv => kv.Key));

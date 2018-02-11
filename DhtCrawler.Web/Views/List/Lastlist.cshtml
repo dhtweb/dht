@@ -43,13 +43,12 @@
             <li class="media">
                 <div class="media-body">
 
-                    <h4><a class="title" target="_blank" href="@Url.RouteUrl("detail", new { hash = item.InfoHash })">@Html.Raw(item.Name)</a></h4>
+                    <h4><a class="title" target="_blank" href="@Url.RouteUrl("detail", new { hash = item.InfoHash })">@item.Name</a></h4>
                     <div class="media-more">
                         <cite>创建日期：</cite><span class="label label-success">@item.CreateTime.ToShortDateString()</span>&nbsp;&nbsp;&nbsp;
                         <cite>文件大小：</cite><span class="label label-warning">@item.ShowFileSize</span>&nbsp;&nbsp;&nbsp;
                         <cite>文件数：</cite><span class="label label-warning">@item.FileNum</span>&nbsp;&nbsp;&nbsp;
                         <cite>访问热度：</cite><span class="label label-primary">@item.DownNum</span>&nbsp;&nbsp;&nbsp;
-                        @*<span class="media-down"><a href="http://www.lixianhezi.com/yun/" title="磁力云" style="color: red"><i class="icon-download"></i> 网盘播放</a></span>*@
                     </div>
                 </div>
             </li>

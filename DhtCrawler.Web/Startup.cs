@@ -14,6 +14,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using log4net;
+using Microsoft.Extensions.WebEncoders;
+using System.Text.Unicode;
+using System.Text.Encodings.Web;
 
 namespace DhtCrawler.Web
 {
@@ -44,6 +47,10 @@ namespace DhtCrawler.Web
             {
                 var infoHashRepo = provider.GetService<InfoHashRepository>();
                 return new IndexSearchService(Configuration["index.dir"], infoHashRepo);
+            });
+            services.Configure<WebEncoderOptions>(options =>
+            {
+                options.TextEncoderSettings = new TextEncoderSettings(UnicodeRanges.All);
             });
         }
 
@@ -85,7 +92,7 @@ namespace DhtCrawler.Web
                 {
                     await writer.WriteAsync(pageItem.Content, 0, pageItem.Content.Length);
                 }
-            });            
+            });
             var logger = LogManager.GetLogger(typeof(Startup));
             Task.Run(async () =>
                        {
