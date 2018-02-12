@@ -84,7 +84,7 @@ namespace DhtCrawler.Web
                 var filePath = pageItem.RequestPath.Trim('/');
                 var path = Path.Combine(basePath, filePath);
                 var fileInfo = new FileInfo(path);
-                if (!fileInfo.Directory.Exists)
+                if (fileInfo.Directory != null && !fileInfo.Directory.Exists)
                 {
                     fileInfo.Directory.Create();
                 }
