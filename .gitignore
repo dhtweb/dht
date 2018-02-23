@@ -12,6 +12,7 @@ obj/
 log/
 info/
 DhtCrawler.Web/Index/
+infohash/
 torrent/
 Properties/
 /.vs
