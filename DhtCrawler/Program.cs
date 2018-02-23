@@ -23,6 +23,8 @@ using DhtCrawler.Configuration;
 using DhtCrawler.DHT.Message;
 using DhtCrawler.Store;
 using BitTorrentClient = BitTorrent.Listeners.BitTorrentClient;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace DhtCrawler
 {
@@ -54,8 +56,8 @@ namespace DhtCrawler
             LoadDownInfoHash();
             RunSpider();
             RunDown();
-            RunWriteTorrent();
             RunRecordInfoHash();
+            Task.WaitAll(RunWriteTorrent(), SyncToDatabase());
             WaitComplete();
         }
 
@@ -503,7 +505,7 @@ namespace DhtCrawler
                 {
                     while (true)
                     {
-                        var infoHashFiles = Directory.GetFiles(InfoPath, "*.txt");
+                        var infoHashFiles = Directory.GetFiles(InfoPath, "*.retry");
                         foreach (var hashFile in infoHashFiles)
                         {
                             using (var stream = File.OpenRead(hashFile))
@@ -547,37 +549,252 @@ namespace DhtCrawler
             };
         }
 
-        private static void RunWriteTorrent()
+        private static async Task RunWriteTorrent()
         {
-            Task.Factory.StartNew(async () =>
+            var directory = new DirectoryInfo(TorrentPath);
+            await Task.Yield();
+            while (running)
             {
-                var directory = new DirectoryInfo(TorrentPath);
-                while (running)
-                {
-                    while (WriteTorrentQueue.TryDequeue(out var item))
-                    {
-                        var content = item.ToJson();
-                        if (content.IsBlank())
-                        {
-                            continue;
-                        }
-                        var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                        var path = Path.Combine(TorrentPath, subdirectory.FullName, item.InfoHash + ".json");
-                        await File.WriteAllTextAsync(path, content);
-                        await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
-                        Console.WriteLine($"download {item.InfoHash} success");
-                    }
-                    await Task.Delay(500);
-                }
                 while (WriteTorrentQueue.TryDequeue(out var item))
                 {
+                    var content = item.ToJson();
+                    if (content.IsBlank())
+                    {
+                        continue;
+                    }
                     var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                    var path = Path.Combine(subdirectory.FullName, item.InfoHash + ".json");
-                    await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), item.ToJson());
+                    var path = Path.Combine(TorrentPath, subdirectory.FullName, item.InfoHash + ".json");
+                    await File.WriteAllTextAsync(path, content);
                     await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
                     Console.WriteLine($"download {item.InfoHash} success");
                 }
-            });
+                await Task.Delay(500);
+            }
+            while (WriteTorrentQueue.TryDequeue(out var item))
+            {
+                var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
+                var path = Path.Combine(subdirectory.FullName, item.InfoHash + ".json");
+                await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), item.ToJson());
+                await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
+                Console.WriteLine($"download {item.InfoHash} success");
+            }
+        }
+
+        private static async Task SyncToDatabase()
+        {
+            watchLog.Info("同步种子到数据库启动");
+            while (running)
+            {
+                var queue = new Queue<string>(Directory.GetDirectories(TorrentPath));
+                while (queue.Count > 0)
+                {
+                    var dir = queue.Dequeue();
+                    foreach (var directory in Directory.GetDirectories(dir))
+                    {
+                        queue.Enqueue(directory);
+                    }
+                    var files = Directory.GetFiles(dir, "*.json");
+                    if (files.Length == 0 && Directory.GetLastWriteTime(dir) <= DateTime.Now.AddHours(-6))
+                    {
+                        Directory.Delete(dir);
+                        continue;
+                    }
+                    var conStr = ConfigurationManager.Default.GetString("conStr");
+                    try
+                    {
+                        using (var con = new NpgsqlConnection(conStr))
+                        {
+                            await con.OpenAsync();
+                            foreach (var file in files)
+                            {
+                                try
+                                {
+                                    var content = await File.ReadAllTextAsync(file);
+                                    if (content.IsBlank())
+                                    {
+                                        File.Delete(file);
+                                        continue;
+                                    }
+                                    var item = content.ToObjectFromJson<Torrent>();
+                                    if (item == null)
+                                    {
+                                        continue;
+                                    }
+                                    var fileNum = 0;
+                                    if (!item.Files.IsEmpty())
+                                    {
+                                        var fileQueue = new Queue<TorrentFile>(item.Files);
+                                        while (fileQueue.Count > 0)
+                                        {
+                                            var tfile = fileQueue.Dequeue();
+                                            if (tfile.Files.IsEmpty())
+                                            {
+                                                fileNum += 1;
+                                            }
+                                            else
+                                            {
+                                                foreach (var it in tfile.Files)
+                                                {
+                                                    fileQueue.Enqueue(it);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    using (var transaction = con.BeginTransaction())
+                                    {
+                                        try
+                                        {
+                                            using (var insertHash = con.CreateCommand())
+                                            {
+                                                insertHash.CommandText = "INSERT INTO t_infohash AS ti (infohash, name, filenum, filesize, downnum, isdown, createtime, hasfile) VALUES (@hash, @name, @filenum, @filesize, 1, TRUE, @createtime,  @hasfile) ON CONFLICT  (infohash) DO UPDATE SET name=@name,filenum=@filenum,filesize=@filesize,isdown=TRUE,createtime=@createtime,updatetime=current_timestamp,hasfile=@hasfile RETURNING id;";
+                                                insertHash.Transaction = transaction;
+                                                insertHash.Parameters.Add(new NpgsqlParameter("hash", item.InfoHash));
+                                                insertHash.Parameters.Add(new NpgsqlParameter("name", item.Name ?? ""));
+                                                insertHash.Parameters.Add(new NpgsqlParameter("filenum", fileNum == 0 ? 1 : fileNum));
+                                                insertHash.Parameters.Add(new NpgsqlParameter("filesize", item.FileSize));
+                                                insertHash.Parameters.Add(new NpgsqlParameter("createtime", File.GetCreationTime(file)));
+                                                insertHash.Parameters.Add(new NpgsqlParameter("hasfile", !item.Files.IsEmpty()));
+                                                var hashId = Convert.ToInt64(await insertHash.ExecuteScalarAsync());
+                                                if (!item.Files.IsEmpty())
+                                                {
+                                                    using (var insertFile = con.CreateCommand())
+                                                    {
+                                                        insertFile.CommandText = "INSERT INTO t_infohash_file (info_hash_id, files) VALUES (@hashId,@files) ON CONFLICT (info_hash_id) DO UPDATE SET files=@files;";
+                                                        insertFile.Transaction = transaction;
+                                                        insertFile.Parameters.Add(new NpgsqlParameter("hashId", hashId));
+                                                        insertFile.Parameters.Add(new NpgsqlParameter("files", NpgsqlDbType.Jsonb) { Value = item.Files.ToJson() });
+                                                        await insertFile.ExecuteNonQueryAsync();
+                                                    }
+                                                }
+                                            }
+                                            await transaction.CommitAsync();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            await transaction.RollbackAsync();
+                                            log.Error("添加种子信息到数据库失败", ex);
+                                        }
+                                    }
+                                    File.Delete(file);
+                                }
+                                catch (Exception ex)
+                                {
+                                    log.Error("添加种子信息到数据库失败，文件：" + file, ex);
+                                }
+                            }
+                        }
+                        watchLog.InfoFormat("文件夹写入数据库成功{0}", dir);
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Error("打开数据库失败", ex);
+                    }
+                }
+                await Task.WhenAll(UpdateDownNum(), Task.Delay(TimeSpan.FromHours(1)));//, SyncDownNumToDatabase()                
+            }
+        }
+
+        private static async Task UpdateDownNum()
+        {
+            try
+            {
+                var conStr = ConfigurationManager.Default.GetString("conStr");
+                using (var con = new NpgsqlConnection(conStr))
+                {
+                    await con.OpenAsync();
+                    using (var cmd = con.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE t_statistics_info SET num = (SELECT count(id) FROM t_infohash WHERE isdown=TRUE) WHERE datakey='TorrentNum';";
+                        await cmd.ExecuteNonQueryAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error("更新下载数失败", ex);
+            }
+        }
+
+        private static async Task SyncDownNumToDatabase()
+        {
+            var files = Directory.GetFiles(InfoPath, "*.txt");
+            var conStr = ConfigurationManager.Default.GetString("conStr");
+            try
+            {
+                using (var con = new NpgsqlConnection(conStr))
+                {
+                    await con.OpenAsync();
+                    foreach (var file in files)
+                    {
+                        try
+                        {
+                            if (File.GetLastWriteTime(file) < DateTime.Now.AddHours(-1))
+                            {
+                                continue;
+                            }
+                            var info = new Dictionary<string, int>();
+                            using (var reader = new StreamReader(File.OpenRead(file), Encoding.UTF8))
+                            {
+                                while (reader.Peek() > 0)
+                                {
+                                    var key = await reader.ReadLineAsync();
+                                    if (key.IsBlank())
+                                    {
+                                        continue;
+                                    }
+                                    var size = 1;
+                                    if (key.IndexOf(':') > 0)
+                                    {
+                                        var infos = key.Split(':');
+                                        key = infos[0];
+                                        size = int.Parse(infos[1]);
+                                    }
+                                    if (info.TryGetValue(key, out var num))
+                                    {
+                                        info[key] = num + size;
+                                    }
+                                    else
+                                    {
+                                        info[key] = size;
+                                    }
+                                }
+                            }
+                            using (var insertHash = con.CreateCommand())
+                            {
+                                foreach (var kv in info)
+                                {
+                                    try
+                                    {
+                                        if (kv.Value <= 1)
+                                        {
+                                            continue;
+                                        }
+                                        insertHash.CommandText = "INSERT INTO t_infohash AS ti (infohash,downnum) VALUES (@hash, @downnum) ON CONFLICT  (infohash) DO UPDATE SET downnum=ti.downnum+@downnum;";
+                                        insertHash.Parameters.Add(new NpgsqlParameter("hash", kv.Key));
+                                        insertHash.Parameters.Add(new NpgsqlParameter("downnum", kv.Value));
+                                        await insertHash.ExecuteScalarAsync();
+                                        insertHash.Parameters.Clear();
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        log.Error("添加种子信息到数据库失败", ex);
+                                    }
+                                }
+                            }
+                            watchLog.InfoFormat("文件写入数据库成功{0}", file);
+                            File.Delete(file);
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Error("添加种子信息到数据库失败，文件：" + file, ex);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error("打开数据库失败", ex);
+            }
         }
 
         private static void RunRecordInfoHash()

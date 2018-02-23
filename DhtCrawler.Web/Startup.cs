@@ -40,6 +40,7 @@ namespace DhtCrawler.Web
             services.AddSingleton(provider => new StaticHtmlFilterAttribute(provider.GetService<IQueue<PageStaticHtmlItem>>()));
             services.AddSingleton(new DbFactory(Configuration["postgresql.url"], NpgsqlFactory.Instance));
             services.AddTransient<InfoHashRepository>();
+            services.AddTransient<StatisticsInfoRepository>();
             services.AddTransient<KeyWordRepository>();
             services.AddTransient<SearchWordRepository>();
             services.AddTransient<VisitedHistoryRepository>();
@@ -52,6 +53,7 @@ namespace DhtCrawler.Web
             {
                 options.TextEncoderSettings = new TextEncoderSettings(UnicodeRanges.All);
             });
+            //services.con
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -77,6 +79,7 @@ namespace DhtCrawler.Web
                 routes.MapRoute("last", "last/{date}/{index}", new { controller = "list", action = "lastlist", index = 1 }, new { date = @"\d{4}-\d{2}-\d{2}", index = "\\d+" });
                 routes.MapRoute("lastest", "last/{index}", new { controller = "list", action = "lastestlist", index = 1 }, new { index = "\\d+" });
                 routes.MapRoute("detail", "infohash/{hash}.html", new { controller = "list", action = "detail" }, new { hash = "^[A-Za-z0-9]{40}$" });
+                routes.MapRoute("sitemap", "sitemap", new { controller = "home", action = "sitemap" });
             });
             app.UsePageHtmlStatic(async pageItem =>
             {
@@ -103,7 +106,7 @@ namespace DhtCrawler.Web
                                try
                                {
                                    var searchWord = await wordQueue.DequeueAsync();
-                                   var item = new SearchWordModel() { Word = searchWord, Num = 1 };
+                                   var item = new SearchWordModel() { Word = searchWord, Num = 1, SearchTime = DateTime.Now };
                                    await searchRepo.InsertOrUpdateAsync(item);
                                }
                                catch (Exception ex)

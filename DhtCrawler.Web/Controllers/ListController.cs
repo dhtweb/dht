@@ -42,7 +42,7 @@ namespace DhtCrawler.Web.Controllers
             var key = keyword.ToLower() + ":" + index;
             var page = _cache.GetOrCreate(key, entry =>
              {
-                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30);
+                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(1);
                  var list = _indexSearchService.GetList(index, PageSize, out int count, keyword);
                  return new PageModel<InfoHashModel>()
                  {

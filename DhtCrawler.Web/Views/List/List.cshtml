@@ -74,7 +74,7 @@ else
                             }
                         }
                         <div class="media-more">
-                            <cite>创建日期：</cite><span class="label label-success">@item.CreateTime.ToShortDateString()</span>&nbsp;&nbsp;&nbsp;
+                            <cite>创建日期：</cite><span class="label label-success">@item.CreateTime.ToString("yyyy-MM-dd HH:mm:ss")</span>&nbsp;&nbsp;&nbsp;
                             <cite>文件大小：</cite><span class="label label-warning">@item.ShowFileSize</span>&nbsp;&nbsp;&nbsp;
                             <cite>文件数：</cite><span class="label label-warning">@item.FileNum</span>&nbsp;&nbsp;&nbsp;
                             <cite>访问热度：</cite><span class="label label-primary">@item.DownNum</span>&nbsp;&nbsp;&nbsp;
@@ -132,7 +132,7 @@ else
             $("#topsearch").submit(function () {
                 var key = $.trim($("#search").val());
                 if (key.length > 0) {
-                    window.location.href = $("#topsearch").attr("action") + "/" + key;
+                    window.location.href = $("#topsearch").attr("action") + "/" + encodeURIComponent(key);
                 }
                 return false;
             });

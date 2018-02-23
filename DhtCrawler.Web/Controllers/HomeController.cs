@@ -19,20 +19,31 @@ namespace DhtCrawler.Web.Controllers
     public class HomeController : Controller
     {
         private readonly InfoHashRepository _infoHashRepository;
+        private readonly StatisticsInfoRepository statisticsInfoRepository;
         private readonly IMemoryCache _cache;
         private static ILog log = LogManager.GetLogger(typeof(HomeController));
-        public HomeController(InfoHashRepository infoHashRepository, IMemoryCache cache)
+        public HomeController(InfoHashRepository infoHashRepository, StatisticsInfoRepository statisticsInfoRepository, IMemoryCache cache)
         {
             this._infoHashRepository = infoHashRepository;
+            this.statisticsInfoRepository = statisticsInfoRepository;
             _cache = cache;
         }
         public async Task<IActionResult> Index()
         {
+            var keys = new[] { "妖猫传", "寻梦环游记", "妖铃铃", "神秘巨星", "红海行动", "芳华", "前任3:再见前任", "捉妖记2", "唐人街探案2", "三块广告牌" };
             ViewBag.TorrentNum = await _cache.GetOrCreateAsync("total", entry =>
              {
-                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
-                 return _infoHashRepository.GetTorrentNumAsync();
+                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(35);
+                 return statisticsInfoRepository.GetInfoById("TorrentNum").ContinueWith(t =>
+                    {
+                        if (t.Result == null)
+                        {
+                            return 0;
+                        }
+                        return t.Result.Num;
+                    });
              });
+            ViewBag.HotKeys = keys;
             return View();
         }
 
@@ -235,6 +246,11 @@ namespace DhtCrawler.Web.Controllers
         {
             ViewBag.Index = 2;
             return View();
+        }
+        private static readonly DateTime startTime = new DateTime(2017, 11, 7);
+        public IActionResult SiteMap()
+        {
+            return Content("");
         }
     }
 }

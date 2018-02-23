@@ -13,11 +13,11 @@
     "ProcessRequestThreadNum": 3,
     "KTableSize": 2048
   },
-  "redis.server": "127.0.0.1:6379",
   "BufferDownSize": 8192,
   "BatchDownSize": 128,
   "MaxDownThreadNum": 64,
   "DownMode": "Task",
   "filter": "hash",
-  "ReTryDownHash": false
+  "ReTryDownHash": false,
+  "conStr": "Host=127.0.0.1;Username=zk;Database=dht;Port=5432"
 }

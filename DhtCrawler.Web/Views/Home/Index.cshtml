@@ -29,6 +29,10 @@
                 <div class="hot-tags-index newhot">
                     <ul class="hot-tags list-inline">
                         <li class="hot-item newhot"><a href="#">热门搜索</a>：</li>
+                        @foreach (var key in ViewBag.HotKeys)
+                        {
+                            <li class="hot-item newhot"><a href="@Url.RouteUrl("list",new { keyword=key})">@key</a></li>
+                        }
                     </ul>
                 </div>
 
@@ -73,10 +77,10 @@
             }
         );
         $(function () {
-            $("#search_form").submit(function() {
+            $("#search_form").submit(function () {
                 var key = $.trim($("#search").val());
                 if (key.length > 0) {
-                    window.location.href = $(this).attr("action") + "/" + key;
+                    window.location.href = $(this).attr("action") + "/" + encodeURIComponent(key);
                 }
                 return false;
             });

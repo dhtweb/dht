@@ -126,7 +126,7 @@ namespace DhtCrawler.Service.Index
                         fileTerms[i] = new Term("Files", key);
                     }
                     var nameQuery = new MultiPhraseQuery() { nameTerms };
-                    nameQuery.Boost = 1.5f;
+                    nameQuery.Boost = 100f;
                     query.Add(nameQuery, Occur.SHOULD);
                     query.Add(new MultiPhraseQuery() { fileTerms }, Occur.SHOULD);
                 }

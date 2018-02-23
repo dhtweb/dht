@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Npgsql" Version="3.2.6" />
     <PackageReference Include="StackExchange.Redis" Version="1.2.6" />
     <PackageReference Include="STSdb4.Core" Version="1.0.0" />
   </ItemGroup>

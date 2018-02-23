@@ -8,7 +8,6 @@
     <meta http-eqbtv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="applicable-device" content="pc,mobile">
-
     <link rel="stylesheet" href="http://cdn.bootcss.com/bootstrap/3.2.0/css/bootstrap.min.css" media="screen">
     <link rel="stylesheet" href="~/css/reset.min.css">
     <link rel="stylesheet" href="http://cdn.bootcss.com/font-awesome/3.2.1/css/font-awesome.min.css">
@@ -27,7 +26,6 @@
     <div id="wrap" class="new-home">
         @RenderSection("PagerHeader", false)
         <div class="container" id="main">
-
             <!--[if lte IE 9]>
                 <div id="warning_info" class="alert alert-dismissable alert-info">
                     <button data-dismiss="alert" class="close" type="button">×</button>
@@ -42,18 +40,23 @@
                 </div>
             <![endif]-->
             <!-- <script src="~/js/domaina.js"></script> -->
-
             @RenderBody()
             <div class="push"><!-- not put anything here --></div>
-
         </div>
     </div>
-
     <script src="http://cdn.bootcss.com/jquery/1.10.2/jquery.min.js"></script>
     <script src="http://cdn.bootcss.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
     <script src="~/js/reset.js"></script>
-
     <!-- 广告位：bt通用移动端 -->
     @RenderSection("Footer", false)
+    <script>
+        var _hmt = _hmt || [];
+        (function () {
+            var hm = document.createElement("script");
+            hm.src = "https://hm.baidu.com/hm.js?f6e513bda845cb9ea6cb3575f8254d9e";
+            var s = document.getElementsByTagName("script")[0];
+            s.parentNode.insertBefore(hm, s);
+        })();
+    </script>
 </body>
 </html>

@@ -37,6 +37,7 @@ namespace DhtCrawler.Common.Index
 
         private static readonly ConcurrentDictionary<string, FSDirectory> FSDirectoryDic = new ConcurrentDictionary<string, FSDirectory>();
         private static readonly ConcurrentDictionary<string, IndexWriter> IndexWriterDic = new ConcurrentDictionary<string, IndexWriter>();
+        private static readonly ConcurrentDictionary<string, IndexSearcher> IndexSearcherDic = new ConcurrentDictionary<string, IndexSearcher>();
 
         private volatile IndexWriter _writer;
         private IndexWriter IndexWriter
@@ -59,6 +60,26 @@ namespace DhtCrawler.Common.Index
                              return _writer;
                          }
                      });
+            }
+        }
+
+        private volatile IndexSearcher _searcher;
+        private IndexSearcher IndexSearcher
+        {
+            get
+            {
+                if (_searcher != null)
+                    return _searcher;
+                return IndexSearcherDic.GetOrAdd(IndexDir, dic =>
+                {
+                    lock (IndexSearcherDic)
+                    {
+                        if (_searcher != null)
+                            return _searcher;
+                        _searcher = new IndexSearcher(DirectoryReader.Open(IndexDirectory));
+                        return _searcher;
+                    }
+                });
             }
         }
 
@@ -378,9 +399,9 @@ namespace DhtCrawler.Common.Index
         /// <returns></returns>
         public IList<T> Search(int index, int size, out int total, Func<Query> getQuery, Func<Sort> getSort)
         {
-            using (var reader = DirectoryReader.Open(IndexDirectory))//获取索引只读对象
+            //using (var reader = DirectoryReader.Open(IndexDirectory))//获取索引只读对象
             {
-                var searcher = new IndexSearcher(reader);
+                var searcher = IndexSearcher;// new IndexSearcher(reader);
                 var query = getQuery();
                 var sort = getSort();
                 int start = (index - 1) * size, end = index * size;

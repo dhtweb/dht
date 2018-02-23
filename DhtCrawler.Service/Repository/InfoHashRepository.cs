@@ -370,7 +370,6 @@ namespace DhtCrawler.Service.Repository
             {
                 trans?.Dispose();
             }
-
         }
         public async Task<uint> GetTorrentNumAsync()
         {
@@ -415,14 +414,14 @@ namespace DhtCrawler.Service.Repository
             }
             if (where.Length > 0)
             {
-                var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
+                var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filenum,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
                 var count = await result.ReadFirstAsync<long>();
                 var list = (await result.ReadAsync<InfoHashModel>()).ToArray();
                 return (list, count);
             }
             else
             {
-                var result = await Connection.QueryMultipleAsync(string.Format("SELECT infohash,name,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} OFFSET @start LIMIT @size;", desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
+                var result = await Connection.QueryMultipleAsync(string.Format("SELECT infohash,name,filenum,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} OFFSET @start LIMIT @size;", desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
                 var list = (await result.ReadAsync<InfoHashModel>()).ToArray();
                 return (list, int.MaxValue);
             }
@@ -449,32 +448,39 @@ namespace DhtCrawler.Service.Repository
             }
             sql.Append(" order by id LIMIT @size");
             var selectSql = sql.ToString();
-            do
+            using (var connection = this.Factory.CreateConnection())
             {
-                var length = 0;
-                IEnumerable<InfoHashModel> hashs;
-                try
+                do
                 {
-                    hashs = Connection.Query<InfoHashModel>(selectSql, new { id, start, size });
-                }
-                catch (Exception ex)
-                {
-                    log.Error(ex);
-                    continue;
-                }
-                foreach (var model in hashs)
-                {
-                    length++;
-                    id = model.Id;
-                    if (model.HasFile)
+                    var length = 0;
+                    IEnumerable<InfoHashModel> hashs;
+                    try
                     {
-                        model.Files = Connection.QueryFirst<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = model.Id });
+                        hashs = connection.Query<InfoHashModel>(selectSql, new { id, start, size });
                     }
-                    yield return model;
-                }
-                if (length < size)
-                    yield break;
-            } while (true);
+                    catch (Exception ex)
+                    {
+                        log.Error(ex);
+                        throw ex;
+                    }
+                    foreach (var model in hashs)
+                    {
+                        length++;
+                        id = model.Id;
+                        if (model.HasFile)
+                        {
+                            model.Files = connection.QueryFirstOrDefault<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = model.Id });
+                            if (model.Files.IsEmpty())
+                            {
+                                log.InfoFormat("种子信息有误，对应文件内容不存在,Id:{0}", id.ToString());
+                            }
+                        }
+                        yield return model;
+                    }
+                    if (length < size)
+                        yield break;
+                } while (true);
+            }
         }
 
     }
