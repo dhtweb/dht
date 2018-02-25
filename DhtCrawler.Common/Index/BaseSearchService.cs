@@ -76,7 +76,8 @@ namespace DhtCrawler.Common.Index
                     {
                         if (_searcher != null)
                             return _searcher;
-                        _searcher = new IndexSearcher(DirectoryReader.Open(IndexDirectory));
+                        //DirectoryReader.Open(IndexDirectory)
+                        _searcher = new IndexSearcher(IndexWriter.GetReader(true));
                         return _searcher;
                     }
                 });
@@ -208,7 +209,7 @@ namespace DhtCrawler.Common.Index
         public void ReBuildIndex(Action<T> onBuild)
         {
             var list = GetAllModels();
-            int size = 0;
+            int size = 0, total = 0;
             lock (IndexWriter)
             {
                 IndexWriter.DeleteAll();
@@ -220,12 +221,18 @@ namespace DhtCrawler.Common.Index
                     size++;
                     if (size >= BatchCommitNum)
                     {
+                        total += size;
                         IndexWriter.Commit();
                         size = 0;
+                        log.InfoFormat("已更新{0}条数据", total);
                     }
                 }
                 if (size > 0)
+                {
+                    total += size;
                     IndexWriter.Commit();
+                    log.InfoFormat("已更新{0}条数据", total);
+                }
             }
         }
 

@@ -46,11 +46,11 @@ namespace DhtCrawler.Web.Controllers
             return new EmptyResult();
         }
 
-        public IActionResult MBuild()
+        public IActionResult Build()
         {
             Task.Factory.StartNew(() =>
             {
-                _indexSearchService.MultipleThreadReBuildIndex();
+                _indexSearchService.ReBuildIndex(null);
             }, TaskCreationOptions.LongRunning);
             return Content("over");
         }

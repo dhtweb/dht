@@ -483,5 +483,10 @@ namespace DhtCrawler.Service.Repository
             }
         }
 
+        public async Task<DateTime> GetLastInfoHashDownTimeAsync()
+        {
+            return await Connection.ExecuteScalarAsync<DateTime>("SELECT max(createtime) FROM t_infohash WHERE isdown=TRUE");
+        }
+
     }
 }

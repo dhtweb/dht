@@ -13,6 +13,7 @@ using DhtCrawler.Service.Repository;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 using log4net;
+using System.Globalization;
 
 namespace DhtCrawler.Web.Controllers
 {
@@ -248,9 +249,14 @@ namespace DhtCrawler.Web.Controllers
             return View();
         }
         private static readonly DateTime startTime = new DateTime(2017, 11, 7);
-        public IActionResult SiteMap()
+        public async Task<IActionResult> SiteMap()
         {
-            return Content("");
+            var lastUpdateTime = await _infoHashRepository.GetLastInfoHashDownTimeAsync();
+            var content = new StringBuilder();
+            content.Append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
+            content.AppendFormat("<url><loc>{0}</loc><lastmod>{1}</lastmod><changefreq>hourly</changefreq><priority>0.8</priority></url>", "http://www.btcloudword.com/last", lastUpdateTime.ToString("yyyy-MM-ddThh:mm:sszzzz", DateTimeFormatInfo.InvariantInfo));
+            content.Append("</urlset>");
+            return Content(content.ToString(), "text/xml; charset=utf-8");
         }
     }
 }
