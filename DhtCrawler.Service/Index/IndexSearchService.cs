@@ -16,14 +16,11 @@ namespace DhtCrawler.Service.Index
 {
     public class IndexSearchService : BaseSearchService<InfoHashModel>
     {
-        private InfoHashRepository _infoHashRepository;
-        public IndexSearchService(string indexDir, InfoHashRepository infoHashRepository)
+        private readonly InfoHashRepository _infoHashRepository;
+        public IndexSearchService(string indexDir, InfoHashRepository infoHashRepository) : base(indexDir)
         {
-            IndexDir = indexDir;
             _infoHashRepository = infoHashRepository;
         }
-
-        protected override string IndexDir { get; }
 
         protected override Analyzer KeyWordAnalyzer => new JieBaAnalyzer(0, AnalyzerUtils.DefaultMaxWordLength);
 

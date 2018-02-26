@@ -248,7 +248,6 @@ namespace DhtCrawler.Web.Controllers
             ViewBag.Index = 2;
             return View();
         }
-        private static readonly DateTime startTime = new DateTime(2017, 11, 7);
         public async Task<IActionResult> SiteMap()
         {
             var lastUpdateTime = await _infoHashRepository.GetLastInfoHashDownTimeAsync();

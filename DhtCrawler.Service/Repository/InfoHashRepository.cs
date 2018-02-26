@@ -440,14 +440,12 @@ namespace DhtCrawler.Service.Repository
         public IEnumerable<InfoHashModel> GetAllFullInfoHashModels(DateTime? start = null)
         {
             var id = 0L;
-            var size = 500;
-            var sql = new StringBuilder("SELECT id, infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, hasfile, isdanger FROM t_infohash WHERE isdown=TRUE AND id > @id");
             if (start.HasValue)
             {
-                sql.Append(" AND updatetime>@start");
+                id = Connection.ExecuteScalar<long>("SELECT MIN(id) FROM t_infohash WHERE isdown=TRUE AND updatetime > @start", new { start });
             }
-            sql.Append(" order by id LIMIT @size");
-            var selectSql = sql.ToString();
+            var size = 500;
+            var sql = "SELECT id, infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, hasfile, isdanger FROM t_infohash WHERE id > @id order by id LIMIT @size";
             using (var connection = this.Factory.CreateConnection())
             {
                 do
@@ -456,23 +454,27 @@ namespace DhtCrawler.Service.Repository
                     IEnumerable<InfoHashModel> hashs;
                     try
                     {
-                        hashs = connection.Query<InfoHashModel>(selectSql, new { id, start, size });
+                        hashs = connection.Query<InfoHashModel>(sql, new { id, size }, null, true, 60 * 5);
                     }
                     catch (Exception ex)
                     {
                         log.Error(ex);
-                        throw ex;
+                        throw;
                     }
                     foreach (var model in hashs)
                     {
                         length++;
                         id = model.Id;
+                        if (!model.IsDown || (start.HasValue && model.UpdateTime < start.Value))
+                        {
+                            continue;
+                        }
                         if (model.HasFile)
                         {
                             model.Files = connection.QueryFirstOrDefault<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = model.Id });
                             if (model.Files.IsEmpty())
                             {
-                                log.InfoFormat("种子信息有误，对应文件内容不存在,Id:{0}", id.ToString());
+                                log.InfoFormat("种子信息有误，对应文件内容不存在,hash:{0}", model.InfoHash);
                             }
                         }
                         yield return model;
