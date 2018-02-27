@@ -31,10 +31,6 @@
     </None>
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="log\" />
-  </ItemGroup>
-
   <ProjectExtensions><VisualStudio><UserProperties app_1json__JSONSchema="http://json.schemastore.org/chutzpah" /></VisualStudio></ProjectExtensions>
 
 </Project>

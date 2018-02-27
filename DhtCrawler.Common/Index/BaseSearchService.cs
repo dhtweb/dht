@@ -39,8 +39,8 @@ namespace DhtCrawler.Common.Index
         private static readonly ConcurrentDictionary<string, IndexWriter> IndexWriterDic = new ConcurrentDictionary<string, IndexWriter>();
         private static readonly ConcurrentDictionary<string, IndexSearcher> IndexSearcherDic = new ConcurrentDictionary<string, IndexSearcher>();
 
-        private volatile IndexWriter _writer;
-        private IndexSearcher _searcher;
+        private readonly IndexWriter _writer;
+        private readonly IndexSearcher _searcher;
         private volatile FSDirectory _currentDirectory;
         private FSDirectory IndexDirectory
         {

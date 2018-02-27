@@ -1,5 +1,6 @@
 ﻿using DhtCrawler.DHT;
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -690,7 +691,7 @@ namespace DhtCrawler
                         log.Error("打开数据库失败", ex);
                     }
                 }
-                await Task.WhenAll(UpdateDownNum(), Task.Delay(TimeSpan.FromHours(1)));//, SyncDownNumToDatabase()                
+                await Task.WhenAll(UpdateDownNum(), SyncDownNumToDatabase(), Task.Delay(TimeSpan.FromHours(1)));
             }
         }
 
@@ -721,6 +722,7 @@ namespace DhtCrawler
             var conStr = ConfigurationManager.Default.GetString("conStr");
             try
             {
+                var info = new Dictionary<string, int>();
                 using (var con = new NpgsqlConnection(conStr))
                 {
                     await con.OpenAsync();
@@ -732,7 +734,6 @@ namespace DhtCrawler
                             {
                                 continue;
                             }
-                            var info = new Dictionary<string, int>();
                             using (var reader = new StreamReader(File.OpenRead(file), Encoding.UTF8))
                             {
                                 while (reader.Peek() > 0)
@@ -765,11 +766,7 @@ namespace DhtCrawler
                                 {
                                     try
                                     {
-                                        if (kv.Value <= 1)
-                                        {
-                                            continue;
-                                        }
-                                        insertHash.CommandText = "INSERT INTO t_infohash AS ti (infohash,downnum) VALUES (@hash, @downnum) ON CONFLICT  (infohash) DO UPDATE SET downnum=ti.downnum+@downnum;";
+                                        insertHash.CommandText = "UPDATE t_infohash SET downnum = downnum+@downnum WHERE infohash=@hash;";
                                         insertHash.Parameters.Add(new NpgsqlParameter("hash", kv.Key));
                                         insertHash.Parameters.Add(new NpgsqlParameter("downnum", kv.Value));
                                         await insertHash.ExecuteScalarAsync();
@@ -777,16 +774,17 @@ namespace DhtCrawler
                                     }
                                     catch (Exception ex)
                                     {
-                                        log.Error("添加种子信息到数据库失败", ex);
+                                        log.Error("更新下载信息到数据库失败", ex);
                                     }
                                 }
                             }
                             watchLog.InfoFormat("文件写入数据库成功{0}", file);
                             File.Delete(file);
+                            info.Clear();
                         }
                         catch (Exception ex)
                         {
-                            log.Error("添加种子信息到数据库失败，文件：" + file, ex);
+                            log.Error("更新下载信息到数据库失败，文件：" + file, ex);
                         }
                     }
                 }
