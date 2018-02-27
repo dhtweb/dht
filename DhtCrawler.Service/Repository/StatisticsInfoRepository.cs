@@ -23,5 +23,11 @@ namespace DhtCrawler.Service.Repository
             var sql = "INSERT INTO t_statistics_info (datakey, num, updatetime) VALUES (@DataKey,@Num,@UpdateTime) ON CONFLICT (datakey) DO UPDATE SET num=@Num,updatetime=@UpdateTime;";
             return await Connection.ExecuteAsync(sql, model) > 0;
         }
+
+        public bool InsertOrUpdate(StatisticsInfoModel model)
+        {
+            var sql = "INSERT INTO t_statistics_info (datakey, num, updatetime) VALUES (@DataKey,@Num,@UpdateTime) ON CONFLICT (datakey) DO UPDATE SET num=@Num,updatetime=@UpdateTime;";
+            return Connection.Execute(sql, model) > 0;
+        }
     }
 }

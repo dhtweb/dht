@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 using log4net;
 using System.Globalization;
+using Microsoft.Extensions.Configuration;
 
 namespace DhtCrawler.Web.Controllers
 {

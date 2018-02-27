@@ -133,7 +133,7 @@ namespace DhtCrawler.Service.Index
             }, () => new Sort(SortField.FIELD_SCORE, new SortField("CreateTime", SortFieldType.INT64, true)));
         }
 
-        public void IncrementBuild(DateTime start)
+        public void IncrementBuild(DateTime? start)
         {
             var list = _infoHashRepository.GetAllFullInfoHashModels(start);
             var batch = new List<InfoHashModel>(1000);

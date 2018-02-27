@@ -61,7 +61,7 @@ namespace DhtCrawler.Common.Index
                          }
                          return _currentDirectory;
                      }
-                 });  // 取得索引存储的文件夹
+                 });
             }
         }
         protected readonly ILog log;
@@ -393,7 +393,7 @@ namespace DhtCrawler.Common.Index
             var docs = searcher.Search(query, null, end, sort);
             total = docs.TotalHits;
             end = Math.Min(end, total);
-            var models = new List<T>();
+            var models = new T[end - start];
             var queryTerms = new HashSet<Term>();
             query.ExtractTerms(queryTerms);
             var keywords = new HashSet<string>(queryTerms.Select(k => k.Text()), StringComparer.OrdinalIgnoreCase);
@@ -401,16 +401,23 @@ namespace DhtCrawler.Common.Index
             {
                 var docNum = docs.ScoreDocs[i].Doc;
                 var doc = searcher.Doc(docNum);
-                models.Add(GetModel(doc, keywords));
+                models[i - start] = GetModel(doc, keywords);
             }
             return models;
         }
 
         public void Dispose()
         {
-            if (!IndexWriterDic.TryRemove(IndexDir, out var writer))
-                return;
-            writer.Dispose();
+            if (IndexSearcherDic.TryRemove(IndexDir, out var searcher))
+            {
+                searcher.IndexReader.Dispose();
+                _searcher = null;
+            }
+            if (IndexWriterDic.TryRemove(IndexDir, out var writer))
+            {
+                writer.Dispose();
+                _writer = null;
+            }
         }
     }
 }
