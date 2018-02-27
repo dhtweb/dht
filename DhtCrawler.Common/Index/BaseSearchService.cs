@@ -39,8 +39,8 @@ namespace DhtCrawler.Common.Index
         private static readonly ConcurrentDictionary<string, IndexWriter> IndexWriterDic = new ConcurrentDictionary<string, IndexWriter>();
         private static readonly ConcurrentDictionary<string, IndexSearcher> IndexSearcherDic = new ConcurrentDictionary<string, IndexSearcher>();
 
-        private readonly IndexWriter _writer;
-        private readonly IndexSearcher _searcher;
+        private IndexWriter _writer;
+        private IndexSearcher _searcher;
         private volatile FSDirectory _currentDirectory;
         private FSDirectory IndexDirectory
         {
@@ -124,8 +124,12 @@ namespace DhtCrawler.Common.Index
 
         protected virtual string[] SplitString(string keyword)
         {
+            if (keyword.Length <= 1)
+            {
+                return new[] { keyword };
+            }
             var seg = new JiebaSegmenter();
-            return seg.Cut(keyword, true).Union(seg.Cut(keyword)).Where(word => !string.IsNullOrWhiteSpace(word)).Select(w => w.ToLower()).Distinct().ToArray();
+            return seg.Cut(keyword, true).Union(seg.Cut(keyword)).Where(word => word.Length > 1 && !string.IsNullOrWhiteSpace(word)).Select(w => w.ToLower()).Distinct().ToArray();
         }
 
         /// <summary>
@@ -196,6 +200,10 @@ namespace DhtCrawler.Common.Index
                 foreach (var item in list)
                 {
                     var doc = GetDocument(item);
+                    if (doc == null)
+                    {
+                        continue;
+                    }
                     _writer.AddDocument(doc);
                     onBuild?.Invoke(item);
                     size++;
@@ -251,6 +259,10 @@ namespace DhtCrawler.Common.Index
                                 while (queue.TryDequeue(out var it))
                                 {
                                     var doc = GetDocument(it);
+                                    if (doc == null)
+                                    {
+                                        continue;
+                                    }
                                     writer.AddDocument(doc);
                                 }
                                 writer.Commit();
@@ -274,6 +286,10 @@ namespace DhtCrawler.Common.Index
                                 while (queue.TryDequeue(out var it))
                                 {
                                     var doc = GetDocument(it);
+                                    if (doc == null)
+                                    {
+                                        continue;
+                                    }
                                     writer.AddDocument(doc);
                                 }
                                 writer.Commit();
@@ -340,6 +356,11 @@ namespace DhtCrawler.Common.Index
         public void AddIndex(T model)
         {
             var doc = GetDocument(model);
+            if (doc == null)
+            {
+                DeleteIndex(model);
+                return;
+            }
             lock (_writer)
             {
                 _writer.AddDocument(doc);
@@ -353,6 +374,11 @@ namespace DhtCrawler.Common.Index
         public void UpdateIndex(T model)
         {
             var doc = GetDocument(model);
+            if (doc == null)
+            {
+                DeleteIndex(model);
+                return;
+            }
             lock (_writer)
             {
                 _writer.UpdateDocument(GetTargetTerm(model), doc);
@@ -370,7 +396,14 @@ namespace DhtCrawler.Common.Index
                 foreach (var model in models)
                 {
                     var doc = GetDocument(model);
-                    _writer.UpdateDocument(GetTargetTerm(model), doc);
+                    if (doc == null)
+                    {
+                        _writer.DeleteDocuments(GetTargetTerm(model));
+                    }
+                    else
+                    {
+                        _writer.UpdateDocument(GetTargetTerm(model), doc);
+                    }
                 }
                 _writer.Commit();
             }
@@ -393,6 +426,10 @@ namespace DhtCrawler.Common.Index
             var docs = searcher.Search(query, null, end, sort);
             total = docs.TotalHits;
             end = Math.Min(end, total);
+            if (start >= end)
+            {
+                start = Math.Max(0, end - size);
+            }
             var models = new T[end - start];
             var queryTerms = new HashSet<Term>();
             query.ExtractTerms(queryTerms);

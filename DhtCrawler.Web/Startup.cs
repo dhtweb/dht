@@ -17,6 +17,8 @@ using log4net;
 using Microsoft.Extensions.WebEncoders;
 using System.Text.Unicode;
 using System.Text.Encodings.Web;
+using DhtCrawler.Common;
+using DhtCrawler.Common.Filters;
 
 namespace DhtCrawler.Web
 {
@@ -47,13 +49,13 @@ namespace DhtCrawler.Web
             services.AddSingleton(provider =>
             {
                 var infoHashRepo = provider.GetService<InfoHashRepository>();
-                return new IndexSearchService(Configuration["index.dir"], infoHashRepo);
+                var filterWords = Configuration["filterWords"].ToObjectFromJson<string[]>();
+                return new IndexSearchService(Configuration["index.dir"], new KeyWordFilter(filterWords), infoHashRepo);
             });
             services.Configure<WebEncoderOptions>(options =>
             {
                 options.TextEncoderSettings = new TextEncoderSettings(UnicodeRanges.All);
             });
-            //services.con
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

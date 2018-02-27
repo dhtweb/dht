@@ -70,9 +70,23 @@ namespace DhtCrawler.Web.Controllers
         {
             Task.Factory.StartNew(() =>
             {
-                _indexSearchService.ReBuildIndex(null);
+                try
+                {
+                    if (!Monitor.TryEnter(IndexLocker))
+                    {
+                        return;
+                    }
+                    _indexSearchService.ReBuildIndex(null);
+                }
+                finally
+                {
+                    if (Monitor.IsEntered(IndexLocker))
+                    {
+                        Monitor.Exit(IndexLocker);
+                    }
+                }
             }, TaskCreationOptions.LongRunning);
-            return Content("over");
+            return new EmptyResult();
         }
     }
 }

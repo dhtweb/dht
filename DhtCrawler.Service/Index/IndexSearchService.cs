@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+using DhtCrawler.Common.Filters;
 using DhtCrawler.Common.Index;
 using DhtCrawler.Common.Index.Analyzer;
 using DhtCrawler.Common.Index.Utils;
@@ -17,15 +17,21 @@ namespace DhtCrawler.Service.Index
     public class IndexSearchService : BaseSearchService<InfoHashModel>
     {
         private readonly InfoHashRepository _infoHashRepository;
-        public IndexSearchService(string indexDir, InfoHashRepository infoHashRepository) : base(indexDir)
+        private readonly IFilter<string> _wordFilter;
+        public IndexSearchService(string indexDir, IFilter<string> wordFilter, InfoHashRepository infoHashRepository) : base(indexDir)
         {
             _infoHashRepository = infoHashRepository;
+            _wordFilter = wordFilter;
         }
 
         protected override Analyzer KeyWordAnalyzer => new JieBaAnalyzer(0, AnalyzerUtils.DefaultMaxWordLength);
 
         protected override Document GetDocument(InfoHashModel item)
         {
+            if (_wordFilter.Contain(item.Name))
+            {
+                return null;
+            }
             var doc = new Document();
             doc.AddStringField("InfoHash", item.InfoHash, Field.Store.YES);
             doc.AddTextField("Name", item.Name, Field.Store.YES);
@@ -50,7 +56,12 @@ namespace DhtCrawler.Service.Index
                     }
                     else
                     {
-                        names.Add(file.Name);
+                        if (!names.Add(file.Name))
+                            continue;
+                        if (_wordFilter.Contain(file.Name))
+                        {
+                            return null;
+                        }
                     }
                 }
                 doc.AddTextField("Files", string.Join(",", names), Field.Store.YES);
