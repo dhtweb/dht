@@ -28,8 +28,6 @@ namespace DhtCrawler.Common.Filters
             for (var startIndex = 0; startIndex < content.Length; startIndex++)
             {
                 var ch = content[startIndex];
-                Console.WriteLine(ch);
-                Console.WriteLine(startIndex);
                 if (!_headBitArray[ch])
                 {
                     continue;
