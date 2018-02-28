@@ -28,8 +28,10 @@ namespace DhtCrawler.Service.Index
 
         protected override Document GetDocument(InfoHashModel item)
         {
+            log.InfoFormat("处理数据:{0}", item.Id.ToString());
             if (_wordFilter.Contain(item.Name))
             {
+                log.InfoFormat("高危内容，参数:{0}", item.InfoHash);
                 return null;
             }
             var doc = new Document();
@@ -60,6 +62,7 @@ namespace DhtCrawler.Service.Index
                             continue;
                         if (_wordFilter.Contain(file.Name))
                         {
+                            log.InfoFormat("高危内容，参数:{0}", item.InfoHash);
                             return null;
                         }
                     }
@@ -130,6 +133,10 @@ namespace DhtCrawler.Service.Index
                     for (var i = 0; i < splitKey.Length; i++)
                     {
                         var key = splitKey[i];
+                        if (key.Length <= 1)
+                        {
+                            continue;
+                        }
                         nameTerms[i] = new Term("Name", key);
                         fileTerms[i] = new Term("Files", key);
                     }

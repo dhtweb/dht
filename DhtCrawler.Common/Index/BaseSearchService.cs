@@ -129,7 +129,7 @@ namespace DhtCrawler.Common.Index
                 return new[] { keyword };
             }
             var seg = new JiebaSegmenter();
-            return seg.Cut(keyword, true).Union(seg.Cut(keyword)).Where(word => word.Length > 1 && !string.IsNullOrWhiteSpace(word)).Select(w => w.ToLower()).Distinct().ToArray();
+            return seg.Cut(keyword, true).Union(seg.Cut(keyword)).Where(word => !string.IsNullOrWhiteSpace(word)).Select(w => w.ToLower()).Distinct().ToArray();
         }
 
         /// <summary>

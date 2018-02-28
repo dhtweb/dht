@@ -647,13 +647,14 @@ namespace DhtCrawler
                                         {
                                             using (var insertHash = con.CreateCommand())
                                             {
-                                                insertHash.CommandText = "INSERT INTO t_infohash AS ti (infohash, name, filenum, filesize, downnum, isdown, createtime, hasfile) VALUES (@hash, @name, @filenum, @filesize, 1, TRUE, @createtime,  @hasfile) ON CONFLICT  (infohash) DO UPDATE SET name=@name,filenum=@filenum,filesize=@filesize,isdown=TRUE,createtime=@createtime,updatetime=current_timestamp,hasfile=@hasfile RETURNING id;";
+                                                insertHash.CommandText = "INSERT INTO t_infohash AS ti (infohash, name, filenum, filesize, downnum, isdown, createtime,updatetime, hasfile) VALUES (@hash, @name, @filenum, @filesize, 1, TRUE, @createtime,@now,  @hasfile) ON CONFLICT  (infohash) DO UPDATE SET name=@name,filenum=@filenum,filesize=@filesize,isdown=TRUE,createtime=@createtime,updatetime=@now,hasfile=@hasfile RETURNING id;";
                                                 insertHash.Transaction = transaction;
                                                 insertHash.Parameters.Add(new NpgsqlParameter("hash", item.InfoHash));
                                                 insertHash.Parameters.Add(new NpgsqlParameter("name", item.Name ?? ""));
                                                 insertHash.Parameters.Add(new NpgsqlParameter("filenum", fileNum == 0 ? 1 : fileNum));
                                                 insertHash.Parameters.Add(new NpgsqlParameter("filesize", item.FileSize));
                                                 insertHash.Parameters.Add(new NpgsqlParameter("createtime", File.GetCreationTime(file)));
+                                                insertHash.Parameters.Add(new NpgsqlParameter("now", DateTime.Now));
                                                 insertHash.Parameters.Add(new NpgsqlParameter("hasfile", !item.Files.IsEmpty()));
                                                 var hashId = Convert.ToInt64(await insertHash.ExecuteScalarAsync());
                                                 if (!item.Files.IsEmpty())
@@ -766,9 +767,10 @@ namespace DhtCrawler
                                 {
                                     try
                                     {
-                                        insertHash.CommandText = "UPDATE t_infohash SET downnum = downnum+@downnum WHERE infohash=@hash;";
+                                        insertHash.CommandText = "UPDATE t_infohash SET downnum = downnum+@downnum,updatetime=@now WHERE infohash=@hash;";
                                         insertHash.Parameters.Add(new NpgsqlParameter("hash", kv.Key));
                                         insertHash.Parameters.Add(new NpgsqlParameter("downnum", kv.Value));
+                                        insertHash.Parameters.Add(new NpgsqlParameter("now", DateTime.Now));
                                         await insertHash.ExecuteScalarAsync();
                                         insertHash.Parameters.Clear();
                                     }

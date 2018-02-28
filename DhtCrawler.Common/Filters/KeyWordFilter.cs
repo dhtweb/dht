@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace DhtCrawler.Common.Filters
@@ -12,8 +13,8 @@ namespace DhtCrawler.Common.Filters
 
         public KeyWordFilter(params string[] words)
         {
-            _headBitArray = new BitArray(char.MaxValue);
-            _allBitArray = new BitArray(char.MaxValue);
+            _headBitArray = new BitArray(char.MaxValue + 1);
+            _allBitArray = new BitArray(char.MaxValue + 1);
             _wordLengths = new HashSet<int>();
             _words = new HashSet<string>();
             foreach (var word in words)
@@ -27,20 +28,18 @@ namespace DhtCrawler.Common.Filters
             for (var startIndex = 0; startIndex < content.Length; startIndex++)
             {
                 var ch = content[startIndex];
+                Console.WriteLine(ch);
+                Console.WriteLine(startIndex);
                 if (!_headBitArray[ch])
                 {
                     continue;
                 }
                 var endIndex = startIndex + 1;
-                while (endIndex < content.Length - 1 && _allBitArray[content[endIndex]])
+                while (endIndex < content.Length && _allBitArray[content[endIndex]])
                 {
                     endIndex++;
                 }
                 var wordLength = endIndex - startIndex;
-                if (endIndex >= content.Length - 1)
-                {
-                    wordLength++;
-                }
                 if (!_wordLengths.Contains(wordLength))
                 {
                     continue;
