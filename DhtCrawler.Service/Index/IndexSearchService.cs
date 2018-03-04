@@ -131,7 +131,7 @@ namespace DhtCrawler.Service.Index
                 if (!string.IsNullOrEmpty(keyword))//关键字搜索
                 {
                     highWords = SplitString(keyword);
-                    var searchKeys = highWords.Where(w => w.Length > 1).ToArray();
+                    var searchKeys = highWords.Where(w => keyword.Length <= 1 || w.Length > 1).ToArray();
                     Term[] nameTerms = new Term[searchKeys.Length], fileTerms = new Term[searchKeys.Length];
                     for (var i = 0; i < searchKeys.Length; i++)
                     {
