@@ -37,7 +37,8 @@
     <PackageReference Include="Lucene.Net" Version="4.8.0-beta00005" />
     <PackageReference Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00005" />
     <PackageReference Include="Lucene.Net.Highlighter" Version="4.8.0-beta00005" />
-    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="11.0.1" />
+    <PackageReference Include="System.Threading.Tasks.Dataflow" Version="4.8.0" />
   </ItemGroup>
 
   <ItemGroup>
