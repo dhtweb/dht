@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using DhtCrawler.Common.Filters;
 using DhtCrawler.Common.Index;
 using DhtCrawler.Common.Index.Analyzer;
@@ -85,7 +86,7 @@ namespace DhtCrawler.Service.Index
             var name = doc.Get("Name");
             if (!name.IsBlank())
             {
-                var newName = SetHighKeyWord(doc.Get("Name"), keyWords);
+                var newName = SetHighKeyWord(name, keyWords);
                 item.Name = newName;
                 if (name.Length != newName.Length)
                 {
@@ -126,17 +127,18 @@ namespace DhtCrawler.Service.Index
             return base.Search(index, size, out count, () =>
             {
                 var query = new BooleanQuery();//搜索条件
+                var highWords = new string[0];
                 if (!string.IsNullOrEmpty(keyword))//关键字搜索
                 {
-                    var splitKey = SplitString(keyword);
-                    Term[] nameTerms = new Term[splitKey.Length], fileTerms = new Term[splitKey.Length];
-                    for (var i = 0; i < splitKey.Length; i++)
+                    highWords = SplitString(keyword);
+                    var searchKeys = highWords.Where(w => keyword.Length <= 1 || w.Length > 1).ToArray();
+                    if(searchKeys.Length==0){
+                        searchKeys=highWords;
+                    }
+                    Term[] nameTerms = new Term[searchKeys.Length], fileTerms = new Term[searchKeys.Length];
+                    for (var i = 0; i < searchKeys.Length; i++)
                     {
-                        var key = splitKey[i];
-                        if (key.Length <= 1)
-                        {
-                            continue;
-                        }
+                        var key = searchKeys[i];
                         nameTerms[i] = new Term("Name", key);
                         fileTerms[i] = new Term("Files", key);
                     }
@@ -147,7 +149,7 @@ namespace DhtCrawler.Service.Index
                 }
                 if (query.Clauses.Count <= 0)
                     query.Add(new MatchAllDocsQuery(), Occur.MUST);
-                return query;
+                return (query, highWords);
             }, () => new Sort(SortField.FIELD_SCORE, new SortField("CreateTime", SortFieldType.INT64, true)));
         }
 

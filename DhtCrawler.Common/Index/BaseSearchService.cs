@@ -417,13 +417,13 @@ namespace DhtCrawler.Common.Index
         /// <param name="getQuery"></param>
         /// <param name="getSort"></param>
         /// <returns></returns>
-        public IList<T> Search(int index, int size, out int total, Func<Query> getQuery, Func<Sort> getSort)
+        public IList<T> Search(int index, int size, out int total, Func<(Query, string[])> getQuery, Func<Sort> getSort)
         {
             var searcher = _searcher;
             var query = getQuery();
             var sort = getSort();
             int start = (index - 1) * size, end = index * size;
-            var docs = searcher.Search(query, null, end, sort);
+            var docs = searcher.Search(query.Item1, null, end, sort);
             total = docs.TotalHits;
             end = Math.Min(end, total);
             if (start >= end)
@@ -431,9 +431,7 @@ namespace DhtCrawler.Common.Index
                 start = Math.Max(0, end - size);
             }
             var models = new T[end - start];
-            var queryTerms = new HashSet<Term>();
-            query.ExtractTerms(queryTerms);
-            var keywords = new HashSet<string>(queryTerms.Select(k => k.Text()), StringComparer.OrdinalIgnoreCase);
+            var keywords = new HashSet<string>(query.Item2, StringComparer.OrdinalIgnoreCase);
             for (int i = start; i < total && i < end; i++)
             {
                 var docNum = docs.ScoreDocs[i].Doc;
