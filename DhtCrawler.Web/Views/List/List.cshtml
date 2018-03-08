@@ -55,7 +55,21 @@ else
     <div class="sort">
         <ol class="breadcrumb">
             <span class="hidden-xs">磁力云为您搜索到的 <b class="blue">@ViewBag.SearchKey</b> 磁力链接资源结果</span>
-            <li></li>
+            <li>
+                <a href="@Url.RouteUrl("list",new {keyword=ViewBag.SearchKey})" @(ViewBag.Sort == null ? "class=\"highlight\"" : "")>
+                    默认
+                </a>
+            </li>
+            <li>
+                <a href="@Url.RouteUrl("sortList",new{keyword=ViewBag.SearchKey,sort="time"})" @(ViewBag.Sort == "time" ? "class=\"highlight\"" : "")>
+                    收录时间
+                </a>
+            </li>
+            <li>
+                <a href="@Url.RouteUrl("sortList",new{keyword=ViewBag.SearchKey,sort="hot"})" @(ViewBag.Sort == "hot" ? "class=\"highlight\"" : "")>
+                    活跃热度
+                </a>
+            </li>
         </ol>
     </div>
     <div class="search-list col-md-12">
@@ -85,6 +99,9 @@ else
         </ul>
     </div>
     <ul class="pagination">
+        @{
+            var routeName = ViewBag.Sort == null ? "list" : "sortList";
+        }
         @if (Model.PageIndex == 1)
         {
             <li class="disabled"><a href="javascript:void(0);">首页</a></li>
@@ -92,8 +109,8 @@ else
         }
         else
         {
-            <li><a href="@Url.RouteUrl("list", new { keyword = ViewBag.SearchKey,index=1 })">首页</a></li>
-            <li><a href="@Url.RouteUrl("list", new { keyword = ViewBag.SearchKey, index = Model.PreIndex })">上一页</a></li>
+            <li><a href="@Url.RouteUrl(routeName, new { keyword = ViewBag.SearchKey,index=1,sort=ViewBag.Sort })">首页</a></li>
+            <li><a href="@Url.RouteUrl(routeName, new { keyword = ViewBag.SearchKey, index = Model.PreIndex,sort=ViewBag.Sort })">上一页</a></li>
         }
         @for (int start = Math.Max(1, Model.PageIndex - 3), end = Math.Min(Model.Pages, Model.PageIndex + 3); start <= end; start++)
         {
@@ -103,7 +120,7 @@ else
             }
             else
             {
-                <li><a href="@Url.RouteUrl("list", new { keyword = ViewBag.SearchKey, index = start })">@start</a></li>
+                <li><a href="@Url.RouteUrl(routeName, new { keyword = ViewBag.SearchKey, index = start,sort=ViewBag.Sort })">@start</a></li>
             }
         }
         @if (Model.PageIndex >= Model.Pages)
@@ -113,8 +130,8 @@ else
         }
         else
         {
-            <li><a href="@Url.RouteUrl("list", new { keyword = ViewBag.SearchKey, index = Model.NextIndex })">下一页</a></li>
-            <li><a href="@Url.RouteUrl("list", new { keyword = ViewBag.SearchKey, index = Model.Pages })">尾页</a></li>
+            <li><a href="@Url.RouteUrl(routeName, new { keyword = ViewBag.SearchKey, index = Model.NextIndex,sort=ViewBag.Sort })">下一页</a></li>
+            <li><a href="@Url.RouteUrl(routeName, new { keyword = ViewBag.SearchKey, index = Model.Pages,sort=ViewBag.Sort })">尾页</a></li>
         }
     </ul>
 }

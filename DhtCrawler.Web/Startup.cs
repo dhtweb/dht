@@ -78,6 +78,7 @@ namespace DhtCrawler.Web
                     name: "default",
                     template: "{controller=Home}/{action=Index}/{id?}");
                 routes.MapRoute("list", "list/{keyword}/{index}", new { controller = "list", action = "list", index = 1 }, new { keyword = ".+", index = "\\d+" });
+                routes.MapRoute("sortList", "list/{keyword}/{sort}/{index}", new { controller = "list", action = "list", index = 1 }, new { keyword = ".+", index = "\\d+", sort = "time|hot" });
                 routes.MapRoute("last", "last/{date}/{index}", new { controller = "list", action = "lastlist", index = 1 }, new { date = @"\d{4}-\d{2}-\d{2}", index = "\\d+" });
                 routes.MapRoute("lastest", "last/{index}", new { controller = "list", action = "lastestlist", index = 1 }, new { index = "\\d+" });
                 routes.MapRoute("detail", "infohash/{hash}.html", new { controller = "list", action = "detail" }, new { hash = "^[A-Za-z0-9]{40}$" });

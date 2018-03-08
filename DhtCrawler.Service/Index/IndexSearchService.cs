@@ -19,10 +19,16 @@ namespace DhtCrawler.Service.Index
     {
         private readonly InfoHashRepository _infoHashRepository;
         private readonly IFilter<string> _wordFilter;
+        private readonly Sort _defaultSort;
+        private readonly Sort _timeSort;
+        private readonly Sort _hotSort;
         public IndexSearchService(string indexDir, IFilter<string> wordFilter, InfoHashRepository infoHashRepository) : base(indexDir)
         {
             _infoHashRepository = infoHashRepository;
             _wordFilter = wordFilter;
+            _defaultSort = new Sort(SortField.FIELD_SCORE, new SortField("CreateTime", SortFieldType.INT64, true));
+            _timeSort = new Sort(new SortField("CreateTime", SortFieldType.INT64, true));
+            _hotSort = new Sort(new SortField("DownNum", SortFieldType.INT32, true));
         }
 
         protected override Analyzer KeyWordAnalyzer => new JieBaAnalyzer(0, AnalyzerUtils.DefaultMaxWordLength);
@@ -122,7 +128,7 @@ namespace DhtCrawler.Service.Index
             return new Term("InfoHash", item.InfoHash);
         }
 
-        public IList<InfoHashModel> GetList(int index, int size, out int count, string keyword)
+        public IList<InfoHashModel> GetList(int index, int size, out int count, string keyword, int sort = 1)
         {
             return base.Search(index, size, out count, () =>
             {
@@ -132,8 +138,9 @@ namespace DhtCrawler.Service.Index
                 {
                     highWords = SplitString(keyword);
                     var searchKeys = highWords.Where(w => keyword.Length <= 1 || w.Length > 1).ToArray();
-                    if(searchKeys.Length==0){
-                        searchKeys=highWords;
+                    if (searchKeys.Length == 0)
+                    {
+                        searchKeys = highWords;
                     }
                     Term[] nameTerms = new Term[searchKeys.Length], fileTerms = new Term[searchKeys.Length];
                     for (var i = 0; i < searchKeys.Length; i++)
@@ -150,7 +157,19 @@ namespace DhtCrawler.Service.Index
                 if (query.Clauses.Count <= 0)
                     query.Add(new MatchAllDocsQuery(), Occur.MUST);
                 return (query, highWords);
-            }, () => new Sort(SortField.FIELD_SCORE, new SortField("CreateTime", SortFieldType.INT64, true)));
+            }, () =>
+            {
+                switch (sort)
+                {
+                    //时间
+                    case 2:
+                        return _timeSort;
+                    //下载数
+                    case 3:
+                        return _hotSort;
+                }
+                return _defaultSort;
+            });
         }
 
         public void IncrementBuild(DateTime? start)

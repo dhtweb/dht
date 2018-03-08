@@ -36,18 +36,28 @@ namespace DhtCrawler.Web.Controllers
             _visiteQueue = visiteQueue;
         }
 
-        public IActionResult List(string keyword, int index = 1)
+        public IActionResult List(string keyword, string sort, int index = 1)
         {
             ViewBag.SearchKey = keyword;
+            ViewBag.Sort = sort;
             if (index == 1 && !keyword.IsBlank() && !Request.IsSpider())
             {
                 _searchKeyQueue.Enqueue(keyword);
             }
-            var key = keyword.ToLower() + ":" + index;
+            var key = keyword.ToLower() + ":" + index + sort;
             var page = _cache.GetOrCreate(key, entry =>
              {
                  entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(2);
-                 var list = _indexSearchService.GetList(index, PageSize, out int count, keyword);
+                 var sortType = 1;
+                 if (sort == "time")
+                 {
+                     sortType = 2;
+                 }
+                 else if (sort == "hot")
+                 {
+                     sortType = 3;
+                 }
+                 var list = _indexSearchService.GetList(index, PageSize, out int count, keyword, sortType);
                  return new PageModel<InfoHashModel>()
                  {
                      PageIndex = index,
