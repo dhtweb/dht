@@ -16,7 +16,7 @@ using NpgsqlTypes;
 
 namespace DhtCrawler.Service.Repository
 {
-    public class InfoHashRepository : BaseRepository<InfoHashModel, long>
+    public class InfoHashRepository : BaseRepository
     {
         static InfoHashRepository()
         {

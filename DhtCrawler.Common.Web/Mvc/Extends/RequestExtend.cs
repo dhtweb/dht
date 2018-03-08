@@ -10,7 +10,7 @@ namespace DhtCrawler.Common.Web.Mvc.Extends
         {
             return request.Headers["User-Agent"].Any(header =>
             {
-                return header.IndexOf("Googlebot", StringComparison.OrdinalIgnoreCase) > -1 || header.IndexOf("bingbot", StringComparison.OrdinalIgnoreCase) > -1 || header.IndexOf("Baiduspider", StringComparison.OrdinalIgnoreCase) > -1;
+                return header.IndexOf("Googlebot", StringComparison.OrdinalIgnoreCase) > -1 || header.IndexOf("bingbot", StringComparison.OrdinalIgnoreCase) > -1 || header.IndexOf("Baiduspider", StringComparison.OrdinalIgnoreCase) > -1 || header.IndexOf("Sogou web spider", StringComparison.OrdinalIgnoreCase) > -1;
             });
         }
     }

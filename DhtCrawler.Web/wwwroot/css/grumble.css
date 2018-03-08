@@ -93,7 +93,7 @@
     border-top: 1px solid #e9e9e9;
     border-right: 1px solid #e9e9e9;
     border-left: 1px solid #e9e9e9;
-    background: rgba(7, 60, 139,.4);
+    background: rgba(0, 0, 0,0.4);
 }
 .tabs li{
     width: 33.3%;
@@ -101,6 +101,7 @@
     float: left;
     text-align: center;
     color: #fff;
+    cursor:pointer;
 }
 .tabs li:hover{
     color: #e43937;
@@ -112,7 +113,7 @@
     background-image: none !important;
     filter: none !important;
 }
-.tabs-content{
+.tabs-content {
     position: relative;
     text-align: center;
     padding-top: 2rem;
@@ -120,6 +121,7 @@
     border-bottom: 1px solid #e9e9e9;
     border-right: 1px solid #e9e9e9;
     border-left: 1px solid #e9e9e9;
+    background: rgba(0, 0, 0,0.4);
 }
 .tabs-content .line-left{
     float: left;

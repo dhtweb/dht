@@ -8,7 +8,7 @@ using DhtCrawler.Service.Model;
 
 namespace DhtCrawler.Service.Repository
 {
-    public class SearchWordRepository : BaseRepository<SearchWordModel, string>
+    public class SearchWordRepository : BaseRepository
     {
 
         public SearchWordRepository(DbFactory factory) : base(factory)

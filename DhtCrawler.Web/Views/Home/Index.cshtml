@@ -27,82 +27,36 @@
                         </div>
                     </form>
                 </div>
+                @{
+                    var wordList = (IList<HomeWord>)ViewBag.HomeWord;
+                }
                 <div class="tabs col-md-12">
                     <ul>
-                        <li class="J-tab current" data-text="扛144万坐火车扛144万坐火车扛144万坐火车扛144万坐火车扛144万坐火车扛144万坐火车">我的关注</li>
-                        <li class="J-tab" data-text="女子捡古老漂流瓶">推荐</li>
-                        <li class="J-tab" data-text="日军机舱门坠落">导航</li>
-                        <li class="J-tab" data-text="日军机舱门坠落">导航</li>
-                        <li class="J-tab" data-text="日军机舱门坠落">导航</li>
+                        @for (var i = 0; i < wordList.Count; i++)
+                        {
+                            var word = wordList[i];
+                            <li for="@i" class="J-tab @(i==0?"current":"")">@word.TypeName</li>
+                        }
                     </ul>
                 </div>
                 <div class="tabs-content col-md-12">
                     <p class="line-left hidden-xs hidden-sm"></p>
-                    <span class="tit"><i class="icon-logo"></i>以下信息根据您的兴趣推荐</span>
+                    <span class="tit"><i class="icon-logo"></i>为您的推荐以下内容</span>
                     <p class="line-right hidden-xs hidden-sm"></p>
                     <div class="content-wrap">
-                        <ul class="J-ul-content">
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车扛144万坐火车扛144万坐火车扛144万坐火车扛144万坐火车扛144万坐火车
-                                </a>
-                            </li>
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车
-                                </a>
-                            </li>
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车
-                                </a>
-                            </li>
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车
-                                </a>
-                            </li>
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车
-                                </a>
-                            </li>
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车
-                                </a>
-                            </li>
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车
-                                </a>
-                            </li>
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车
-                                </a>
-                            </li>
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车
-                                </a>
-                            </li>
-                            <li class="news-meta-item news-viewed" data-index="0">
-                                <a class="title-content" href="" target="_blank">
-                                    扛144万坐火车
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="hot-tags-index newhot col-md-12">
-                    <ul class="hot-tags list-inline">
-                        <li class="hot-item newhot"><a href="#">热门搜索</a>：</li>
-                        @foreach (var key in ViewBag.HotKeys)
+                        @for (var i = 0; i < wordList.Count; i++)
                         {
-                            <li class="hot-item newhot"><a href="@Url.RouteUrl("list",new { keyword=key})">@key</a></li>
+                            var wordItem = wordList[i];
+                            <ul id="list_@i" class="J-ul-content" style="display:@(i==0?"block":"none")">
+                                @foreach (var word in wordItem.Words)
+                                {
+                                    <li class="news-meta-item news-viewed">
+                                        <a class="title-content" href="@Url.RouteUrl("list",new { keyword=word })" target="_blank">@word</a>
+                                    </li>
+                                }
+                            </ul>
                         }
-                    </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -153,18 +107,14 @@
                 return false;
             });
             $(".J-tab").click(function () {
-                if($(this).hasClass('current')) {
+                if ($(this).hasClass('current')) {
                     return;
                 }
                 $(this).siblings().removeClass('current').end().addClass('current');
-                var text = $(this).data('text');
-                var html = '';
-                for(var i= 0 ; i<15 ; i++){
-                    html+='<li class="news-meta-item news-viewed" data-index="0">'
-                         +'<a class="title-content" href="" target="_blank">'+text+'</a></li>'
-                }
-                $('.J-ul-content').find('li').remove().end().append(html);
-            })
+                var index = $(this).attr("for");
+                $(".J-ul-content").hide();
+                $("#list_" + index).show();
+            });
         });
     </script>
 }

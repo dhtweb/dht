@@ -5,7 +5,7 @@ using DhtCrawler.Service.Model;
 
 namespace DhtCrawler.Service.Repository
 {
-    public class StatisticsInfoRepository : BaseRepository<StatisticsInfoModel, string>
+    public class StatisticsInfoRepository : BaseRepository
     {
 
         public StatisticsInfoRepository(DbFactory factory) : base(factory)

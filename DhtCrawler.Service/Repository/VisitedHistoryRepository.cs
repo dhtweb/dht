@@ -8,7 +8,7 @@ using DhtCrawler.Service.Model;
 
 namespace DhtCrawler.Service.Repository
 {
-    public class VisitedHistoryRepository : BaseRepository<VisitedModel, string>
+    public class VisitedHistoryRepository : BaseRepository
     {
 
         public VisitedHistoryRepository(DbFactory factory) : base(factory)

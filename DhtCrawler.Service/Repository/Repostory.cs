@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Data;
 using DhtCrawler.Common.Db;
-using DhtCrawler.Service.Model;
 using log4net;
 
 namespace DhtCrawler.Service.Repository
 {
-    public abstract class BaseRepository<T, TId> : IDisposable where T : BaseModel<TId>
+    public abstract class BaseRepository : IDisposable
     {
         protected readonly ILog log;
 

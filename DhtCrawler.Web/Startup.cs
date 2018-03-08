@@ -44,6 +44,7 @@ namespace DhtCrawler.Web
             services.AddTransient<InfoHashRepository>();
             services.AddTransient<StatisticsInfoRepository>();
             services.AddTransient<KeyWordRepository>();
+            services.AddTransient<HomeWordRepository>();
             services.AddTransient<SearchWordRepository>();
             services.AddTransient<VisitedHistoryRepository>();
             services.AddSingleton(provider =>

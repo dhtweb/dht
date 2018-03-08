@@ -37,10 +37,10 @@ namespace DhtCrawler.Common.Index
 
         private static readonly ConcurrentDictionary<string, FSDirectory> FsDirectoryDic = new ConcurrentDictionary<string, FSDirectory>();
         private static readonly ConcurrentDictionary<string, IndexWriter> IndexWriterDic = new ConcurrentDictionary<string, IndexWriter>();
-        private static readonly ConcurrentDictionary<string, IndexSearcher> IndexSearcherDic = new ConcurrentDictionary<string, IndexSearcher>();
 
         private IndexWriter _writer;
-        private IndexSearcher _searcher;
+        private SearcherManager _searcherManager;
+        //private IndexSearcher _searcher;
         private volatile FSDirectory _currentDirectory;
         private FSDirectory IndexDirectory
         {
@@ -87,13 +87,7 @@ namespace DhtCrawler.Common.Index
                          });
                  }
              });
-            this._searcher = IndexSearcherDic.GetOrAdd(indexDir, dic =>
-             {
-                 lock (IndexSearcherDic)
-                 {
-                     return IndexSearcherDic.TryGetValue(indexDir, out var search) ? search : new IndexSearcher(_writer.GetReader(true));
-                 }
-             });
+            this._searcherManager = new SearcherManager(_writer, true, null);
         }
         /// <summary>
         /// 获取lucene文档对象
@@ -419,35 +413,45 @@ namespace DhtCrawler.Common.Index
         /// <returns></returns>
         public IList<T> Search(int index, int size, out int total, Func<(Query, string[])> getQuery, Func<Sort> getSort)
         {
-            var searcher = _searcher;
-            var query = getQuery();
-            var sort = getSort();
-            int start = (index - 1) * size, end = index * size;
-            var docs = searcher.Search(query.Item1, null, end, sort);
-            total = docs.TotalHits;
-            end = Math.Min(end, total);
-            if (start >= end)
+            IndexSearcher searcher = null;
+            try
             {
-                start = Math.Max(0, end - size);
+                _searcherManager.MaybeRefresh();
+                searcher = _searcherManager.Acquire();
+                var query = getQuery();
+                var sort = getSort();
+                int start = (index - 1) * size, end = index * size;
+                var docs = searcher.Search(query.Item1, null, end, sort);
+                total = docs.TotalHits;
+                end = Math.Min(end, total);
+                if (start >= end)
+                {
+                    start = Math.Max(0, end - size);
+                }
+                var models = new T[end - start];
+                var keywords = new HashSet<string>(query.Item2, StringComparer.OrdinalIgnoreCase);
+                for (int i = start; i < total && i < end; i++)
+                {
+                    var docNum = docs.ScoreDocs[i].Doc;
+                    var doc = searcher.Doc(docNum);
+                    models[i - start] = GetModel(doc, keywords);
+                }
+                return models;
             }
-            var models = new T[end - start];
-            var keywords = new HashSet<string>(query.Item2, StringComparer.OrdinalIgnoreCase);
-            for (int i = start; i < total && i < end; i++)
+            finally
             {
-                var docNum = docs.ScoreDocs[i].Doc;
-                var doc = searcher.Doc(docNum);
-                models[i - start] = GetModel(doc, keywords);
+                if (searcher != null)
+                {
+                    _searcherManager.Release(searcher);
+                    searcher = null;
+                }
             }
-            return models;
         }
 
         public void Dispose()
         {
-            if (IndexSearcherDic.TryRemove(IndexDir, out var searcher))
-            {
-                searcher.IndexReader.Dispose();
-                _searcher = null;
-            }
+            _searcherManager.Dispose();
+            _searcherManager = null;
             if (IndexWriterDic.TryRemove(IndexDir, out var writer))
             {
                 writer.Dispose();
