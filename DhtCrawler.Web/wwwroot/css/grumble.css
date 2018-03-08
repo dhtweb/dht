@@ -78,3 +78,91 @@
 
         z-index: 99999;
         }
+.newhot{
+    overflow: hidden;
+}
+.hot-tags{
+    padding: .5rem;
+    background: rgba(187, 99, 99,.4);
+}
+.tabs{
+    margin-top: 1.4rem;
+    overflow: hidden;
+    position: relative;
+    font-size: 14px;
+    border-top: 1px solid #e9e9e9;
+    border-right: 1px solid #e9e9e9;
+    border-left: 1px solid #e9e9e9;
+    background: rgba(7, 60, 139,.4);
+}
+.tabs li{
+    width: 33.3%;
+    line-height: 40px;
+    float: left;
+    text-align: center;
+    color: #fff;
+}
+.tabs li:hover{
+    color: #e43937;
+}
+.tabs li.current{
+    background: rgba(7, 60, 139,.9);
+    color: #fff;
+    font-weight: bold;
+    background-image: none !important;
+    filter: none !important;
+}
+.tabs-content{
+    position: relative;
+    text-align: center;
+    padding-top: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9e9e9;
+    border-right: 1px solid #e9e9e9;
+    border-left: 1px solid #e9e9e9;
+}
+.tabs-content .line-left{
+    float: left;
+    width: 30%;
+    border-bottom: 1px solid #fff;
+}
+.tabs-content .line-right{
+    float: right;
+    width: 30%;
+    border-bottom: 1px solid #fff;
+}
+.tit{
+    position: relative;
+    top: -1.5rem;
+    left: .5rem;
+    line-height: 2rem;
+    color: #fff;
+}
+.icon-logo{
+    background: url(/images/mainlogo.png) no-repeat 0 0;
+    background-size: 100% 100%;
+    height: 1.8rem;
+    width: 2.4rem;
+    display: inline-block;
+    position: relative;
+    left: -1rem;
+    top: .5rem;
+}
+.content-wrap{
+    overflow: hidden;
+    width: 100%;
+}
+.content-wrap li {
+    float: left;
+    width: 25%;
+    text-align: center;
+    line-height: 2.2rem;
+    padding: 0 .4rem;
+}
+.content-wrap li a{
+    color: #fff;
+    display: block;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}

@@ -1,0 +1,88 @@
+blockquote,body,button,dd,dl,dt,fieldset,form,h1,h2,h3,h4,h5,h6,hr,input,legend,li,ol,p,pre,td,textarea,th,ul{
+    margin:0;
+    padding:0
+}
+body,button,input,select,textarea{
+    font: 14px/1.5 tahoma,arial,'Hiragino Sans GB','\5b8b\4f53', sans-serif;
+    color: #333;
+}
+h1,h2,h3,h4,h5,h6{
+    font-size:100%;
+    -webkit-font-smoothing: antialiased;
+}
+address,cite,dfn,em,var,i{
+    font-style:normal
+}
+code,kbd,pre,samp{
+    font-family:courier new,courier,monospace
+}
+a{
+    color: #333;
+    text-decoration: none;
+    outline:none;
+}
+a:hover{
+    text-decoration:underline
+}
+img{
+    border:0
+}
+ol,ul{
+    list-style:none
+}
+button,input,select,textarea{
+    font-size:100%;
+    outline: none
+}
+textarea{
+    resize: none;
+}
+table{
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+.fr{
+    float: right;
+}
+.fl{
+    float: left;
+}
+.hide{
+    display: none
+}
+.show{
+    display: block
+}
+.hidden{
+    overflow: hidden
+}
+.visible{
+    overflow: visible
+}
+.center{
+    text-align: center
+}
+.clearfix:after{
+    content:".";
+    display:block;
+    height:0;
+    clear:both;
+    visibility:hidden
+}
+.clearfix{
+    *height:1%;
+}
+.text-overflow {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.text-left {
+  text-align: left;
+}
+.text-right {
+  text-align: right;
+}
+.text-center {
+  text-align: center;
+}
