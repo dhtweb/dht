@@ -72,10 +72,10 @@ namespace DhtCrawler.Web.Controllers
         [ServiceFilter(typeof(StaticHtmlFilterAttribute), IsReusable = true)]
         public async Task<IActionResult> Detail(string hash)
         {
-            var item = await _infoHashRepository.GetInfoHashDetailAsync(hash);
+            var item = await _infoHashRepository.GetInfoHashDetailAsync(hash.ToUpper());
             if (item == null)
             {
-                return RedirectToAction("List");
+                return Redirect("/");
             }
             item.KeyWords = new HashSet<string>(item.Name.Cut().Union(item.Name.Cut(false)).Where(k => k.Length > 1 && k.Length < 40));//.Take(10)
             if (!Request.IsSpider())

@@ -110,7 +110,7 @@ namespace DhtCrawler.DHT
                 case PlatformID.Win32S:
                 case PlatformID.Win32Windows:
                 case PlatformID.WinCE:
-                    _client.Client.IOControl(-1744830452, new byte[] { 0, 0, 0, 0 }, null);
+                    _client.Client.IOControl(-1744830452, new byte[] { Convert.ToByte(false) }, new byte[4]);
                     break;
             }
 

@@ -36,11 +36,11 @@ namespace DhtCrawler.Web.Controllers
             //var keys = new[] { "红海行动", "唐人街探案2", "捉妖记2", "西游记女儿国", "祖宗十九代", "熊出没·变形记", "黑豹", "闺蜜2", "比得兔", "爱在记忆消逝前", "妈妈咪鸭", "小萝莉的猴神大叔", "环太平洋：雷霆再起", "金钱世界", "古墓丽影：源起之战", "三块广告牌", "前任3：再见前任", "厉害了，我的国", "战神纪", "无问西东", "新哥斯拉", "芳华", "人怕出名猪怕壮", "南极之恋", "宇宙有爱浪漫同游", "奇迹男孩", "忌日快乐", "小马宝莉大电影", "复仇者联盟3：无限战争", "马戏之王" };
             var wordTask = _cache.GetOrCreateAsync("words", entry =>
            {
-               entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(1);
                return homeWordRepository.GetHomeWordListAsync().ContinueWith(t =>
                {
                    if (t.Result != null)
                    {
+                       entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(1);
                        return t.Result.GroupBy(it => it.Order).OrderBy(kv => kv.Key).Select(kv =>
                        {
                            var item = kv.First();
@@ -51,7 +51,11 @@ namespace DhtCrawler.Web.Controllers
                            };
                        }).ToArray();
                    }
-                   return new HomeWord[0];
+                   else
+                   {
+                       entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(10);
+                       return new HomeWord[0];
+                   }
                });
            });
             var torrentNumTask = _cache.GetOrCreateAsync("total", entry =>
