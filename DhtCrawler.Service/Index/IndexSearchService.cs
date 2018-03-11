@@ -65,7 +65,7 @@ namespace DhtCrawler.Service.Index
                     }
                     else
                     {
-                        if (!names.Add(file.Name))
+                        if (file.Name.IsBlank() || !names.Add(file.Name))
                             continue;
                         if (_wordFilter.Contain(file.Name))
                         {
