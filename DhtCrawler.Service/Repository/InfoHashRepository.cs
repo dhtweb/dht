@@ -432,7 +432,7 @@ namespace DhtCrawler.Service.Repository
             var item = await Connection.QueryFirstOrDefaultAsync<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
             if (item != null && item.HasFile)
             {
-                item.Files = await Connection.QueryFirstAsync<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = item.Id });
+                item.Files = await Connection.QueryFirstOrDefaultAsync<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = item.Id });
             }
             return item;
         }

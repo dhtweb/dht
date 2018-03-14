@@ -38,7 +38,6 @@ namespace DhtCrawler
             public IPEndPoint Peer { get; set; }
         }
         private static ConcurrentQueue<string> InfoHashQueue;
-        private static ConcurrentQueue<Torrent> WriteTorrentQueue;
         private static BlockingCollection<InfoHash> DownLoadQueue;
         private static ConcurrentHashSet<string> DownlaodedSet;
         private static ConcurrentDictionary<long, DateTime> BadAddress;
@@ -46,6 +45,8 @@ namespace DhtCrawler
         private static readonly ILog log = LogManager.GetLogger(typeof(Program));
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         private const string TorrentPath = "torrent";
+        private static readonly DirectoryInfo TorrentDirectory = new DirectoryInfo(TorrentPath);
+
         private const string InfoPath = "info";
         private static readonly string DownloadInfoPath = Path.Combine(TorrentPath, "downloaded.txt");
         private static volatile bool running = true;
@@ -58,7 +59,7 @@ namespace DhtCrawler
             RunSpider();
             RunDown();
             RunRecordInfoHash();
-            Task.WaitAll(RunWriteTorrent(), SyncToDatabase());
+            SyncToDatabase().Wait();
             WaitComplete();
         }
 
@@ -134,7 +135,11 @@ namespace DhtCrawler
                     DownlaodedSet.Add(infoHash.Value);
                     var torrent = ParseBitTorrent(meta.Item1);
                     torrent.InfoHash = infoHash.Value;
-                    WriteTorrentQueue.Enqueue(torrent);
+                    var subdirectory = TorrentDirectory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
+                    var path = Path.Combine(subdirectory.FullName, torrent.InfoHash + ".json");
+                    File.WriteAllText(Path.Combine(TorrentPath, path), torrent.ToJson());
+                    File.AppendAllText(DownloadInfoPath, torrent.InfoHash + Environment.NewLine);
+                    Console.WriteLine($"download {torrent.InfoHash} success");
                     return true;
                 }
             }
@@ -228,7 +233,11 @@ namespace DhtCrawler
                                         DownlaodedSet.Add(info.Value);
                                         var torrent = ParseBitTorrent(meta);
                                         torrent.InfoHash = info.Value;
-                                        WriteTorrentQueue.Enqueue(torrent);
+                                        var subdirectory = TorrentDirectory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
+                                        var path = Path.Combine(subdirectory.FullName, torrent.InfoHash + ".json");
+                                        File.WriteAllText(Path.Combine(TorrentPath, path), torrent.ToJson());
+                                        File.AppendAllText(DownloadInfoPath, torrent.InfoHash + Environment.NewLine);
+                                        Console.WriteLine($"download {torrent.InfoHash} success");
                                     }
                                     break;
                                 }
@@ -404,7 +413,6 @@ namespace DhtCrawler
         private static void Init()
         {
             InfoHashQueue = new ConcurrentQueue<string>();
-            WriteTorrentQueue = new ConcurrentQueue<Torrent>();
             DownLoadQueue = new BlockingCollection<InfoHash>(ConfigurationManager.Default.GetInt("BufferDownSize", 5120));
             DownlaodedSet = new ConcurrentHashSet<string>();
             BadAddress = new ConcurrentDictionary<long, DateTime>();
@@ -425,7 +433,7 @@ namespace DhtCrawler
                         IocContainer.RegisterType<IFilter<long>>(new EmptyFilter<long>());
                         break;
                 }
-                IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(600));
+                IocContainer.RegisterType<AbstractMessageMap>(new LocalFileMap(Path.Combine("msg", "data.bat")));
             }
             else
             {
@@ -495,7 +503,7 @@ namespace DhtCrawler
             {
                 while (true)
                 {
-                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},收到请求消息数:{dhtClient.RequestMessageCount},收到回复消息数:{dhtClient.ResponseMessageCount},发送消息数:{dhtClient.SendMessageCount},回复消息数:{dhtClient.ReplyMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},待写入磁盘种子数:{WriteTorrentQueue.Count}");
+                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},收到请求消息数:{dhtClient.RequestMessageCount},收到回复消息数:{dhtClient.ResponseMessageCount},发送消息数:{dhtClient.SendMessageCount},回复消息数:{dhtClient.ReplyMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count}");
                     await Task.Delay(60 * 1000);
                 }
             });
@@ -548,37 +556,6 @@ namespace DhtCrawler
                 dhtClient.ShutDown();
                 e.Cancel = true;
             };
-        }
-
-        private static async Task RunWriteTorrent()
-        {
-            var directory = new DirectoryInfo(TorrentPath);
-            await Task.Yield();
-            while (running)
-            {
-                while (WriteTorrentQueue.TryDequeue(out var item))
-                {
-                    var content = item.ToJson();
-                    if (content.IsBlank())
-                    {
-                        continue;
-                    }
-                    var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                    var path = Path.Combine(TorrentPath, subdirectory.FullName, item.InfoHash + ".json");
-                    await File.WriteAllTextAsync(path, content);
-                    await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
-                    Console.WriteLine($"download {item.InfoHash} success");
-                }
-                await Task.Delay(500);
-            }
-            while (WriteTorrentQueue.TryDequeue(out var item))
-            {
-                var subdirectory = directory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                var path = Path.Combine(subdirectory.FullName, item.InfoHash + ".json");
-                await File.WriteAllTextAsync(Path.Combine(TorrentPath, path), item.ToJson());
-                await File.AppendAllTextAsync(DownloadInfoPath, item.InfoHash + Environment.NewLine);
-                Console.WriteLine($"download {item.InfoHash} success");
-            }
         }
 
         private static async Task SyncToDatabase()
