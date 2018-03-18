@@ -54,13 +54,13 @@ namespace DhtCrawler.Service.Model
                 }
                 if (size < TorrentFileModel.MbSize)//小于1M
                 {
-                    return (size / TorrentFileModel.KbSize).ToString("F") + "KB";
+                    return (size / TorrentFileModel.KbSize).ToString("F2") + "KB";
                 }
                 if (size < TorrentFileModel.GbSize)//小于1G
                 {
-                    return (size / TorrentFileModel.MbSize).ToString("F") + "MB";
+                    return (size / TorrentFileModel.MbSize).ToString("F2") + "MB";
                 }
-                return (size / TorrentFileModel.GbSize).ToString("F") + "GB";
+                return (size / TorrentFileModel.GbSize).ToString("F2") + "GB";
             }
         }
 

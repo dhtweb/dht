@@ -17,7 +17,7 @@ namespace DhtCrawler.DHT.Message
         {
             var dirPath = Path.GetDirectoryName(storePath);
             Directory.CreateDirectory(dirPath);
-            var treeOption = new BPlusTree<ulong, byte[]>.OptionsV2(PrimitiveSerializer.UInt64, PrimitiveSerializer.Bytes) { FileName = storePath, CreateFile = CreatePolicy.IfNeeded };
+            var treeOption = new BPlusTree<ulong, byte[]>.OptionsV2(PrimitiveSerializer.UInt64, PrimitiveSerializer.Bytes) { FileName = storePath, CreateFile = CreatePolicy.Always };
             _treeStore = new BPlusTree<ulong, byte[]>(treeOption);
             _lastClearTime = DateTime.Now.Ticks;
         }

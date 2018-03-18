@@ -1,6 +1,5 @@
 ﻿using DhtCrawler.DHT;
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -23,7 +22,6 @@ using DhtCrawler.Common.Utils;
 using DhtCrawler.Configuration;
 using DhtCrawler.DHT.Message;
 using DhtCrawler.Store;
-using BitTorrentClient = BitTorrent.Listeners.BitTorrentClient;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -41,7 +39,6 @@ namespace DhtCrawler
         private static BlockingCollection<InfoHash> DownLoadQueue;
         private static ConcurrentHashSet<string> DownlaodedSet;
         private static ConcurrentDictionary<long, DateTime> BadAddress;
-        private static StoreManager<InfoHash> InfoStore;
         private static readonly ILog log = LogManager.GetLogger(typeof(Program));
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         private const string TorrentPath = "torrent";
@@ -50,6 +47,13 @@ namespace DhtCrawler
         private const string InfoPath = "info";
         private static readonly string DownloadInfoPath = Path.Combine(TorrentPath, "downloaded.txt");
         private static volatile bool running = true;
+        #region 下载信息
+        private static ThreadSafeList<Task> DownTaskList;
+        private static StoreManager<InfoHash> InfoStore;
+        private static int MinDownTaskNum;
+        private static int MaxDownTaskNum;
+        private static int DownTimeOutSeconds;
+        #endregion
         static void Main(string[] args)
         {
             Init();
@@ -64,241 +68,121 @@ namespace DhtCrawler
         }
 
         #region BT种子下载
-        static async Task LoopDownload(int taskId)
+        private static void RunDown()
         {
-            while (running)
+            MinDownTaskNum = ConfigurationManager.Default.GetInt("MinDownThreadNum", 1);
+            MaxDownTaskNum = ConfigurationManager.Default.GetInt("MaxDownThreadNum", 32);
+            DownTimeOutSeconds = ConfigurationManager.Default.GetInt("DownTimeout", 60) * 1000;
+            DownTaskList = new ThreadSafeList<Task>();
+            for (int i = 0; i < MinDownTaskNum; i++)
             {
-                try
+                StartDownTorrent();
+            }
+            Console.CancelKeyPress += (sender, e) =>
+            {
+                Task.WaitAll(DownTaskList.ToArray());
+            };
+        }
+        private static void StartDownTorrent()
+        {
+            if (DownTaskList.Count >= MaxDownTaskNum)
+            {
+                return;
+            }
+            Task downTask = null;
+            downTask = Task.Factory.StartNew(t =>
+            {
+                var currentTask = t == null ? downTask : (Task)t;
+                while (running)
                 {
-                    if (!DownLoadQueue.TryTake(out var info))
+                    try
                     {
-                        if (InfoStore.CanRead)
+                        if (!DownLoadQueue.TryTake(out var info))
                         {
                             info = InfoStore.ReadLast();
                         }
-                    }
-                    if (info == null)
-                    {
-                        await Task.Delay(1000);
-                        continue;
-                    }
-                    if (DownlaodedSet.Contains(info.Value))
-                        continue;
-                    Console.WriteLine($"task {taskId} downloading {info.Value}");
-                    foreach (var peer in info.Peers.Where(p => p.Address.IsPublic()))
-                    {
-                        if (!running)
-                            return;
+                        if (info == null)
+                        {
+                            if (!DownLoadQueue.TryTake(out info, DownTimeOutSeconds))
+                            {
+                                lock (DownTaskList.SyncRoot)
+                                {
+                                    if (DownTaskList.Count > MinDownTaskNum)
+                                    {
+                                        DownTaskList.Remove(currentTask);
+                                        return;
+                                    }
+                                    else
+                                    {
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
                         if (DownlaodedSet.Contains(info.Value))
+                            continue;
+                        watchLog.Info($"thread {Task.CurrentId:x2} downloading {info.Value}");
+                        foreach (var peer in info.Peers.Where(p => p.Address.IsPublic()))
                         {
-                            break;
-                        }
-                        var flag = await DownTorrentAsync(new DownInfoHash() { Peer = peer, Bytes = info.Bytes, Value = info.Value });
-                        if (flag)
-                        {
-                            break;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    log.Error("并行下载时错误", ex);
-                }
-            }
-        }
-
-        static async Task<bool> DownTorrentAsync(DownInfoHash infoHash)
-        {
-            var longPeer = infoHash.Peer.ToInt64();
-            try
-            {
-                if (BadAddress.TryGetValue(longPeer, out var expireTime))
-                {
-                    if (expireTime > DateTime.Now)
-                    {
-                        return false;
-                    }
-                    BadAddress.TryRemove(longPeer, out expireTime);
-                }
-                using (var client = new BitTorrentClient(infoHash.Peer))
-                {
-                    var meta = await client.GetMetaDataAsync(new global::BitTorrent.InfoHash(infoHash.Bytes));
-                    if (meta.Item1 == null)
-                    {
-                        if (meta.Item2)
-                        {
-                            BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1),
-                                (ip, before) => DateTime.Now.AddDays(1));
-                        }
-                        return false;
-                    }
-                    DownlaodedSet.Add(infoHash.Value);
-                    var torrent = ParseBitTorrent(meta.Item1);
-                    torrent.InfoHash = infoHash.Value;
-                    var subdirectory = TorrentDirectory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                    var path = Path.Combine(subdirectory.FullName, torrent.InfoHash + ".json");
-                    File.WriteAllText(Path.Combine(TorrentPath, path), torrent.ToJson());
-                    File.AppendAllText(DownloadInfoPath, torrent.InfoHash + Environment.NewLine);
-                    Console.WriteLine($"download {torrent.InfoHash} success");
-                    return true;
-                }
-            }
-            catch (SocketException)
-            {
-                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
-            }
-            catch (IOException)
-            {
-                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
-            }
-            catch (Exception ex)
-            {
-                log.Error("下载失败", ex);
-            }
-            return false;
-        }
-
-        private static void RunDown()
-        {
-            var downMode = ConfigurationManager.Default.GetString("DownMode");
-            if (string.Equals(downMode, "thread", StringComparison.OrdinalIgnoreCase))
-            {
-                DownByThread();
-            }
-            else
-            {
-                DownByTask();
-            }
-        }
-
-        private static void DownByThread()
-        {
-            int parallelDownSize = ConfigurationManager.Default.GetInt("MaxDownThreadNum", 32);//, downSize = ConfigurationManager.Default.GetInt("BatchDownSize", 128)
-            var tasks = new Task[parallelDownSize];
-            for (int i = 0; i < parallelDownSize; i++)
-            {
-                var taskId = i;
-                tasks[i] = Task.Factory.StartNew(() =>
-                {
-                    while (running)
-                    {
-                        try
-                        {
-                            if (!DownLoadQueue.TryTake(out var info))
-                            {
-                                if (InfoStore.CanRead)
-                                {
-                                    info = InfoStore.ReadLast();
-                                }
-                            }
-                            if (info == null)
-                            {
-                                Thread.Sleep(1000);
-                                continue;
-                            }
                             if (DownlaodedSet.Contains(info.Value))
-                                continue;
-                            Console.WriteLine($"thread {taskId:x2} downloading {info.Value}");
-                            foreach (var peer in info.Peers.Where(p => p.Address.IsPublic()))
                             {
-                                if (!running)
-                                    return;
-                                if (DownlaodedSet.Contains(info.Value))
+                                break;
+                            }
+                            var longPeer = peer.ToInt64();
+                            try
+                            {
+                                if (BadAddress.TryGetValue(longPeer, out var expireTime))
                                 {
-                                    break;
-                                }
-                                var longPeer = peer.ToInt64();
-                                try
-                                {
-                                    if (BadAddress.TryGetValue(longPeer, out var expireTime))
+                                    if (expireTime > DateTime.Now)
                                     {
-                                        if (expireTime > DateTime.Now)
-                                        {
-                                            continue;
-                                        }
-                                        BadAddress.TryRemove(longPeer, out expireTime);
+                                        continue;
                                     }
-                                    using (var client = new WireClient(peer))
+                                    BadAddress.TryRemove(longPeer, out expireTime);
+                                }
+                                using (var client = new WireClient(peer))
+                                {
+                                    var meta = client.GetMetaData(new global::BitTorrent.InfoHash(info.Bytes), out var netError);
+                                    if (meta == null)
                                     {
-                                        var meta = client.GetMetaData(new global::BitTorrent.InfoHash(info.Bytes), out var netError);
-                                        if (meta == null)
+                                        if (netError)
                                         {
-                                            if (netError)
-                                            {
-                                                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1),
-                                                    (ip, before) => DateTime.Now.AddDays(1));
-                                            }
-                                            continue;
+                                            BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1),
+                                                (ip, before) => DateTime.Now.AddDays(1));
                                         }
-                                        DownlaodedSet.Add(info.Value);
-                                        var torrent = ParseBitTorrent(meta);
-                                        torrent.InfoHash = info.Value;
-                                        var subdirectory = TorrentDirectory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                                        var path = Path.Combine(subdirectory.FullName, torrent.InfoHash + ".json");
-                                        File.WriteAllText(Path.Combine(TorrentPath, path), torrent.ToJson());
-                                        File.AppendAllText(DownloadInfoPath, torrent.InfoHash + Environment.NewLine);
-                                        Console.WriteLine($"download {torrent.InfoHash} success");
+                                        continue;
                                     }
-                                    break;
+                                    DownlaodedSet.Add(info.Value);
+                                    var torrent = ParseBitTorrent(meta);
+                                    torrent.InfoHash = info.Value;
+                                    var subdirectory = TorrentDirectory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
+                                    var path = Path.Combine(subdirectory.FullName, torrent.InfoHash + ".json");
+                                    File.WriteAllText(Path.Combine(TorrentPath, path), torrent.ToJson());
+                                    File.AppendAllText(DownloadInfoPath, torrent.InfoHash + Environment.NewLine);
+                                    watchLog.Info($"download {torrent.InfoHash} success");
                                 }
-                                catch (SocketException)
-                                {
-                                    BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
-                                }
-                                catch (IOException)
-                                {
-                                    BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
-                                }
-                                catch (Exception ex)
-                                {
-                                    log.Error("下载失败", ex);
-                                }
+                                break;
+                            }
+                            catch (SocketException)
+                            {
+                                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
+                            }
+                            catch (IOException)
+                            {
+                                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
+                            }
+                            catch (Exception ex)
+                            {
+                                log.Error("下载失败", ex);
                             }
                         }
-                        catch (Exception ex)
-                        {
-                            log.Error("并行下载时错误", ex);
-                        }
                     }
-                }, TaskCreationOptions.LongRunning);
-            }
-            Console.CancelKeyPress += (sender, e) =>
-            {
-                Task.WaitAll(tasks);
-            };
-        }
-
-        private static void DownByTask()
-        {
-            int parallelDownSize = ConfigurationManager.Default.GetInt("MaxDownThreadNum", 32);//downSize = ConfigurationManager.Default.GetInt("BatchDownSize", 128),
-            var downTasks = new Task[parallelDownSize];
-            for (int i = 0; i < parallelDownSize; i++)
-            {
-                var local = i;
-                Task.Run(() =>
-                {
-                    downTasks[local] = LoopDownload(local).ContinueWith(t =>
-                      {
-                          if (t.IsFaulted)
-                          {
-                              log.Error($"downlaod task {local} error", t.Exception);
-                          }
-                          else
-                          {
-                              log.Info($"download task {local} complete");
-                          }
-                      });
-                });
-            }
-            Console.CancelKeyPress += (sender, e) =>
-            {
-                running = false;
-                Task.WaitAll(downTasks);
-                while (DownLoadQueue.TryTake(out var item))
-                {
-                    InfoStore.Add(item);
+                    catch (Exception ex)
+                    {
+                        log.Error("并行下载时错误", ex);
+                    }
                 }
-            };
+            }, downTask, TaskCreationOptions.LongRunning);
+            DownTaskList.Add(downTask);
         }
 
         private static Torrent ParseBitTorrent(BEncodedDictionary metaData)
@@ -388,10 +272,18 @@ namespace DhtCrawler
 
         #region DHT事件
 
-        private static Task DhtClient_OnAnnouncePeer(InfoHash arg)
+        private static void DownInfoEnqueue(InfoHash arg)
         {
             if (!DownLoadQueue.TryAdd(arg))
+            {
                 InfoStore.Add(arg);
+                StartDownTorrent();
+            }
+        }
+
+        private static Task DhtClient_OnAnnouncePeer(InfoHash arg)
+        {
+            DownInfoEnqueue(arg);
             return Task.CompletedTask;
         }
         private static Task DhtClient_OnReceiveInfoHash(InfoHash infoHash)
@@ -403,8 +295,7 @@ namespace DhtCrawler
 
         private static Task DhtClient_OnFindPeer(InfoHash arg)
         {
-            if (!DownLoadQueue.TryAdd(arg))
-                InfoStore.Add(arg);
+            DownInfoEnqueue(arg);
             return Task.CompletedTask;
         }
 
@@ -433,7 +324,8 @@ namespace DhtCrawler
                         IocContainer.RegisterType<IFilter<long>>(new EmptyFilter<long>());
                         break;
                 }
-                IocContainer.RegisterType<AbstractMessageMap>(new LocalFileMap(Path.Combine("msg", "data.bat")));
+                //IocContainer.RegisterType<AbstractMessageMap>(new LocalFileMap(Path.Combine("msg", "data.bat")));
+                IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(15));
             }
             else
             {
@@ -503,7 +395,7 @@ namespace DhtCrawler
             {
                 while (true)
                 {
-                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},收到请求消息数:{dhtClient.RequestMessageCount},收到回复消息数:{dhtClient.ResponseMessageCount},发送消息数:{dhtClient.SendMessageCount},回复消息数:{dhtClient.ReplyMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count}");
+                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},收到请求消息数:{dhtClient.RequestMessageCount},收到回复消息数:{dhtClient.ResponseMessageCount},发送消息数:{dhtClient.SendMessageCount},回复消息数:{dhtClient.ReplyMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},下载线程数:{DownTaskList.Count}");
                     await Task.Delay(60 * 1000);
                 }
             });
@@ -618,6 +510,10 @@ namespace DhtCrawler
                                             }
                                         }
                                     }
+                                    if (con.State != System.Data.ConnectionState.Open)
+                                    {
+                                        await con.OpenAsync();
+                                    }
                                     using (var transaction = con.BeginTransaction())
                                     {
                                         try
@@ -655,6 +551,7 @@ namespace DhtCrawler
                                         }
                                     }
                                     File.Delete(file);
+                                    watchLog.InfoFormat("文件{0}写入数据库成功", file);
                                 }
                                 catch (Exception ex)
                                 {
