@@ -116,6 +116,17 @@ namespace DhtCrawler.Common.Collections.Queue
             return item;
         }
 
+        public bool TryDequeue(out T item)
+        {
+            if (size <= 0)
+            {
+                item = default(T);
+                return false;
+            }
+            item = Dequeue();
+            return true;
+        }
+
         public void Enqueue(T item)
         {
             if (size >= array.Length)
