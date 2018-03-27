@@ -43,6 +43,7 @@ namespace DhtCrawler
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
         private const string TorrentPath = "torrent";
         private static readonly DirectoryInfo TorrentDirectory = new DirectoryInfo(TorrentPath);
+        private static SpinLock writeLock = new SpinLock(false);
 
         private const string InfoPath = "info";
         private static readonly string DownloadInfoPath = Path.Combine(TorrentPath, "downloaded.txt");
@@ -99,7 +100,25 @@ namespace DhtCrawler
                     {
                         if (!DownLoadQueue.TryTake(out var info))
                         {
-                            info = InfoStore.ReadLast();
+                            lock (InfoStore)
+                            {
+                                if (!DownLoadQueue.TryTake(out info))
+                                {
+                                    var infos = InfoStore.ReadLast(Math.Min(MaxDownTaskNum, DownLoadQueue.BoundedCapacity - DownLoadQueue.Count));
+                                    if (infos.Count > 0)
+                                    {
+                                        for (int i = 0; i < infos.Count - 1; i++)
+                                        {
+                                            var item = infos[i];
+                                            if (!DownLoadQueue.TryAdd(item))
+                                            {
+                                                InfoStore.Add(item);
+                                            }
+                                        }
+                                        info = infos.Last();
+                                    }
+                                }
+                            }
                         }
                         if (info == null)
                         {
@@ -156,8 +175,20 @@ namespace DhtCrawler
                                     torrent.InfoHash = info.Value;
                                     var subdirectory = TorrentDirectory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
                                     var path = Path.Combine(subdirectory.FullName, torrent.InfoHash + ".json");
-                                    File.WriteAllText(Path.Combine(TorrentPath, path), torrent.ToJson());
-                                    File.AppendAllText(DownloadInfoPath, torrent.InfoHash + Environment.NewLine);
+                                    var hasLock = false;
+                                    writeLock.Enter(ref hasLock);
+                                    try
+                                    {
+                                        File.WriteAllText(Path.Combine(TorrentPath, path), torrent.ToJson());
+                                        File.AppendAllText(DownloadInfoPath, torrent.InfoHash + Environment.NewLine);
+                                    }
+                                    finally
+                                    {
+                                        if (hasLock)
+                                        {
+                                            writeLock.Exit(false);
+                                        }
+                                    }
                                     watchLog.Info($"download {torrent.InfoHash} success");
                                 }
                                 break;
@@ -409,6 +440,7 @@ namespace DhtCrawler
                         var infoHashFiles = Directory.GetFiles(InfoPath, "*.retry");
                         foreach (var hashFile in infoHashFiles)
                         {
+                            var allDown = true;
                             using (var stream = File.OpenRead(hashFile))
                             {
                                 using (var reader = new StreamReader(stream))
@@ -434,12 +466,17 @@ namespace DhtCrawler
                                             Thread.Sleep(2000);
                                         }
                                         dhtClient.GetPeers(hashBytes);
+                                        allDown = false;
                                     }
                                 }
                             }
+                            if (allDown)
+                            {
+                                File.Delete(hashFile);
+                            }
                         }
                         log.Info("LOOP COMPLETE");
-                        Thread.Sleep(TimeSpan.FromHours(12));
+                        Thread.Sleep(TimeSpan.FromMinutes(15));
                     }
                 }, TaskCreationOptions.LongRunning);
             }
@@ -477,6 +514,10 @@ namespace DhtCrawler
                             await con.OpenAsync();
                             foreach (var file in files)
                             {
+                                if (!running)
+                                {
+                                    return;
+                                }
                                 try
                                 {
                                     var content = await File.ReadAllTextAsync(file);

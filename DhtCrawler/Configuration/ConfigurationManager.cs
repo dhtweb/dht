@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using DhtCrawler.Common;
 using Newtonsoft.Json.Linq;
 
@@ -44,6 +45,13 @@ namespace DhtCrawler.Configuration
             return string.Empty;
         }
 
+        public IList<object> GetList(string key)
+        {
+            if (ContainsKey(key))
+                return (IList<object>)this[key];
+            return new object[0];
+        }
+
         public ConfigurationManager GetSection(string key)
         {
             if (ContainsKey(key))
@@ -51,20 +59,21 @@ namespace DhtCrawler.Configuration
                 if (this[key] is ConfigurationManager manager)
                     return manager;
                 var section = (JObject)this[key];
-                manager = new ConfigurationManager();
-                foreach (var kv in section)
+                manager = section.ToObject<ConfigurationManager>();
+                this[key] = manager;
+                foreach (var k in manager.Keys.ToArray())
                 {
-                    switch (kv.Value.Type)
+                    var val = manager[k];
+                    if (val is JArray)
                     {
-                        case JTokenType.Integer:
-                            manager.Add(kv.Key, kv.Value.Value<int>());
-                            break;
-                        case JTokenType.String:
-                            manager.Add(kv.Key, kv.Value.Value<string>());
-                            break;
+                        var list = new List<object>();
+                        foreach (var it in (JArray)val)
+                        {
+                            list.Add(it.ToObject<Dictionary<string, object>>());
+                        }
+                        manager[k] = list;
                     }
                 }
-                this[key] = manager;
                 return manager;
             }
             return new ConfigurationManager();

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace DhtCrawler.Store
@@ -113,6 +114,41 @@ namespace DhtCrawler.Store
                 var result = new T();
                 result.ReadBytes(byteArray);
                 return result;
+            }
+        }
+
+        public IList<T> ReadLast(int num)
+        {
+            lock (this)
+            {
+                if (!CanRead)
+                    return new T[0];
+                var items = new List<T>();
+                for (int i = 0; i < num && CanRead; i++)
+                {
+                    _count--;
+                    reader.BaseStream.Seek(_readIndex, SeekOrigin.Begin);
+                    var preReadIndex = reader.ReadInt64();
+                    var length = reader.ReadInt32();
+                    var byteArray = new byte[length];
+                    var index = 0;
+                    while (index < length)
+                    {
+                        index += reader.Read(byteArray, index, length);
+                    }
+
+                    #region 设置文件头
+
+                    long rIndex = preReadIndex, wIndex = Position - LongSize - IntSize - byteArray.Length;
+                    SetIndex(wIndex, rIndex);
+
+                    #endregion
+
+                    var result = new T();
+                    result.ReadBytes(byteArray);
+                    items.Add(result);
+                }
+                return items;
             }
         }
 
