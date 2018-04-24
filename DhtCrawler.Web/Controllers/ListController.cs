@@ -73,7 +73,7 @@ namespace DhtCrawler.Web.Controllers
         public async Task<IActionResult> Detail(string hash)
         {
             var item = await _infoHashRepository.GetInfoHashDetailAsync(hash.ToUpper());
-            if (item == null)
+            if (item == null || item.IsDanger)
             {
                 return Redirect("/");
             }
