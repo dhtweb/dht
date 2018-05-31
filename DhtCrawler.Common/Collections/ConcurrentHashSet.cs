@@ -127,7 +127,7 @@ namespace DhtCrawler.Common.Collections
         private bool DoInvoke(T item, Func<ReaderWriterLockSlim, HashSet<T>, T, bool> excutor)
         {
             var hashCode = item.GetHashCode();
-            var index = hashCode % rwLockSlims.Length;
+            var index = Math.Abs(hashCode % rwLockSlims.Length);
             var rwLockSlim = rwLockSlims[index];
             var hashSet = hashSets[index];
             return excutor(rwLockSlim, hashSet, item);
