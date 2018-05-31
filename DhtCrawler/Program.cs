@@ -90,10 +90,8 @@ namespace DhtCrawler
             {
                 return;
             }
-            Task downTask = null;
-            downTask = Task.Factory.StartNew(t =>
+            Task downTask = Task.Factory.StartNew(() =>
             {
-                var currentTask = t == null ? downTask : (Task)t;
                 while (running)
                 {
                     try
@@ -124,18 +122,11 @@ namespace DhtCrawler
                         {
                             if (!DownLoadQueue.TryTake(out info, DownTimeOutSeconds))
                             {
-                                lock (DownTaskList.SyncRoot)
+                                if (DownTaskList.Count > MinDownTaskNum)
                                 {
-                                    if (DownTaskList.Count > MinDownTaskNum)
-                                    {
-                                        DownTaskList.Remove(currentTask);
-                                        return;
-                                    }
-                                    else
-                                    {
-                                        continue;
-                                    }
+                                    return;
                                 }
+                                continue;
                             }
                         }
                         if (DownlaodedSet.Contains(info.Value))
@@ -212,7 +203,8 @@ namespace DhtCrawler
                         log.Error("并行下载时错误", ex);
                     }
                 }
-            }, downTask, TaskCreationOptions.LongRunning);
+            }, TaskCreationOptions.LongRunning);
+            downTask.ContinueWith(t => DownTaskList.Remove(t));
             DownTaskList.Add(downTask);
         }
 

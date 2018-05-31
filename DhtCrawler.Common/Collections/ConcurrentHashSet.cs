@@ -9,27 +9,57 @@ namespace DhtCrawler.Common.Collections
 {
     public class ConcurrentHashSet<T> : ISet<T>
     {
-        private readonly ReaderWriterLockSlim rwLockSlim;
-        private readonly HashSet<T> hashSet;
-        public ConcurrentHashSet()
+        public enum ConcurrentLevel
         {
-            rwLockSlim = new ReaderWriterLockSlim();
-            hashSet = new HashSet<T>();
+            Default = 4
         }
 
-        public ConcurrentHashSet(Func<T, T, bool> compare, Func<T, int> hash)
+        private readonly ReaderWriterLockSlim[] rwLockSlims;
+        private readonly HashSet<T>[] hashSets;
+        private volatile int count;
+
+
+        public ConcurrentHashSet() : this(ConcurrentLevel.Default)
         {
-            rwLockSlim = new ReaderWriterLockSlim();
-            hashSet = new HashSet<T>(new WrapperEqualityComparer<T>(compare, hash));
+
+        }
+
+        public ConcurrentHashSet(ConcurrentLevel concurrentLevel) : this(concurrentLevel, null, null)
+        {
+
+        }
+
+        public ConcurrentHashSet(ConcurrentLevel concurrentLevel, Func<T, T, bool> compare, Func<T, int> hash)
+        {
+            var level = (int)concurrentLevel;
+            rwLockSlims = new ReaderWriterLockSlim[level];
+            hashSets = new HashSet<T>[level];
+            for (byte i = 0; i < level; i++)
+            {
+                rwLockSlims[i] = new ReaderWriterLockSlim();
+                if (compare != null && hash != null)
+                {
+                    hashSets[i] = new HashSet<T>(new WrapperEqualityComparer<T>(compare, hash));
+                }
+                else
+                {
+                    hashSets[i] = new HashSet<T>();
+                }
+            }
         }
 
         public IEnumerator<T> GetEnumerator()
         {
-            using (rwLockSlim.EnterRead())
+            for (int i = 0; i < hashSets.Length; i++)
             {
-                foreach (var item in hashSet)
+                var rwLockSlim = rwLockSlims[i];
+                var hashSet = hashSets[i];
+                using (rwLockSlim.EnterRead())
                 {
-                    yield return item;
+                    foreach (var item in hashSet)
+                    {
+                        yield return item;
+                    }
                 }
             }
         }
@@ -94,52 +124,94 @@ namespace DhtCrawler.Common.Collections
             throw new NotImplementedException();
         }
 
+        private bool DoInvoke(T item, Func<ReaderWriterLockSlim, HashSet<T>, T, bool> excutor)
+        {
+            var hashCode = item.GetHashCode();
+            var index = Math.Abs(hashCode % rwLockSlims.Length);
+            var rwLockSlim = rwLockSlims[index];
+            var hashSet = hashSets[index];
+            return excutor(rwLockSlim, hashSet, item);
+        }
+
         public bool Add(T item)
         {
-            using (rwLockSlim.EnterWrite())
+            return DoInvoke(item, (rwLockSlim, hashSet, it) =>
             {
-                return hashSet.Add(item);
-            }
+                var flag = false;
+                using (rwLockSlim.EnterWrite())
+                {
+                    flag = hashSet.Add(it);
+                }
+                if (flag)
+                {
+                    Interlocked.Increment(ref count);
+                }
+                return flag;
+            });
         }
 
         public void Clear()
         {
-            using (rwLockSlim.EnterWrite())
-                hashSet.Clear();
+            for (int i = 0; i < hashSets.Length; i++)
+            {
+                var rwLockSlim = rwLockSlims[i];
+                var hashSet = hashSets[i];
+                using (rwLockSlim.EnterWrite())
+                {
+                    var size = hashSet.Count;
+                    hashSet.Clear();
+                    while (size > 0)
+                    {
+                        var pre = count;
+                        if (Interlocked.CompareExchange(ref count, pre - size, pre) == pre)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+            }
         }
 
         public bool Contains(T item)
         {
-            using (rwLockSlim.EnterRead())
+            return DoInvoke(item, (rwLockSlim, hashSet, it) =>
             {
-                return hashSet.Contains(item);
-            }
+                using (rwLockSlim.EnterRead())
+                {
+                    return hashSet.Contains(it);
+                }
+            });
+
         }
 
         public void CopyTo(T[] array, int arrayIndex)
         {
-            using (rwLockSlim.EnterRead())
-            {
-                hashSet.CopyTo(array, arrayIndex);
-            }
+            throw new NotImplementedException();
         }
 
         public bool Remove(T item)
         {
-            using (rwLockSlim.EnterWrite())
+            return DoInvoke(item, (rwLockSlim, hashSet, it) =>
             {
-                return hashSet.Remove(item);
-            }
+                var flag = false;
+                using (rwLockSlim.EnterWrite())
+                {
+                    flag = hashSet.Remove(it);
+                }
+                if (flag)
+                {
+                    Interlocked.Increment(ref count);
+                }
+                return flag;
+            });
         }
 
         public int Count
         {
             get
             {
-                using (rwLockSlim.EnterRead())
-                {
-                    return hashSet.Count;
-                }
+                return count;
             }
         }
 
