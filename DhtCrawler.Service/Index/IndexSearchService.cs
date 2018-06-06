@@ -48,7 +48,6 @@ namespace DhtCrawler.Service.Index
             doc.AddInt32Field("FileNum", item.FileNum, Field.Store.YES);
             doc.AddInt64Field("FileSize", item.FileSize, Field.Store.YES);
             doc.AddInt64Field("CreateTime", item.CreateTime.Ticks, Field.Store.YES);
-            doc.AddInt32Field("IsDanger", item.IsDanger ? 1 : 0, Field.Store.NO);
             if (item.Files != null && item.Files.Count > 0)
             {
                 var names = new HashSet<string>();
@@ -172,9 +171,15 @@ namespace DhtCrawler.Service.Index
             });
         }
 
-        public void IncrementBuild(DateTime? start)
+        public override void UpdateIndex(ICollection<InfoHashModel> models)
         {
-            var list = _infoHashRepository.GetAllFullInfoHashModels(start);
+            base.UpdateIndex(models);
+            _infoHashRepository.RemoveSyncInfo(models.Select(m => m.Id).ToArray());
+        }
+
+        public void IncrementBuild()
+        {
+            var list = _infoHashRepository.GetSyncFullInfoHashModels();
             var batch = new List<InfoHashModel>(1000);
             var size = 0;
             foreach (var item in list)

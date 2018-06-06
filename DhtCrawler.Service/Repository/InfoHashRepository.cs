@@ -461,7 +461,7 @@ namespace DhtCrawler.Service.Repository
                     catch (Exception ex)
                     {
                         log.Error(ex);
-                        throw ex;
+                        throw;
                     }
                     foreach (var model in hashs)
                     {
@@ -483,10 +483,63 @@ namespace DhtCrawler.Service.Repository
             }
         }
 
+
+        public IEnumerable<InfoHashModel> GetSyncFullInfoHashModels()
+        {
+            long hashId = 0;
+            var size = 500;
+            const string sql = "SELECT infohash_id FROM t_sync_infohash WHERE infohash_id>@hashId ORDER BY infohash_id LIMIT @size";
+            const string infoSql = "SELECT id, infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, hasfile, isdanger FROM t_infohash WHERE isdown=TRUE AND id = @hashId";
+            const string fileSql = "SELECT files FROM t_infohash_file WHERE info_hash_id = @hashId; ";
+            using (var connection = this.Factory.CreateConnection())
+            {
+                do
+                {
+                    var length = 0;
+                    IEnumerable<long> hashIds;
+                    try
+                    {
+                        hashIds = connection.Query<long>(sql, new { hashId, size });
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Error(ex);
+                        throw;
+                    }
+                    foreach (var id in hashIds)
+                    {
+                        length++;
+                        hashId = id;
+                        var param = new { hashId };
+                        var model = connection.QuerySingleOrDefault<InfoHashModel>(infoSql, param);
+                        if (model == null)
+                        {
+                            continue;
+                        }
+                        if (model.HasFile)
+                        {
+                            model.Files = connection.QueryFirstOrDefault<IList<TorrentFileModel>>(fileSql, param);
+                            if (model.Files.IsEmpty())
+                            {
+                                log.InfoFormat("种子信息有误，对应文件内容不存在,hash:{0}", model.InfoHash);
+                            }
+                        }
+                        yield return model;
+                    }
+                    if (length < size)
+                        yield break;
+                } while (true);
+            }
+        }
+
         public async Task<DateTime> GetLastInfoHashDownTimeAsync()
         {
             return await Connection.ExecuteScalarAsync<DateTime>("SELECT max(createtime) FROM t_infohash WHERE isdown=TRUE");
         }
 
+        public void RemoveSyncInfo(ICollection<long> hashIds)
+        {
+            Connection.Execute($"DELETE FROM t_sync_infohash WHERE infohash_id IN ({string.Join(",", hashIds)})");
+        }
     }
 }

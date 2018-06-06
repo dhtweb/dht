@@ -28,12 +28,6 @@ namespace DhtCrawler.Web.Controllers
         {
             await _statisticsInfoRepository.GetInfoById("LastIndexTime").ContinueWith(t =>
             {
-                var lastIndexTime = DateTime.Now.AddHours(-1);
-                DateTime? updateTime = null;
-                if (t.Result != null)
-                {
-                    updateTime = t.Result.UpdateTime;
-                }
                 Task.Factory.StartNew(() =>
                 {
                     try
@@ -43,12 +37,8 @@ namespace DhtCrawler.Web.Controllers
                             return;
                         }
                         log.Info("开始构建索引");
-                        _indexSearchService.IncrementBuild(updateTime);
+                        _indexSearchService.IncrementBuild();
                         log.Info("构建索引完成");
-                        using (var repository = (StatisticsInfoRepository)_serviceProvider.GetService(typeof(StatisticsInfoRepository)))
-                        {
-                            repository.InsertOrUpdate(new StatisticsInfoModel() { UpdateTime = lastIndexTime, DataKey = "LastIndexTime" });
-                        }
                     }
                     catch (Exception ex)
                     {

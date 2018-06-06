@@ -574,8 +574,16 @@ namespace DhtCrawler
                                                         await insertFile.ExecuteNonQueryAsync();
                                                     }
                                                 }
+                                                using (var insertSync = con.CreateCommand())
+                                                {
+                                                    insertSync.CommandText = "INSERT INTO t_sync_infohash (infohash_id) VALUES (@hashId) ON CONFLICT DO NOTHING ;";
+                                                    insertSync.Transaction = transaction;
+                                                    insertSync.Parameters.Add(new NpgsqlParameter("hashId", hashId));
+                                                    await insertSync.ExecuteNonQueryAsync();
+                                                }
                                             }
                                             await transaction.CommitAsync();
+                                            File.Delete(file);
                                         }
                                         catch (Exception ex)
                                         {
@@ -583,7 +591,6 @@ namespace DhtCrawler
                                             log.Error("添加种子信息到数据库失败", ex);
                                         }
                                     }
-                                    File.Delete(file);
                                     watchLog.InfoFormat("文件{0}写入数据库成功", file);
                                 }
                                 catch (Exception ex)
@@ -613,7 +620,7 @@ namespace DhtCrawler
                     await con.OpenAsync();
                     using (var cmd = con.CreateCommand())
                     {
-                        cmd.CommandText = "UPDATE t_statistics_info SET num = (SELECT count(id) FROM t_infohash WHERE isdown=TRUE) WHERE datakey='TorrentNum';";
+                        cmd.CommandText = "UPDATE t_statistics_info SET num = (SELECT count(id) FROM t_infohash WHERE isdown=TRUE),updatetime = current_timestamp WHERE datakey='TorrentNum';";
                         await cmd.ExecuteNonQueryAsync();
                     }
                 }
@@ -674,11 +681,18 @@ namespace DhtCrawler
                                 {
                                     try
                                     {
-                                        insertHash.CommandText = "UPDATE t_infohash SET downnum = downnum+@downnum,updatetime=@now WHERE infohash=@hash;";
+                                        insertHash.CommandText = "UPDATE t_infohash SET downnum = downnum+@downnum,updatetime=@now WHERE infohash=@hash RETURNING id;";
                                         insertHash.Parameters.Add(new NpgsqlParameter("hash", kv.Key));
                                         insertHash.Parameters.Add(new NpgsqlParameter("downnum", kv.Value));
                                         insertHash.Parameters.Add(new NpgsqlParameter("now", DateTime.Now));
-                                        await insertHash.ExecuteScalarAsync();
+                                        var hashId = Convert.ToInt64(await insertHash.ExecuteScalarAsync());
+                                        if (hashId > 0)
+                                        {
+                                            insertHash.Parameters.Clear();
+                                            insertHash.CommandText = "INSERT INTO t_sync_infohash (infohash_id) VALUES (@hashId) ON CONFLICT DO NOTHING ;";
+                                            insertHash.Parameters.Add(new NpgsqlParameter("hashId", hashId));
+                                            await insertHash.ExecuteNonQueryAsync();
+                                        }
                                         insertHash.Parameters.Clear();
                                     }
                                     catch (Exception ex)

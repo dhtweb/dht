@@ -1,3 +1,7 @@
-﻿User-agent: *
+﻿User-agent: Teoma
+Disallow: /
+User-agent: YandexBot
+Disallow: /
+User-agent: *
 Disallow: 
 Sitemap: http://www.btcloudword.com/sitemap

@@ -383,7 +383,7 @@ namespace DhtCrawler.Common.Index
         /// 批量更新索引
         /// </summary>
         /// <param name="models"></param>
-        public void UpdateIndex(IEnumerable<T> models)
+        public virtual void UpdateIndex(ICollection<T> models)
         {
             lock (_writer)
             {
