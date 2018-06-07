@@ -106,7 +106,6 @@ namespace DhtCrawler.Web.Controllers
                         continue;
                     }
                     model.CreateTime = System.IO.File.GetLastWriteTime(file);
-                    model.IsDown = true;
                     if (model.Files != null && model.Files.Any(f => f.Name.IndexOf('/') > -1))
                     {
                         var metaFiles = model.Files;

@@ -12,7 +12,6 @@ namespace DhtCrawler.Service.Model
         public long? FileSize { get; set; }
         public int? DownNum { get; set; }
         public IList<TorrentFileModel> Files { get; set; }
-        public bool? IsDown { get; set; }
         public bool? IsDanger { get; set; }
         public DateTime? CreateTime { get; set; }
         public DateTime? UpdateTime { get; set; }

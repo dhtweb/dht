@@ -40,11 +40,6 @@ namespace DhtCrawler.Service.Repository
             {
                 list.Add(new NpgsqlParameter("createtime", model.CreateTime));
             }
-            if (model.IsDown)
-            {
-                list.Add(new NpgsqlParameter("isdown", model.IsDown));
-                updateSql.Append("isdown = @isdown,");
-            }
             if (model.IsDanger)
             {
                 list.Add(new NpgsqlParameter("isdanger", model.IsDanger));
@@ -169,7 +164,7 @@ namespace DhtCrawler.Service.Repository
                     }
                 }
                 var hashFileMap = new Dictionary<string, InfoHashModel>();
-                var batchSql = "INSERT INTO t_infohash (infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, isdanger, hasfile) VALUES {0} RETURNING infohash,id;";
+                var batchSql = "INSERT INTO t_infohash (infohash, name, filenum, filesize, downnum, createtime, updatetime, isdanger, hasfile) VALUES {0} RETURNING infohash,id;";
                 var updateItemsSql = new StringBuilder();
                 var parameterList = new List<DbParameter>();
                 for (int i = 0, j = models.Count - 1; i < models.Count; i++)
@@ -179,13 +174,12 @@ namespace DhtCrawler.Service.Repository
                     {
                         hashFileMap[item.InfoHash] = item;
                     }
-                    updateItemsSql.AppendFormat("(@hash{0}, @name{0}, @filenum{0}, @filesize{0}, @downnum{0}, @isdown{0}, @createtime{0}, @updatetime{0}, @isdanger{0}, @hasfile{0})", i.ToString());
+                    updateItemsSql.AppendFormat("(@hash{0}, @name{0}, @filenum{0}, @filesize{0}, @downnum{0}, @createtime{0}, @updatetime{0}, @isdanger{0}, @hasfile{0})", i.ToString());
                     parameterList.Add(new NpgsqlParameter($"hash{i}", item.InfoHash));
                     parameterList.Add(new NpgsqlParameter($"name{i}", item.Name ?? ""));
                     parameterList.Add(new NpgsqlParameter($"filenum{i}", item.FileNum));
                     parameterList.Add(new NpgsqlParameter($"filesize{i}", item.FileSize));
                     parameterList.Add(new NpgsqlParameter($"downnum{i}", item.DownNum));
-                    parameterList.Add(new NpgsqlParameter($"isdown{i}", item.IsDown));
                     parameterList.Add(new NpgsqlParameter($"createtime{i}", item.CreateTime == default(DateTime) ? DateTime.Now : item.CreateTime));
                     parameterList.Add(new NpgsqlParameter($"updatetime{i}", item.UpdateTime == default(DateTime) ? DateTime.Now : item.UpdateTime));
                     parameterList.Add(new NpgsqlParameter($"isdanger{i}", item.IsDanger));
@@ -255,11 +249,6 @@ namespace DhtCrawler.Service.Repository
                     if (model.CreateTime != default(DateTime))
                     {
                         list.Add(new NpgsqlParameter("createtime", model.CreateTime));
-                    }
-                    if (model.IsDown)
-                    {
-                        list.Add(new NpgsqlParameter("isdown", model.IsDown));
-                        updateSql.Append("isdown = @isdown,");
                     }
                     if (model.IsDanger)
                     {
@@ -373,23 +362,23 @@ namespace DhtCrawler.Service.Repository
         }
         public async Task<uint> GetTorrentNumAsync()
         {
-            return await Connection.ExecuteScalarAsync<uint>("select count(id) from t_infohash where isdown=@flag ", new { flag = true });
+            return await Connection.ExecuteScalarAsync<uint>("select count(id) from t_infohash;");
         }
 
         public async Task<bool> ExistsByHashAsync(string infohash)
         {
-            return await Connection.ExecuteScalarAsync<int>("select 1 from t_infohash where infohash=@hash", new { hash = infohash }) > 0;
+            return await Connection.ExecuteScalarAsync<int>("select 1 from t_infohash where infohash=@hash;", new { hash = infohash }) > 0;
         }
 
         public async Task<bool> HasDownInfoHash(string infohash)
         {
-            return await Connection.ExecuteScalarAsync<int>("select count(id) from t_infohash where isdown=True AND infohash=@hash", new { hash = infohash }) > 0;
+            return await Connection.ExecuteScalarAsync<int>("select count(id) from t_infohash where infohash=@hash;", new { hash = infohash }) > 0;
         }
 
         public async Task<IList<string>> GetDownloadInfoHashAsync()
         {
             var result = new List<string>();
-            var reader = await Connection.ExecuteReaderAsync("select infohash from t_infohash where isdown=@flag ", new { flag = true });
+            var reader = await Connection.ExecuteReaderAsync("select infohash from t_infohash;");
             while (reader.Read())
             {
                 result.Add(reader.GetString(0));
@@ -414,14 +403,15 @@ namespace DhtCrawler.Service.Repository
             }
             if (where.Length > 0)
             {
-                var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash WHERE isdown = TRUE {0};SELECT infohash,name,filenum,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} {1} OFFSET @start LIMIT @size;", where.ToString(), desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
+                var result = await Connection.QueryMultipleAsync(string.Format("SELECT count(id) FROM t_infohash {0};SELECT infohash,name,filenum,filesize,downnum,createtime FROM t_infohash {0} {1} OFFSET @start LIMIT @size;", where.Length > 0 ? "WHERE " + where.ToString().Substring(3) : string.Empty, desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
                 var count = await result.ReadFirstAsync<long>();
                 var list = (await result.ReadAsync<InfoHashModel>()).ToArray();
                 return (list, count);
             }
             else
             {
-                var result = await Connection.QueryMultipleAsync(string.Format("SELECT infohash,name,filenum,filesize,downnum,createtime FROM t_infohash WHERE isdown=TRUE {0} OFFSET @start LIMIT @size;", desc ? " order by createtime desc" : " order by createtime"), new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
+                var result = await Connection.QueryMultipleAsync(
+                    $"SELECT infohash,name,filenum,filesize,downnum,createtime FROM t_infohash {(desc ? " order by createtime desc" : " order by createtime")} OFFSET @start LIMIT @size;", new { start = (index - 1) * size, size = size, startTime = start, endTime = end, danger = isDanger });
                 var list = (await result.ReadAsync<InfoHashModel>()).ToArray();
                 return (list, int.MaxValue);
             }
@@ -429,7 +419,7 @@ namespace DhtCrawler.Service.Repository
 
         public async Task<InfoHashModel> GetInfoHashDetailAsync(string hash)
         {
-            var item = await Connection.QueryFirstOrDefaultAsync<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown = TRUE AND infohash=@hash", new { hash });
+            var item = await Connection.QueryFirstOrDefaultAsync<InfoHashModel>("SELECT * FROM t_infohash WHERE infohash=@hash", new { hash });
             if (item != null && item.HasFile)
             {
                 item.Files = await Connection.QueryFirstOrDefaultAsync<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = item.Id });
@@ -441,7 +431,7 @@ namespace DhtCrawler.Service.Repository
         {
             var id = 0L;
             var size = 500;
-            var sql = new StringBuilder("SELECT id, infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, hasfile, isdanger FROM t_infohash WHERE isdown=TRUE AND id > @id");
+            var sql = new StringBuilder("SELECT id, infohash, name, filenum, filesize, downnum, createtime, updatetime, hasfile, isdanger FROM t_infohash WHERE id > @id");
             if (start.HasValue)
             {
                 sql.Append(" AND updatetime>@start");
@@ -489,7 +479,7 @@ namespace DhtCrawler.Service.Repository
             long hashId = 0;
             var size = 500;
             const string sql = "SELECT infohash_id FROM t_sync_infohash WHERE infohash_id>@hashId ORDER BY infohash_id LIMIT @size";
-            const string infoSql = "SELECT id, infohash, name, filenum, filesize, downnum, isdown, createtime, updatetime, hasfile, isdanger FROM t_infohash WHERE isdown=TRUE AND id = @hashId";
+            const string infoSql = "SELECT id, infohash, name, filenum, filesize, downnum, createtime, updatetime, hasfile, isdanger FROM t_infohash WHERE id = @hashId";
             const string fileSql = "SELECT files FROM t_infohash_file WHERE info_hash_id = @hashId; ";
             using (var connection = this.Factory.CreateConnection())
             {
@@ -534,7 +524,7 @@ namespace DhtCrawler.Service.Repository
 
         public async Task<DateTime> GetLastInfoHashDownTimeAsync()
         {
-            return await Connection.ExecuteScalarAsync<DateTime>("SELECT max(createtime) FROM t_infohash WHERE isdown=TRUE");
+            return await Connection.ExecuteScalarAsync<DateTime>("SELECT max(createtime) FROM t_infohash");
         }
 
         public void RemoveSyncInfo(ICollection<long> hashIds)

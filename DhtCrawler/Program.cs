@@ -4,7 +4,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
@@ -29,12 +28,6 @@ namespace DhtCrawler
 {
     class Program
     {
-        private class DownInfoHash
-        {
-            public string Value { get; set; }
-            public byte[] Bytes { get; set; }
-            public IPEndPoint Peer { get; set; }
-        }
         private static ConcurrentQueue<string> InfoHashQueue;
         private static BlockingCollection<InfoHash> DownLoadQueue;
         private static ConcurrentHashSet<string> DownlaodedSet;
@@ -553,7 +546,7 @@ namespace DhtCrawler
                                         {
                                             using (var insertHash = con.CreateCommand())
                                             {
-                                                insertHash.CommandText = "INSERT INTO t_infohash AS ti (infohash, name, filenum, filesize, downnum, isdown, createtime,updatetime, hasfile) VALUES (@hash, @name, @filenum, @filesize, 1, TRUE, @createtime,@now,  @hasfile) ON CONFLICT  (infohash) DO UPDATE SET name=@name,filenum=@filenum,filesize=@filesize,isdown=TRUE,createtime=@createtime,updatetime=@now,hasfile=@hasfile RETURNING id;";
+                                                insertHash.CommandText = "INSERT INTO t_infohash AS ti (infohash, name, filenum, filesize, downnum, createtime,updatetime, hasfile) VALUES (@hash, @name, @filenum, @filesize, 1, @createtime,@now,  @hasfile) ON CONFLICT  (infohash) DO UPDATE SET name=@name,filenum=@filenum,filesize=@filesize,createtime=@createtime,updatetime=@now,hasfile=@hasfile RETURNING id;";
                                                 insertHash.Transaction = transaction;
                                                 insertHash.Parameters.Add(new NpgsqlParameter("hash", item.InfoHash));
                                                 insertHash.Parameters.Add(new NpgsqlParameter("name", item.Name ?? ""));
@@ -584,6 +577,7 @@ namespace DhtCrawler
                                             }
                                             await transaction.CommitAsync();
                                             File.Delete(file);
+                                            watchLog.InfoFormat("文件{0}写入数据库成功", file);
                                         }
                                         catch (Exception ex)
                                         {
@@ -591,7 +585,6 @@ namespace DhtCrawler
                                             log.Error("添加种子信息到数据库失败", ex);
                                         }
                                     }
-                                    watchLog.InfoFormat("文件{0}写入数据库成功", file);
                                 }
                                 catch (Exception ex)
                                 {
@@ -606,28 +599,7 @@ namespace DhtCrawler
                         log.Error("打开数据库失败", ex);
                     }
                 }
-                await Task.WhenAll(UpdateDownNum(), SyncDownNumToDatabase(), Task.Delay(TimeSpan.FromHours(1)));
-            }
-        }
-
-        private static async Task UpdateDownNum()
-        {
-            try
-            {
-                var conStr = ConfigurationManager.Default.GetString("conStr");
-                using (var con = new NpgsqlConnection(conStr))
-                {
-                    await con.OpenAsync();
-                    using (var cmd = con.CreateCommand())
-                    {
-                        cmd.CommandText = "UPDATE t_statistics_info SET num = (SELECT count(id) FROM t_infohash WHERE isdown=TRUE),updatetime = current_timestamp WHERE datakey='TorrentNum';";
-                        await cmd.ExecuteNonQueryAsync();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                log.Error("更新下载数失败", ex);
+                await Task.WhenAll(SyncDownNumToDatabase(), Task.Delay(TimeSpan.FromHours(1)));
             }
         }
 

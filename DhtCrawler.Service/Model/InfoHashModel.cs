@@ -68,7 +68,6 @@ namespace DhtCrawler.Service.Model
         public IList<TorrentFileModel> Files { get; set; }
         public IList<string> ShowFiles { get; set; }
         public bool HasFile { get; set; }
-        public bool IsDown { get; set; }
         public bool IsDanger { get; set; }
         [JsonIgnore]
         public ISet<string> KeyWords { get; set; }

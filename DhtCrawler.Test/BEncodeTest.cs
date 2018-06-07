@@ -103,7 +103,7 @@ namespace DhtCrawler.Test
             const string conStr = "Host=127.0.0.1;Username=zk;Database=dht;Port=5432";
             var connection = new NpgsqlConnection(conStr);
             var update = new NpgsqlConnection(conStr);
-            var list = connection.Query<InfoHashModel>("SELECT * FROM t_infohash WHERE isdown=TRUE AND filenum=1 AND files NOTNULL", (object)null, null, false);
+            var list = connection.Query<InfoHashModel>("SELECT * FROM t_infohash WHERE filenum=1 AND files NOTNULL", (object)null, null, false);
             foreach (var item in list)
             {
                 update.Execute("UPDATE t_infohash SET filenum = @num WHERE infohash = @hash", new { num = item.FileNum, hash = item.InfoHash });
