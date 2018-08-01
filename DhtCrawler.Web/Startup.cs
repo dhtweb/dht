@@ -51,7 +51,8 @@ namespace DhtCrawler.Web
             {
                 var infoHashRepo = provider.GetService<InfoHashRepository>();
                 var filterWords = Configuration["filterWords"].ToObjectFromJson<string[]>();
-                return new IndexSearchService(Configuration["index.dir"], new KeyWordFilter(filterWords), infoHashRepo);
+                var rankWords = File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "Resources", "rankwords.txt"));
+                return new IndexSearchService(Configuration["index.dir"], new KeyWordFilter(filterWords), new KeyWordFilter(rankWords), infoHashRepo);
             });
             services.Configure<WebEncoderOptions>(options =>
             {

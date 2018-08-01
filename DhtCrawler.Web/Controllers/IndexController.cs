@@ -14,45 +14,52 @@ namespace DhtCrawler.Web.Controllers
         private static readonly ILog log = LogManager.GetLogger(typeof(IndexController));
         private static readonly object IndexLocker = new object();
         private readonly IndexSearchService _indexSearchService;
+        private readonly InfoHashRepository _infoHashRepository;
         private readonly StatisticsInfoRepository _statisticsInfoRepository;
-        private readonly IServiceProvider _serviceProvider;
 
-        public IndexController(IndexSearchService indexSearchService, StatisticsInfoRepository statisticsInfoRepository, IServiceProvider serviceProvider)
+        public IndexController(IndexSearchService indexSearchService, InfoHashRepository infoHashRepository, StatisticsInfoRepository statisticsInfoRepository)
         {
             _indexSearchService = indexSearchService;
+            _infoHashRepository = infoHashRepository;
             _statisticsInfoRepository = statisticsInfoRepository;
-            _serviceProvider = serviceProvider;
         }
 
-        public async Task<IActionResult> IncrementBuild()
+        public IActionResult IncrementBuild()
         {
-            await _statisticsInfoRepository.GetInfoById("LastIndexTime").ContinueWith(t =>
+            Task.Factory.StartNew(() =>
             {
-                Task.Factory.StartNew(() =>
+                try
                 {
-                    try
+                    if (!Monitor.TryEnter(IndexLocker))
                     {
-                        if (!Monitor.TryEnter(IndexLocker))
+                        return;
+                    }
+                    log.Info("开始构建索引");
+                    _indexSearchService.IncrementBuild();
+                    log.Info("构建索引完成");
+                    _infoHashRepository.GetTorrentNumAsync().ContinueWith(t =>
+                    {
+                        if (t.IsFaulted)
                         {
+                            log.Error("获取已下载种子数失败", t.Exception);
                             return;
                         }
-                        log.Info("开始构建索引");
-                        _indexSearchService.IncrementBuild();
-                        log.Info("构建索引完成");
-                    }
-                    catch (Exception ex)
+                        _statisticsInfoRepository.InsertOrUpdate(new StatisticsInfoModel() { DataKey = "TorrentNum", Num = t.Result, UpdateTime = DateTime.Now });
+                    });
+
+                }
+                catch (Exception ex)
+                {
+                    log.Error("索引构建出错", ex);
+                }
+                finally
+                {
+                    if (Monitor.IsEntered(IndexLocker))
                     {
-                        log.Error("索引构建出错", ex);
+                        Monitor.Exit(IndexLocker);
                     }
-                    finally
-                    {
-                        if (Monitor.IsEntered(IndexLocker))
-                        {
-                            Monitor.Exit(IndexLocker);
-                        }
-                    }
-                }, TaskCreationOptions.LongRunning);
-            });
+                }
+            }, TaskCreationOptions.LongRunning);
             return new EmptyResult();
         }
 

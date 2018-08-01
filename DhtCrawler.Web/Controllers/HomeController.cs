@@ -47,7 +47,7 @@ namespace DhtCrawler.Web.Controllers
                            return new HomeWord()
                            {
                                TypeName = item.Type,
-                               Words = kv.Select(w => w.Word).ToArray()
+                               Words = kv.OrderByDescending(m => m.Index).Select(w => w.Word).ToArray()
                            };
                        }).ToArray();
                    }

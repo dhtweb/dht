@@ -19,13 +19,15 @@ namespace DhtCrawler.Service.Index
     {
         private readonly InfoHashRepository _infoHashRepository;
         private readonly IFilter<string> _wordFilter;
+        private readonly IFilter<string> _rankWords;
         private readonly Sort _defaultSort;
         private readonly Sort _timeSort;
         private readonly Sort _hotSort;
-        public IndexSearchService(string indexDir, IFilter<string> wordFilter, InfoHashRepository infoHashRepository) : base(indexDir)
+        public IndexSearchService(string indexDir, IFilter<string> wordFilter, IFilter<string> rankWords, InfoHashRepository infoHashRepository) : base(indexDir)
         {
             _infoHashRepository = infoHashRepository;
             _wordFilter = wordFilter;
+            _rankWords = rankWords;
             _defaultSort = new Sort(SortField.FIELD_SCORE, new SortField("CreateTime", SortFieldType.INT64, true));
             _timeSort = new Sort(new SortField("CreateTime", SortFieldType.INT64, true));
             _hotSort = new Sort(new SortField("DownNum", SortFieldType.INT32, true));
@@ -43,13 +45,18 @@ namespace DhtCrawler.Service.Index
             }
             var doc = new Document();
             doc.AddStringField("InfoHash", item.InfoHash, Field.Store.YES);
-            doc.AddTextField("Name", item.Name, Field.Store.YES);
+            var nameField = doc.AddTextField("Name", item.Name, Field.Store.YES);
+            if (_rankWords.Contain(item.Name))
+            {
+                nameField.Boost = 0.9F;
+            }
             doc.AddInt32Field("DownNum", item.DownNum, Field.Store.YES);
             doc.AddInt32Field("FileNum", item.FileNum, Field.Store.YES);
             doc.AddInt64Field("FileSize", item.FileSize, Field.Store.YES);
             doc.AddInt64Field("CreateTime", item.CreateTime.Ticks, Field.Store.YES);
             if (item.Files != null && item.Files.Count > 0)
             {
+                var flag = false;
                 var names = new HashSet<string>();
                 var queues = new Queue<TorrentFileModel>(item.Files);
                 while (queues.Count > 0)
@@ -71,9 +78,18 @@ namespace DhtCrawler.Service.Index
                             log.InfoFormat("高危内容，参数:{0}", item.InfoHash);
                             return null;
                         }
+
+                        if (!flag)
+                        {
+                            flag = _rankWords.Contain(file.Name);
+                        }
                     }
                 }
-                doc.AddTextField("Files", string.Join(",", names), Field.Store.YES);
+                var fileField = doc.AddTextField("Files", string.Join(",", names), Field.Store.YES);
+                if (flag)
+                {
+                    fileField.Boost = 0.8F;
+                }
             }
             return doc;
         }
