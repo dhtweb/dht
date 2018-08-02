@@ -80,10 +80,14 @@ namespace DhtCrawler.Common.Index
                      {
                          return writer;
                      }
+                     InfoStream.Default = new Log4NetInfoStream();
+                     var merge = new ConcurrentMergeScheduler();
+                     merge.SetMaxMergesAndThreads(6, 2);
                      return new IndexWriter(IndexDirectory,
                          new IndexWriterConfig(LuceneVersion.LUCENE_48, KeyWordAnalyzer)
                          {
-                             OpenMode = OpenMode.CREATE_OR_APPEND
+                             OpenMode = OpenMode.CREATE_OR_APPEND,
+                             MergeScheduler = merge
                          });
                  }
              });

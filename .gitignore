@@ -27,3 +27,4 @@ Properties/
 /dotnet1.psess
 *.psess
 *.stsdb
+/DhtCrawler/.vscode

@@ -37,7 +37,6 @@ namespace DhtCrawler.Service.Index
 
         protected override Document GetDocument(InfoHashModel item)
         {
-            log.InfoFormat("处理数据:{0}", item.Id.ToString());
             if (item.IsDanger || _wordFilter.Contain(item.Name))
             {
                 log.InfoFormat("高危内容，参数:{0}", item.InfoHash);
@@ -91,6 +90,7 @@ namespace DhtCrawler.Service.Index
                     fileField.Boost = 0.8F;
                 }
             }
+            log.InfoFormat("处理数据:{0}", item.Id.ToString());
             return doc;
         }
 
