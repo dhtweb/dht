@@ -66,7 +66,7 @@ namespace DhtCrawler.Common.Index
         }
         protected readonly ILog log;
         protected string IndexDir { get; }
-        protected virtual int BatchCommitNum => 10000;
+        protected virtual int BatchCommitNum => 2000;
         protected abstract Lucene.Net.Analysis.Analyzer KeyWordAnalyzer { get; }
         protected BaseSearchService(string indexDir)
         {

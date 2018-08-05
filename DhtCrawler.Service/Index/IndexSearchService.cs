@@ -45,10 +45,7 @@ namespace DhtCrawler.Service.Index
             var doc = new Document();
             doc.AddStringField("InfoHash", item.InfoHash, Field.Store.YES);
             var nameField = doc.AddTextField("Name", item.Name, Field.Store.YES);
-            if (_rankWords.Contain(item.Name))
-            {
-                nameField.Boost = 0.9F;
-            }
+            nameField.Boost = _rankWords.Contain(item.Name) ? 0.9F : 10F;
             doc.AddInt32Field("DownNum", item.DownNum, Field.Store.YES);
             doc.AddInt32Field("FileNum", item.FileNum, Field.Store.YES);
             doc.AddInt64Field("FileSize", item.FileSize, Field.Store.YES);
@@ -85,10 +82,7 @@ namespace DhtCrawler.Service.Index
                     }
                 }
                 var fileField = doc.AddTextField("Files", string.Join(",", names), Field.Store.YES);
-                if (flag)
-                {
-                    fileField.Boost = 0.8F;
-                }
+                fileField.Boost = flag ? 0.1F : 9F;
             }
             log.InfoFormat("处理数据:{0}", item.Id.ToString());
             return doc;
@@ -156,6 +150,10 @@ namespace DhtCrawler.Service.Index
                     if (searchKeys.Length == 0)
                     {
                         searchKeys = highWords;
+                    }
+                    else
+                    {
+                        highWords = searchKeys;
                     }
                     Term[] nameTerms = new Term[searchKeys.Length], fileTerms = new Term[searchKeys.Length];
                     for (var i = 0; i < searchKeys.Length; i++)

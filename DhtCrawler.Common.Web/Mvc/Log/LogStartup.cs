@@ -14,7 +14,7 @@ namespace DhtCrawler.Common.Web.Mvc.Log
             if (!File.Exists(configPath))
                 throw new ArgumentNullException("config file is not exists");
             var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
-            XmlConfigurator.Configure(logRepository, new FileInfo(configPath));
+            XmlConfigurator.ConfigureAndWatch(logRepository, new FileInfo(configPath));
             return app;
         }
     }

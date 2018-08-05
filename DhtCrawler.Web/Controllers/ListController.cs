@@ -47,7 +47,7 @@ namespace DhtCrawler.Web.Controllers
             var key = keyword.ToLower() + ":" + index + sort;
             var page = _cache.GetOrCreate(key, entry =>
              {
-                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(2);
+                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
                  var sortType = 1;
                  if (sort == "time")
                  {
