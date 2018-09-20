@@ -40,7 +40,7 @@ namespace DhtCrawler.Web.Controllers
                {
                    if (t.Result != null)
                    {
-                       entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(1);
+                       entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
                        return t.Result.GroupBy(it => it.Order).OrderBy(kv => kv.Key).Select(kv =>
                        {
                            var item = kv.First();
