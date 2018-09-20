@@ -1,9 +1,9 @@
-﻿using System;
+﻿using DhtCrawler.Common.Compare;
+using DhtCrawler.Common.Extension;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
-using DhtCrawler.Common.Compare;
-using DhtCrawler.Common.Extension;
 
 namespace DhtCrawler.Common.Collections
 {
@@ -16,7 +16,7 @@ namespace DhtCrawler.Common.Collections
 
         private readonly ReaderWriterLockSlim[] rwLockSlims;
         private readonly HashSet<T>[] hashSets;
-        private volatile int count;
+        private int count;
 
 
         public ConcurrentHashSet() : this(ConcurrentLevel.Default)
@@ -160,7 +160,11 @@ namespace DhtCrawler.Common.Collections
                 {
                     var size = hashSet.Count;
                     hashSet.Clear();
-                    while (size > 0)
+                    if (size == 0)
+                    {
+                        return;
+                    }
+                    while (true)
                     {
                         var pre = count;
                         if (Interlocked.CompareExchange(ref count, pre - size, pre) == pre)
@@ -207,13 +211,7 @@ namespace DhtCrawler.Common.Collections
             });
         }
 
-        public int Count
-        {
-            get
-            {
-                return count;
-            }
-        }
+        public int Count => count;
 
         public bool IsReadOnly => false;
     }

@@ -70,7 +70,7 @@ namespace DhtCrawler.Common.Collections.Queue
             return Dequeue(Timeout.Infinite);
         }
 
-        public Action Dequeue(long waitTime = 0)
+        public Action Dequeue(long waitTime)
         {
             bool hasLock = false, infiniteWait = Timeout.Infinite == waitTime;
             try

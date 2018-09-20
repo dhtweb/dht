@@ -1,4 +1,18 @@
-﻿using DhtCrawler.DHT;
+﻿using BitTorrent.Listeners;
+using BitTorrent.MonoTorrent.BEncoding;
+using DhtCrawler.BitTorrent;
+using DhtCrawler.Common;
+using DhtCrawler.Common.Collections;
+using DhtCrawler.Common.Filters;
+using DhtCrawler.Common.Utils;
+using DhtCrawler.Configuration;
+using DhtCrawler.DHT;
+using DhtCrawler.DHT.Message;
+using DhtCrawler.Store;
+using log4net;
+using log4net.Config;
+using Npgsql;
+using NpgsqlTypes;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,20 +23,6 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using BitTorrent.Listeners;
-using BitTorrent.MonoTorrent.BEncoding;
-using DhtCrawler.BitTorrent;
-using log4net;
-using log4net.Config;
-using DhtCrawler.Common;
-using DhtCrawler.Common.Collections;
-using DhtCrawler.Common.Filters;
-using DhtCrawler.Common.Utils;
-using DhtCrawler.Configuration;
-using DhtCrawler.DHT.Message;
-using DhtCrawler.Store;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace DhtCrawler
 {
@@ -57,7 +57,7 @@ namespace DhtCrawler
             RunSpider();
             RunDown();
             RunRecordInfoHash();
-            SyncToDatabase().Wait();
+            SyncToDatabase();
             WaitComplete();
         }
 
@@ -340,7 +340,6 @@ namespace DhtCrawler
                         IocContainer.RegisterType<IFilter<long>>(new EmptyFilter<long>());
                         break;
                 }
-                //IocContainer.RegisterType<AbstractMessageMap>(new LocalFileMap(Path.Combine("msg", "data.bat")));
                 IocContainer.RegisterType<AbstractMessageMap>(new MessageMap(15));
             }
             else
@@ -472,7 +471,7 @@ namespace DhtCrawler
             };
         }
 
-        private static async Task SyncToDatabase()
+        private static void SyncToDatabase()
         {
             watchLog.Info("同步种子到数据库启动");
             while (running)
@@ -496,7 +495,7 @@ namespace DhtCrawler
                     {
                         using (var con = new NpgsqlConnection(conStr))
                         {
-                            await con.OpenAsync();
+                            con.Open();
                             foreach (var file in files)
                             {
                                 if (!running)
@@ -505,7 +504,7 @@ namespace DhtCrawler
                                 }
                                 try
                                 {
-                                    var content = await File.ReadAllTextAsync(file);
+                                    var content = File.ReadAllText(file);
                                     if (content.IsBlank())
                                     {
                                         File.Delete(file);
@@ -538,7 +537,7 @@ namespace DhtCrawler
                                     }
                                     if (con.State != System.Data.ConnectionState.Open)
                                     {
-                                        await con.OpenAsync();
+                                        con.Open();
                                     }
                                     using (var transaction = con.BeginTransaction())
                                     {
@@ -555,7 +554,7 @@ namespace DhtCrawler
                                                 insertHash.Parameters.Add(new NpgsqlParameter("createtime", File.GetCreationTime(file)));
                                                 insertHash.Parameters.Add(new NpgsqlParameter("now", DateTime.Now));
                                                 insertHash.Parameters.Add(new NpgsqlParameter("hasfile", !item.Files.IsEmpty()));
-                                                var hashId = Convert.ToInt64(await insertHash.ExecuteScalarAsync());
+                                                var hashId = Convert.ToInt64(insertHash.ExecuteScalar());
                                                 if (!item.Files.IsEmpty())
                                                 {
                                                     using (var insertFile = con.CreateCommand())
@@ -564,7 +563,7 @@ namespace DhtCrawler
                                                         insertFile.Transaction = transaction;
                                                         insertFile.Parameters.Add(new NpgsqlParameter("hashId", hashId));
                                                         insertFile.Parameters.Add(new NpgsqlParameter("files", NpgsqlDbType.Jsonb) { Value = item.Files.ToJson() });
-                                                        await insertFile.ExecuteNonQueryAsync();
+                                                        insertFile.ExecuteNonQuery();
                                                     }
                                                 }
                                                 using (var insertSync = con.CreateCommand())
@@ -572,16 +571,16 @@ namespace DhtCrawler
                                                     insertSync.CommandText = "INSERT INTO t_sync_infohash (infohash_id) VALUES (@hashId) ON CONFLICT DO NOTHING ;";
                                                     insertSync.Transaction = transaction;
                                                     insertSync.Parameters.Add(new NpgsqlParameter("hashId", hashId));
-                                                    await insertSync.ExecuteNonQueryAsync();
+                                                    insertSync.ExecuteNonQuery();
                                                 }
                                             }
-                                            await transaction.CommitAsync();
+                                            transaction.Commit();
                                             File.Delete(file);
                                             watchLog.InfoFormat("文件{0}写入数据库成功", file);
                                         }
                                         catch (Exception ex)
                                         {
-                                            await transaction.RollbackAsync();
+                                            transaction.Rollback();
                                             log.Error("添加种子信息到数据库失败", ex);
                                         }
                                     }
@@ -599,11 +598,18 @@ namespace DhtCrawler
                         log.Error("打开数据库失败", ex);
                     }
                 }
-                await Task.WhenAll(SyncDownNumToDatabase(), Task.Delay(TimeSpan.FromHours(1)));
+
+                var start = DateTime.Now;
+                SyncDownNumToDatabase();
+                var spendTime = DateTime.Now - start;
+                if (spendTime.Minutes < 60)
+                {
+                    Thread.Sleep((60 - spendTime.Minutes) * 60 * 1000);
+                }
             }
         }
 
-        private static async Task SyncDownNumToDatabase()
+        private static void SyncDownNumToDatabase()
         {
             var files = Directory.GetFiles(InfoPath, "*.txt");
             var conStr = ConfigurationManager.Default.GetString("conStr");
@@ -612,7 +618,7 @@ namespace DhtCrawler
                 var info = new Dictionary<string, int>();
                 using (var con = new NpgsqlConnection(conStr))
                 {
-                    await con.OpenAsync();
+                    con.Open();
                     foreach (var file in files)
                     {
                         try
@@ -625,7 +631,7 @@ namespace DhtCrawler
                             {
                                 while (reader.Peek() > 0)
                                 {
-                                    var key = await reader.ReadLineAsync();
+                                    var key = reader.ReadLine();
                                     if (key.IsBlank())
                                     {
                                         continue;
@@ -657,13 +663,14 @@ namespace DhtCrawler
                                         insertHash.Parameters.Add(new NpgsqlParameter("hash", kv.Key));
                                         insertHash.Parameters.Add(new NpgsqlParameter("downnum", kv.Value));
                                         insertHash.Parameters.Add(new NpgsqlParameter("now", DateTime.Now));
-                                        var hashId = Convert.ToInt64(await insertHash.ExecuteScalarAsync());
+                                        var hashId = Convert.ToInt64(insertHash.ExecuteScalar());
                                         if (hashId > 0)
                                         {
                                             insertHash.Parameters.Clear();
                                             insertHash.CommandText = "INSERT INTO t_sync_infohash (infohash_id) VALUES (@hashId) ON CONFLICT DO NOTHING ;";
                                             insertHash.Parameters.Add(new NpgsqlParameter("hashId", hashId));
-                                            await insertHash.ExecuteNonQueryAsync();
+                                            insertHash.ExecuteNonQuery();
+                                            watchLog.InfoFormat("更新{0}数据到数据库成功", kv.Key);
                                         }
                                         insertHash.Parameters.Clear();
                                     }

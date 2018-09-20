@@ -1,18 +1,19 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Net;
-using System.Net.Sockets;
-using System.Threading.Tasks;
-using System.Linq;
-using System.Threading;
-using DhtCrawler.Common;
+﻿using DhtCrawler.Common;
+using DhtCrawler.Common.Collections;
 using DhtCrawler.Common.RateLimit;
 using DhtCrawler.Common.Utils;
 using DhtCrawler.DHT.Message;
 using DhtCrawler.Encode;
 using DhtCrawler.Encode.Exception;
 using log4net;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 
 
 namespace DhtCrawler.DHT
@@ -43,6 +44,8 @@ namespace DhtCrawler.DHT
 
         private readonly ILog _logger = LogManager.GetLogger(typeof(DhtClient));
 
+        private readonly ConcurrentHashSet<long> filterPeers = new ConcurrentHashSet<long>();
+
         private readonly UdpClient _client;
         private readonly IPEndPoint _endPoint;
         private readonly DhtNode _node;
@@ -55,6 +58,7 @@ namespace DhtCrawler.DHT
         private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _sendMessageQueue;
         private readonly BlockingCollection<Tuple<DhtMessage, DhtNode>> _replyMessageQueue;//
         private readonly CancellationTokenSource _cancellationTokenSource;
+
 
         private readonly IList<Task> _tasks;
         private readonly IRateLimit _sendRateLimit;
@@ -144,11 +148,18 @@ namespace DhtCrawler.DHT
             {
                 var remotePoint = _endPoint;
                 var data = client.EndReceive(asyncResult, ref remotePoint);
-                while (!_receveRateLimit.Require(data.Length, out var limitTime))
+                if (filterPeers.Count > 0 && filterPeers.Contains(remotePoint.ToInt64()))
                 {
-                    Thread.Sleep(limitTime);
+                    _logger.InfoFormat("Filter Bad Address {0}", remotePoint);
                 }
-                _recvMessageQueue.TryAdd(new DhtData() { Data = data, RemoteEndPoint = remotePoint }, EnqueueWaitTime);
+                else
+                {
+                    while (!_receveRateLimit.Require(data.Length, out var limitTime))
+                    {
+                        Thread.Sleep(limitTime);
+                    }
+                    _recvMessageQueue.TryAdd(new DhtData() { Data = data, RemoteEndPoint = remotePoint }, EnqueueWaitTime);
+                }
                 if (!running)
                     return;
             }
@@ -334,22 +345,19 @@ namespace DhtCrawler.DHT
                 }
                 catch (Exception ex)
                 {
+                    if (ex is DecodeException)
+                    {
+                        filterPeers.Add(dhtData.RemoteEndPoint.ToInt64());
+                        continue;
+                    }
                     _logger.Error($"ErrorData:{BitConverter.ToString(dhtData.Data)}", ex);
                     var response = new DhtMessage
                     {
                         MesageType = MessageType.Exception,
                         MessageId = new byte[] { 0, 0 }
                     };
-                    if (ex is DecodeException)
-                    {
-                        response.Errors.Add(203);
-                        response.Errors.Add("Error Protocol");
-                    }
-                    else
-                    {
-                        response.Errors.Add(202);
-                        response.Errors.Add("Server Error:" + ex.Message);
-                    }
+                    response.Errors.Add(202);
+                    response.Errors.Add("Server Error:" + ex.Message);
                     _sendMessageQueue.TryAdd(new Tuple<DhtMessage, DhtNode>(response, new DhtNode(dhtData.RemoteEndPoint)));
                 }
             }
@@ -434,6 +442,12 @@ namespace DhtCrawler.DHT
                 var node = dhtData.Item2;
                 try
                 {
+                    var remotepoint = new IPEndPoint(node.Host, node.Port);
+                    if (!remotepoint.Address.IsPublic() || filterPeers.Contains(remotepoint.ToInt64()))
+                    {
+                        _logger.InfoFormat("Filter Bad Address {0}", remotepoint);
+                        continue;
+                    }
                     if (queue == _sendMessageQueue)
                     {
                         var regResult = await MessageMap.RegisterMessageAsync(msg, node);
@@ -443,11 +457,6 @@ namespace DhtCrawler.DHT
                         }
                     }
                     var sendBytes = msg.BEncodeBytes();
-                    var remotepoint = new IPEndPoint(node.Host, node.Port);
-                    if (!remotepoint.Address.IsPublic())
-                    {
-                        continue;
-                    }
                     while (!_sendRateLimit.Require(sendBytes.Length, out var limitTime))
                     {
                         await Task.Delay(limitTime);
@@ -460,10 +469,7 @@ namespace DhtCrawler.DHT
                     {
                         await MessageMap.RequireRegisteredInfoAsync(msg, node);
                     }
-                    else
-                    {
-                        _logger.Error("消息发送失败", ex);
-                    }
+                    _logger.Error("消息发送失败", ex);
                 }
             }
         }
@@ -610,9 +616,8 @@ namespace DhtCrawler.DHT
 
         private static void ClearCollection<T>(BlockingCollection<T> collection)
         {
-            while (collection.Count > 0)
+            while (collection.Count > 0 && collection.TryTake(out T remove))
             {
-                collection.TryTake(out T remove);
             }
         }
 

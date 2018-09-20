@@ -38,7 +38,7 @@ namespace DhtCrawler.Common.Utils
         public static long ToInt64(this IPEndPoint endPoint)
         {
             long ipNum = endPoint.Address.ToInt64();
-            return ipNum << 2 | (long)endPoint.Port;
+            return ipNum << 8 | (endPoint.Port & ushort.MaxValue);
         }
 
         public static long ToInt64(this IPAddress address)
