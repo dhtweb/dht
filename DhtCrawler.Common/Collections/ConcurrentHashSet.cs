@@ -205,7 +205,7 @@ namespace DhtCrawler.Common.Collections
                 }
                 if (flag)
                 {
-                    Interlocked.Increment(ref count);
+                    Interlocked.Decrement(ref count);
                 }
                 return flag;
             });
