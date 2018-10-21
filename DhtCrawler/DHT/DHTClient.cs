@@ -445,7 +445,6 @@ namespace DhtCrawler.DHT
                     var remotepoint = new IPEndPoint(node.Host, node.Port);
                     if (!remotepoint.Address.IsPublic() || filterPeers.Contains(remotepoint.ToInt64()))
                     {
-                        _logger.InfoFormat("Filter Bad Address {0}", remotepoint);
                         continue;
                     }
                     if (queue == _sendMessageQueue)

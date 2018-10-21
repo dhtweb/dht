@@ -16,6 +16,7 @@ using NpgsqlTypes;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
@@ -535,7 +536,7 @@ namespace DhtCrawler
                                             }
                                         }
                                     }
-                                    if (con.State != System.Data.ConnectionState.Open)
+                                    if (con.State != ConnectionState.Open)
                                     {
                                         con.Open();
                                     }
@@ -653,12 +654,24 @@ namespace DhtCrawler
                                     }
                                 }
                             }
+
+                            var count = 0;
                             using (var insertHash = con.CreateCommand())
                             {
                                 foreach (var kv in info)
                                 {
+                                    count++;
+                                    if (kv.Value <= 1)
+                                    {
+                                        InfoHashQueue.Enqueue(kv.Key);
+                                        continue;
+                                    }
                                     try
                                     {
+                                        if (con.State != ConnectionState.Open)
+                                        {
+                                            con.Open();
+                                        }
                                         insertHash.CommandText = "UPDATE t_infohash SET downnum = downnum+@downnum,updatetime=@now WHERE infohash=@hash RETURNING id;";
                                         insertHash.Parameters.Add(new NpgsqlParameter("hash", kv.Key));
                                         insertHash.Parameters.Add(new NpgsqlParameter("downnum", kv.Value));
@@ -670,7 +683,7 @@ namespace DhtCrawler
                                             insertHash.CommandText = "INSERT INTO t_sync_infohash (infohash_id) VALUES (@hashId) ON CONFLICT DO NOTHING ;";
                                             insertHash.Parameters.Add(new NpgsqlParameter("hashId", hashId));
                                             insertHash.ExecuteNonQuery();
-                                            watchLog.InfoFormat("更新{0}数据到数据库成功", kv.Key);
+                                            watchLog.InfoFormat("更新{0}数据到数据库成功,{1}/{2}", kv.Key, count, info.Count);
                                         }
                                         insertHash.Parameters.Clear();
                                     }

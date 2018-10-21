@@ -1,17 +1,13 @@
-using System;
-using System.Collections.Generic;
-using System.Data;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
 using Dapper;
-using DhtCrawler.Common;
 using DhtCrawler.Encode;
-using DhtCrawler.Service;
 using DhtCrawler.Service.Maps;
 using DhtCrawler.Service.Model;
 using Npgsql;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
 using Xunit;
 
 namespace DhtCrawler.Test
@@ -36,7 +32,7 @@ namespace DhtCrawler.Test
         [Fact]
         static void DecodeTorrentTest()
         {
-            var path = @"E:\Code\dotnetcore\dht\DhtCrawler.Test\xp1024.com_STP1179MP4.torrent";
+            var path = @"F:\迅雷下载\种子\00da1247df008e88f04a79af1816ea07.torrent";
             var bytes = File.ReadAllBytes(path);
             var dic = (IDictionary<string, object>)BEncoder.Decode(bytes);
             var info = (IDictionary<string, object>)dic["info"];
@@ -61,9 +57,66 @@ namespace DhtCrawler.Test
                     }
                 }
             }
-            Console.WriteLine(info);
-            ;
+            Console.WriteLine(info); ;
         }
+
+        [Fact]
+        static void TempTest()
+        {
+            var dir = @"F:\迅雷下载\种子\";
+            var paths = Directory.GetFiles(dir, "*.torrent");
+            var list = new List<KeyValuePair<string, long>>();
+            foreach (var path in paths)
+            {
+                long length = 0;
+                try
+                {
+                    var bytes = File.ReadAllBytes(path);
+                    var dic = (IDictionary<string, object>)BEncoder.Decode(bytes);
+                    var info = (IDictionary<string, object>)dic["info"];
+                    var name = (byte[])info["name"];
+                    Console.WriteLine(Encoding.UTF8.GetString(name));
+                    if (info.ContainsKey("files"))
+                    {
+                        var files = (IList<object>)info["files"];
+                        foreach (IDictionary<string, object> file in files)
+                        {
+                            foreach (var kv in file)
+                            {
+                                if (kv.Key == "length")
+                                {
+                                    length += Convert.ToInt64(kv.Value);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else if (info.ContainsKey("length"))
+                    {
+                        length = Convert.ToInt64(info["length"]);
+                    }
+                }
+                catch (Exception)
+                {
+                    Console.WriteLine(path);
+                }
+                list.Add(new KeyValuePair<string, long>(path, length));
+            }
+            list.Sort((kv1, kv2) => (int)(kv1.Value - kv2.Value));
+            var step = list.Count / 10;
+            for (int j = 0; j < 10; j++)
+            {
+                var target = $@"F:\迅雷下载\种子\{j}";
+                Directory.CreateDirectory(target);
+                for (var i = step * j; i < list.Count; i++)
+                {
+                    var item = list[i];
+                    File.Move(item.Key, $@"{target}\\{item.Value}_{Path.GetFileName(item.Key)}");
+                }
+            }
+        }
+
+
 
         [Fact]
         static void Test()

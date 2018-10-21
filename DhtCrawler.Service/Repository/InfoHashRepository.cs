@@ -531,5 +531,25 @@ namespace DhtCrawler.Service.Repository
         {
             Connection.Execute($"DELETE FROM t_sync_infohash WHERE infohash_id IN ({string.Join(",", hashIds)})");
         }
+
+        public IList<InfoHashModel> GetInfoHashDetailList(long start = 0, int size = 100)
+        {
+            var list = new List<InfoHashModel>(size);
+            var sql = "SELECT * FROM t_infohash WHERE id > @start order by id LIMIT @size";
+            using (var connection = this.Factory.CreateConnection())
+            {
+                var hashs = connection.Query<InfoHashModel>(sql, new { start, size }, null, true, 60 * 5);
+                foreach (var model in hashs)
+                {
+                    if (model.HasFile)
+                    {
+                        model.Files = connection.QueryFirstOrDefault<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = model.Id }, null, 60 * 5);
+
+                    }
+                    list.Add(model);
+                }
+            }
+            return list;
+        }
     }
 }
