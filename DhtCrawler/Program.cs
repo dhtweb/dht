@@ -32,6 +32,7 @@ namespace DhtCrawler
         private static ConcurrentQueue<string> InfoHashQueue;
         private static BlockingCollection<InfoHash> DownLoadQueue;
         private static ConcurrentHashSet<string> DownlaodedSet;
+        private static ConcurrentHashSet<string> DownlaodingSet;
         private static ConcurrentDictionary<long, DateTime> BadAddress;
         private static readonly ILog log = LogManager.GetLogger(typeof(Program));
         private static readonly ILog watchLog = LogManager.GetLogger(Assembly.GetEntryAssembly(), "watchLogger");
@@ -123,72 +124,93 @@ namespace DhtCrawler
                                 continue;
                             }
                         }
-                        if (DownlaodedSet.Contains(info.Value))
-                            continue;
-                        watchLog.Info($"thread {Task.CurrentId:x2} downloading {info.Value}");
-                        foreach (var peer in info.Peers.Where(p => p.Address.IsPublic()))
+
+                        var isFirst = false;
+                        try
                         {
+                            isFirst = DownlaodingSet.Add(info.Value);
+                            if (!isFirst)
+                            {
+                                DownInfoEnqueue(info);
+                                continue;
+                            }
+
                             if (DownlaodedSet.Contains(info.Value))
                             {
-                                break;
+                                continue;
                             }
-                            var longPeer = peer.ToInt64();
-                            try
+                            watchLog.Info($"thread {Task.CurrentId:x2} downloading {info.Value}");
+                            foreach (var peer in info.Peers.Where(p => p.Address.IsPublic()))
                             {
-                                if (BadAddress.TryGetValue(longPeer, out var expireTime))
+                                if (DownlaodedSet.Contains(info.Value))
                                 {
-                                    if (expireTime > DateTime.Now)
-                                    {
-                                        continue;
-                                    }
-                                    BadAddress.TryRemove(longPeer, out expireTime);
+                                    break;
                                 }
-                                using (var client = new WireClient(peer))
+                                var longPeer = peer.ToInt64();
+                                try
                                 {
-                                    var meta = client.GetMetaData(new global::BitTorrent.InfoHash(info.Bytes), out var netError);
-                                    if (meta == null)
+                                    if (BadAddress.TryGetValue(longPeer, out var expireTime))
                                     {
-                                        if (netError)
+                                        if (expireTime > DateTime.Now)
                                         {
-                                            BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1),
-                                                (ip, before) => DateTime.Now.AddDays(1));
+                                            continue;
                                         }
-                                        continue;
+                                        BadAddress.TryRemove(longPeer, out expireTime);
                                     }
-                                    DownlaodedSet.Add(info.Value);
-                                    var torrent = ParseBitTorrent(meta);
-                                    torrent.InfoHash = info.Value;
-                                    var subdirectory = TorrentDirectory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
-                                    var path = Path.Combine(subdirectory.FullName, torrent.InfoHash + ".json");
-                                    var hasLock = false;
-                                    writeLock.Enter(ref hasLock);
-                                    try
+                                    using (var client = new WireClient(peer))
                                     {
-                                        File.WriteAllText(Path.Combine(TorrentPath, path), torrent.ToJson());
-                                        File.AppendAllText(DownloadInfoPath, torrent.InfoHash + Environment.NewLine);
-                                    }
-                                    finally
-                                    {
-                                        if (hasLock)
+                                        var meta = client.GetMetaData(new global::BitTorrent.InfoHash(info.Bytes), out var netError);
+                                        if (meta == null)
                                         {
-                                            writeLock.Exit(false);
+                                            if (netError)
+                                            {
+                                                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1),
+                                                    (ip, before) => DateTime.Now.AddDays(1));
+                                            }
+                                            continue;
                                         }
+                                        DownlaodedSet.Add(info.Value);
+                                        var torrent = ParseBitTorrent(meta);
+                                        torrent.InfoHash = info.Value;
+                                        var subdirectory = TorrentDirectory.CreateSubdirectory(DateTime.Now.ToString("yyyy-MM-dd"));
+                                        var path = Path.Combine(subdirectory.FullName, torrent.InfoHash + ".json");
+                                        var hasLock = false;
+                                        writeLock.Enter(ref hasLock);
+                                        try
+                                        {
+                                            File.WriteAllText(Path.Combine(TorrentPath, path), torrent.ToJson());
+                                            File.AppendAllText(DownloadInfoPath, torrent.InfoHash + Environment.NewLine);
+                                        }
+                                        finally
+                                        {
+                                            if (hasLock)
+                                            {
+                                                writeLock.Exit(false);
+                                            }
+                                        }
+                                        watchLog.Info($"download {torrent.InfoHash} success");
                                     }
-                                    watchLog.Info($"download {torrent.InfoHash} success");
+                                    break;
                                 }
-                                break;
+                                catch (SocketException)
+                                {
+                                    BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
+                                }
+                                catch (IOException)
+                                {
+                                    BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
+                                }
+                                catch (Exception ex)
+                                {
+                                    log.Error("下载失败", ex);
+                                }
                             }
-                            catch (SocketException)
+                        }
+                        finally
+                        {
+                            if (isFirst)
                             {
-                                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
-                            }
-                            catch (IOException)
-                            {
-                                BadAddress.AddOrUpdate(longPeer, DateTime.Now.AddDays(1), (ip, before) => DateTime.Now.AddDays(1));
-                            }
-                            catch (Exception ex)
-                            {
-                                log.Error("下载失败", ex);
+                                DownlaodingSet.Remove(info.Value);
                             }
                         }
                     }
@@ -323,6 +345,7 @@ namespace DhtCrawler
             InfoHashQueue = new ConcurrentQueue<string>();
             DownLoadQueue = new BlockingCollection<InfoHash>(ConfigurationManager.Default.GetInt("BufferDownSize", 5120));
             DownlaodedSet = new ConcurrentHashSet<string>();
+            DownlaodingSet = new ConcurrentHashSet<string>();
             BadAddress = new ConcurrentDictionary<long, DateTime>();
             InfoStore = new StoreManager<InfoHash>("infohash.store");
             var redisServer = ConfigurationManager.Default.GetString("redis.server");
@@ -624,7 +647,7 @@ namespace DhtCrawler
                     {
                         try
                         {
-                            if (File.GetLastWriteTime(file) < DateTime.Now.AddHours(-1))
+                            if (File.GetLastWriteTime(file) > DateTime.Now.AddHours(-1))
                             {
                                 continue;
                             }
@@ -658,9 +681,10 @@ namespace DhtCrawler
                             var count = 0;
                             using (var insertHash = con.CreateCommand())
                             {
+                                var num = 0;
                                 foreach (var kv in info)
                                 {
-                                    count++;
+                                    num++;
                                     if (kv.Value <= 1)
                                     {
                                         InfoHashQueue.Enqueue(kv.Key);
@@ -683,7 +707,7 @@ namespace DhtCrawler
                                             insertHash.CommandText = "INSERT INTO t_sync_infohash (infohash_id) VALUES (@hashId) ON CONFLICT DO NOTHING ;";
                                             insertHash.Parameters.Add(new NpgsqlParameter("hashId", hashId));
                                             insertHash.ExecuteNonQuery();
-                                            watchLog.InfoFormat("更新{0}数据到数据库成功,{1}/{2}", kv.Key, count, info.Count);
+                                            watchLog.InfoFormat("更新{0}数据到数据库成功,{1}/{2}", kv.Key, num, info.Count);
                                         }
                                         insertHash.Parameters.Clear();
                                     }
