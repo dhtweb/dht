@@ -434,7 +434,7 @@ namespace DhtCrawler
             {
                 while (true)
                 {
-                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},收到请求消息数:{dhtClient.RequestMessageCount},收到回复消息数:{dhtClient.ResponseMessageCount},发送消息数:{dhtClient.SendMessageCount},回复消息数:{dhtClient.ReplyMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},下载线程数:{DownTaskList.Count}");
+                    watchLog.Info($"收到消息数:{dhtClient.ReceviceMessageCount},收到请求消息数:{dhtClient.RequestMessageCount},收到回复消息数:{dhtClient.ResponseMessageCount},发送消息数:{dhtClient.SendMessageCount},回复消息数:{dhtClient.ReplyMessageCount},待查找节点数:{dhtClient.FindNodeCount},待记录InfoHash数:{InfoHashQueue.Count},下载中InfoHash数:{DownlaodingSet.Count},待下载InfoHash数:{DownLoadQueue.Count},堆积的infoHash数:{InfoStore.Count},下载线程数:{DownTaskList.Count}");
                     await Task.Delay(60 * 1000);
                 }
             });
@@ -639,12 +639,14 @@ namespace DhtCrawler
             var conStr = ConfigurationManager.Default.GetString("conStr");
             try
             {
+                var waitingFiles = new Stack<string>(files);
                 var info = new Dictionary<string, int>();
                 using (var con = new NpgsqlConnection(conStr))
                 {
                     con.Open();
-                    foreach (var file in files)
+                    while (waitingFiles.Count > 0)
                     {
+                        var file = waitingFiles.Pop();
                         try
                         {
                             if (File.GetLastWriteTime(file) > DateTime.Now.AddHours(-1))
@@ -653,6 +655,8 @@ namespace DhtCrawler
                             }
                             using (var reader = new StreamReader(File.OpenRead(file), Encoding.UTF8))
                             {
+                                var splitFile = reader.BaseStream.Length > 1024 * 1024 * 10;
+
                                 while (reader.Peek() > 0)
                                 {
                                     var key = reader.ReadLine();
@@ -675,10 +679,17 @@ namespace DhtCrawler
                                     {
                                         info[key] = size;
                                     }
+
+                                    if (splitFile && info.Count > 20000)
+                                    {
+                                        var newFilePath = Path.Combine(InfoPath, $"{Guid.NewGuid()}.txt");
+                                        File.WriteAllLines(newFilePath, info.Select(kv => $"{kv.Key}:{kv.Value.ToString()}"), Encoding.UTF8);
+                                        info.Clear();
+                                        waitingFiles.Push(newFilePath);
+                                    }
                                 }
                             }
 
-                            var count = 0;
                             using (var insertHash = con.CreateCommand())
                             {
                                 var num = 0;
@@ -752,7 +763,7 @@ namespace DhtCrawler
                     }
                     foreach (var kv in set)
                     {
-                        content.AppendLine($"{kv.Key}:{kv.Value}");
+                        content.AppendLine($"{kv.Key}:{kv.Value.ToString()}");
                     }
                     if (set.Count > 0)
                     {

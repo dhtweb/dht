@@ -468,7 +468,7 @@ namespace DhtCrawler.DHT
                     {
                         await MessageMap.RequireRegisteredInfoAsync(msg, node);
                     }
-                    _logger.Error("消息发送失败", ex);
+                    _logger.Error($"消息发送失败,remote:{node.Host}:{node.Port.ToString()}", ex);
                 }
             }
         }
