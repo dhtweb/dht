@@ -11,7 +11,7 @@ namespace Sync
     {
         static void Main(string[] args)
         {
-            var dbFactory = new DbFactory("Host=198.13.54.254;Username=zk;Database=dht;Port=5432;Password=741-plm-qaz", NpgsqlFactory.Instance);
+            var dbFactory = new DbFactory("Host=127.0.0.1;Username=zk;Database=dht;Port=5432;", NpgsqlFactory.Instance);
             var repository = new InfoHashRepository(dbFactory);
             var store = new StoreFile("infohash.data");
             Console.WriteLine("start index {0}", store.Index);
