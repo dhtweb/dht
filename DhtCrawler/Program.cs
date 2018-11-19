@@ -87,6 +87,8 @@ namespace DhtCrawler
             }
             Task downTask = Task.Factory.StartNew(() =>
             {
+                var random = new Random();
+                var localSize = Math.Min(MaxDownTaskNum, DownLoadQueue.BoundedCapacity - DownLoadQueue.Count);
                 while (running)
                 {
                     try
@@ -97,7 +99,7 @@ namespace DhtCrawler
                             {
                                 if (!DownLoadQueue.TryTake(out info))
                                 {
-                                    var infos = InfoStore.ReadLast(Math.Min(MaxDownTaskNum, DownLoadQueue.BoundedCapacity - DownLoadQueue.Count));
+                                    var infos = InfoStore.ReadLast(localSize);
                                     if (infos.Count > 0)
                                     {
                                         for (int i = 0; i < infos.Count - 1; i++)
@@ -132,6 +134,7 @@ namespace DhtCrawler
                             if (!isFirst)
                             {
                                 DownInfoEnqueue(info);
+                                Thread.Sleep(random.Next(10, 100));//添加等待时间，防止入队以后依旧竞争同一个
                                 continue;
                             }
 

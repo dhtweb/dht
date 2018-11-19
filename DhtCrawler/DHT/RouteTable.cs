@@ -65,7 +65,7 @@ namespace DhtCrawler.DHT
 
         public void AddNode(DhtNode node)
         {
-            if (node.NodeId == null || node.NodeId.Length != 20 || _kTable.Count >= _maxNodeSize)
+            if (node.Port == 0 || node.NodeId == null || node.NodeId.Length != 20 || _kTable.Count >= _maxNodeSize)
                 return;
             var route = new Route()
             {
@@ -85,7 +85,7 @@ namespace DhtCrawler.DHT
 
         public void AddOrUpdateNode(DhtNode node)
         {
-            if (node.NodeId == null || node.NodeId.Length != 20)
+            if (node.Port == 0 || node.NodeId == null || node.NodeId.Length != 20)
                 return;
             if (_kTable.Count >= _maxNodeSize && _minLastTime + RouteLife.Ticks < DateTime.Now.Ticks)
             {

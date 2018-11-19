@@ -442,6 +442,10 @@ namespace DhtCrawler.DHT
                 var node = dhtData.Item2;
                 try
                 {
+                    if (node.Port == 0)
+                    {
+                        continue;
+                    }
                     var remotepoint = new IPEndPoint(node.Host, node.Port);
                     if (!remotepoint.Address.IsPublic() || filterPeers.Contains(remotepoint.ToInt64()))
                     {
