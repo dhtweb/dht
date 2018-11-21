@@ -13,19 +13,26 @@ namespace DhtCrawler.Common.RateLimit
         /// </summary>
         private readonly long _fillTick;
 
+        private readonly bool _hasLimit;
+
         private int _tokens;
         private long _nextTick;
 
         public TokenBucketLimit(int capacity, int fillInterval, TimeUnit unit)
         {
-            this._tokens = capacity;
-            this._capacity = capacity;
-            this._nextTick = DateTime.Now.Ticks;
-            this._fillTick = TimeSpan.FromMilliseconds(fillInterval * (int)unit).Ticks;
+            _tokens = capacity;
+            _capacity = capacity;
+            _hasLimit = capacity > 0;
+            _nextTick = DateTime.Now.Ticks;
+            _fillTick = TimeSpan.FromMilliseconds(fillInterval * (int)unit).Ticks;
         }
 
         public bool Require(int count, out TimeSpan waitTime)
         {
+            if (!_hasLimit)
+            {
+                return true;
+            }
             lock (this)
             {
                 while (true)
@@ -45,7 +52,6 @@ namespace DhtCrawler.Common.RateLimit
                         return false;
                     }
                     _tokens -= count;
-                    waitTime = TimeSpan.Zero;
                     return true;
                 }
             }

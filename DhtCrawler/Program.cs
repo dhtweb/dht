@@ -391,6 +391,7 @@ namespace DhtCrawler
         private static void LoadDownInfoHash()
         {
             var queue = new Queue<string>(new[] { TorrentPath });
+            var limitList = new LinkedList<string>();
             while (queue.Count > 0)
             {
                 var dir = queue.Dequeue();
@@ -400,7 +401,14 @@ namespace DhtCrawler
                 }
                 foreach (var file in Directory.GetFiles(dir))
                 {
-                    DownlaodedSet.Add(Path.GetFileNameWithoutExtension(file));
+                    var hash = Path.GetFileNameWithoutExtension(file);
+                    DownlaodedSet.Add(hash);
+                    limitList.AddLast(hash);
+                    if (limitList.Count >= 50000)
+                    {
+                        DownlaodedSet.Remove(limitList.First.Value);
+                        limitList.RemoveFirst();
+                    }
                 }
             }
             if (!File.Exists(DownloadInfoPath))
@@ -408,6 +416,12 @@ namespace DhtCrawler
             foreach (var line in File.ReadAllLines(DownloadInfoPath))
             {
                 DownlaodedSet.Add(line);
+                limitList.AddFirst(line);
+                if (limitList.Count >= 50000)
+                {
+                    DownlaodedSet.Remove(limitList.First.Value);
+                    limitList.RemoveFirst();
+                }
             }
         }
 
