@@ -73,7 +73,7 @@ namespace DhtCrawler.Web.Controllers
                     {
                         return;
                     }
-                    _indexSearchService.ReBuildIndex(null);
+                    _indexSearchService.ReBuildIndex();
                 }
                 finally
                 {

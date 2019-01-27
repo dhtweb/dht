@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Data.Common;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Dapper;
+﻿using Dapper;
 using DhtCrawler.Common;
 using DhtCrawler.Common.Db;
 using DhtCrawler.Common.Utils;
@@ -13,6 +6,13 @@ using DhtCrawler.Service.Maps;
 using DhtCrawler.Service.Model;
 using Npgsql;
 using NpgsqlTypes;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Data.Common;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace DhtCrawler.Service.Repository
 {
@@ -423,6 +423,26 @@ namespace DhtCrawler.Service.Repository
             if (item != null && item.HasFile)
             {
                 item.Files = await Connection.QueryFirstOrDefaultAsync<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = item.Id });
+            }
+            return item;
+        }
+
+        public async Task<InfoHashModel> GetInfoHashDetailAsync(long id)
+        {
+            var item = await Connection.QueryFirstOrDefaultAsync<InfoHashModel>("SELECT * FROM t_infohash WHERE id=@id", new { id });
+            if (item != null && item.HasFile)
+            {
+                item.Files = await Connection.QueryFirstOrDefaultAsync<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = item.Id });
+            }
+            return item;
+        }
+
+        public InfoHashModel GetInfoHashDetail(long id)
+        {
+            var item = Connection.QueryFirstOrDefault<InfoHashModel>("SELECT * FROM t_infohash WHERE id=@id", new { id });
+            if (item != null && item.HasFile)
+            {
+                item.Files = Connection.QueryFirstOrDefault<IList<TorrentFileModel>>("SELECT files FROM t_infohash_file WHERE info_hash_id =@hashId; ", new { hashId = item.Id });
             }
             return item;
         }

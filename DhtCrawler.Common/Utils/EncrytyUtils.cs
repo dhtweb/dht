@@ -18,5 +18,19 @@ namespace DhtCrawler.Common.Utils
         {
             return GetMd5(Encoding.UTF8.GetBytes(str));
         }
+
+        public static string GetSha1(byte[] array)
+        {
+            using (var provider = new SHA1CryptoServiceProvider())
+            {
+                var buffer = provider.ComputeHash(array);
+                return buffer.ToHex();
+            }
+        }
+
+        public static string GetSha1(string str)
+        {
+            return GetSha1(Encoding.UTF8.GetBytes(str));
+        }
     }
 }

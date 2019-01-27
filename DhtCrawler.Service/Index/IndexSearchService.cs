@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using DhtCrawler.Common.Filters;
+﻿using DhtCrawler.Common.Filters;
 using DhtCrawler.Common.Index;
 using DhtCrawler.Common.Index.Analyzer;
 using DhtCrawler.Common.Index.Utils;
@@ -12,6 +9,8 @@ using Lucene.Net.Analysis;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace DhtCrawler.Service.Index
 {
@@ -43,13 +42,11 @@ namespace DhtCrawler.Service.Index
                 return null;
             }
             var doc = new Document();
-            doc.AddStringField("InfoHash", item.InfoHash, Field.Store.YES);
-            var nameField = doc.AddTextField("Name", item.Name, Field.Store.YES);
-            nameField.Boost = _rankWords.Contain(item.Name) ? 0.9F : 10F;
-            doc.AddInt32Field("DownNum", item.DownNum, Field.Store.YES);
-            doc.AddInt32Field("FileNum", item.FileNum, Field.Store.YES);
-            doc.AddInt64Field("FileSize", item.FileSize, Field.Store.YES);
-            doc.AddInt64Field("CreateTime", item.CreateTime.Ticks, Field.Store.YES);
+            var nameField = doc.AddTextField("Name", item.Name, Field.Store.NO);
+            nameField.Boost = _rankWords.Contain(item.Name) ? 0.1F : 10F;
+            doc.AddStringField("Id", item.Id.ToString(), Field.Store.YES);
+            doc.AddInt32Field("DownNum", item.DownNum, Field.Store.NO);
+            doc.AddInt64Field("CreateTime", item.CreateTime.Ticks, Field.Store.NO);
             if (item.Files != null && item.Files.Count > 0)
             {
                 var flag = false;
@@ -81,7 +78,7 @@ namespace DhtCrawler.Service.Index
                         }
                     }
                 }
-                var fileField = doc.AddTextField("Files", string.Join(",", names), Field.Store.YES);
+                var fileField = doc.AddTextField("Files", string.Join(",", names), Field.Store.NO);
                 fileField.Boost = flag ? 0.1F : 9F;
             }
             log.InfoFormat("处理数据:{0}", item.Id.ToString());
@@ -90,40 +87,54 @@ namespace DhtCrawler.Service.Index
 
         protected override InfoHashModel GetModel(Document doc, ISet<string> keyWords)
         {
-            var item = new InfoHashModel
+            var idStr = doc.GetField("Id").GetStringValue();
+            if (!long.TryParse(idStr, out var infoId))
             {
-                InfoHash = doc.Get("InfoHash"),
-                DownNum = doc.GetField("DownNum").GetInt32ValueOrDefault(),
-                FileNum = doc.GetField("FileNum").GetInt32ValueOrDefault(),
-                FileSize = doc.GetField("FileSize").GetInt64ValueOrDefault(),
-                CreateTime = new DateTime(doc.GetField("CreateTime").GetInt64ValueOrDefault())
-            };
-            var name = doc.Get("Name");
-            if (!name.IsBlank())
+                return new InfoHashModel();
+            }
+            var item = _infoHashRepository.GetInfoHashDetail(infoId);
+            if (item == null)
             {
-                var newName = SetHighKeyWord(name, keyWords);
-                item.Name = newName;
-                if (name.Length != newName.Length)
+                return new InfoHashModel();
+            }
+            if (!item.Name.IsBlank())
+            {
+                var newName = SetHighKeyWord(item.Name, keyWords);
+                if (item.Name.Length != newName.Length)
                 {
+                    item.Name = newName;
                     return item;
                 }
             }
-            var files = doc.Get("Files");
-            if (files.IsBlank())
-                return item;
-            item.ShowFiles = new List<string>();
-            var lines = files.Split(',');
-            foreach (var line in lines)
+
+            if (item.Files == null || item.Files.Count <= 0)
             {
-                var newline = SetHighKeyWord(line, keyWords);
-                if (newline.Length == line.Length)
-                    continue;
-                item.ShowFiles.Add(newline);
-                if (item.ShowFiles.Count > 2)
+                return item;
+            }
+
+            item.ShowFiles = new List<string>();
+            var fileQueue = new Queue<TorrentFileModel>(item.Files);
+            while (fileQueue.Count > 0)
+            {
+                var file = fileQueue.Dequeue();
+                var newline = SetHighKeyWord(file.Name, keyWords);
+                if (newline.Length != file.Name.Length)
                 {
-                    break;
+                    item.ShowFiles.Add(newline);
+                    if (item.ShowFiles.Count > 2)
+                    {
+                        break;
+                    }
+                }
+
+                if (file.Files == null || item.Files.Count <= 0)
+                    continue;
+                foreach (var model in file.Files)
+                {
+                    fileQueue.Enqueue(model);
                 }
             }
+            item.Files = null;
             return item;
         }
 
@@ -134,7 +145,7 @@ namespace DhtCrawler.Service.Index
 
         protected override Term GetTargetTerm(InfoHashModel item)
         {
-            return new Term("InfoHash", item.InfoHash);
+            return new Term("Id", item.Id.ToString());
         }
 
         public IList<InfoHashModel> GetList(int index, int size, out int count, string keyword, int sort = 1)
@@ -146,26 +157,15 @@ namespace DhtCrawler.Service.Index
                 if (!string.IsNullOrEmpty(keyword))//关键字搜索
                 {
                     highWords = SplitString(keyword);
-                    var searchKeys = highWords.Where(w => keyword.Length <= 1 || w.Length > 1).ToArray();
-                    if (searchKeys.Length == 0)
+                    BooleanQuery nameQuery = new BooleanQuery() { Boost = 100f }, flieQuery = new BooleanQuery();
+                    foreach (var key in highWords)
                     {
-                        searchKeys = highWords;
+                        var isSingle = key.Length == 1 && ('0' <= key[0] && key[0] <= '9' || 'a' <= key[0] && key[0] <= 'z' || 'A' <= key[0] && key[0] <= 'Z');
+                        nameQuery.Add(new TermQuery(new Term("Name", key)), isSingle ? Occur.SHOULD : Occur.MUST);
+                        flieQuery.Add(new TermQuery(new Term("Files", key)), isSingle ? Occur.SHOULD : Occur.MUST);
                     }
-                    else
-                    {
-                        highWords = searchKeys;
-                    }
-                    Term[] nameTerms = new Term[searchKeys.Length], fileTerms = new Term[searchKeys.Length];
-                    for (var i = 0; i < searchKeys.Length; i++)
-                    {
-                        var key = searchKeys[i];
-                        nameTerms[i] = new Term("Name", key);
-                        fileTerms[i] = new Term("Files", key);
-                    }
-                    var nameQuery = new MultiPhraseQuery() { nameTerms };
-                    nameQuery.Boost = 100f;
                     query.Add(nameQuery, Occur.SHOULD);
-                    query.Add(new MultiPhraseQuery() { fileTerms }, Occur.SHOULD);
+                    query.Add(flieQuery, Occur.SHOULD);
                 }
                 if (query.Clauses.Count <= 0)
                     query.Add(new MatchAllDocsQuery(), Occur.MUST);
