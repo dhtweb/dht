@@ -1,13 +1,12 @@
-﻿using System;
+﻿using DhtCrawler.Common.Compare;
+using DhtCrawler.Common.Filters;
+using DhtCrawler.Common.Utils;
+using log4net;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using DhtCrawler.Common.Collections;
-using DhtCrawler.Common.Compare;
-using DhtCrawler.Common.Filters;
-using DhtCrawler.Common.Utils;
-using log4net;
 
 namespace DhtCrawler.DHT.Message
 {
@@ -95,34 +94,45 @@ namespace DhtCrawler.DHT.Message
 
         private void ClearExpireMessage(int clearSize = 1000)
         {
-            var startTime = DateTime.Now;
-            var rmList = _mappingInfo.ToArray().OrderBy(t => t.Value.LastTime).Take(clearSize).ToDictionary(kv => kv.Value.InfoHash, kv => new { kv.Key, kv.Value.LastTime });
-            foreach (var kv in rmList)
+            lock (this)
             {
-                var infohash = kv.Key;
-                var msgId = kv.Value;
-                if (_mappingInfo.TryRemove(msgId.Key, out var map))
+                foreach (var key in _mappingInfo.Keys)
                 {
-                    _bucket.Add(msgId.Key);
+                    _bucket.Add(key);
                 }
-                if (_idMappingInfo.TryRemove(infohash, out var idMap))
-                {
-                    if (idMap.Count > 0 && (DateTime.Now - msgId.LastTime).TotalSeconds > _expireSeconds)//过期了的消息节点过滤
-                    {
-                        foreach (var peer in idMap.GetPeers())
-                        {
-                            _filter.Add(peer);
-                        }
-                    }
-                }
+                _mappingInfo.Clear();
+                _idMappingInfo.Clear();
             }
-            foreach (var mapInfo in _idMappingInfo)
-            {
-                if (mapInfo.Value.Count <= 0)
-                    _idMappingInfo.TryRemove(mapInfo.Key, out var rm);
 
-            }
-            log.Info($"清理过期的命令ID,清理后可用命令ID数:{_bucket.Count},用时:{(DateTime.Now - startTime).TotalSeconds}");
+            log.Info($"无可用命令ID，清除已注册命令");
+            //var startTime = DateTime.Now;
+            //var rmList = _mappingInfo.ToArray().OrderBy(t => t.Value.LastTime).Take(clearSize).ToDictionary(kv => kv.Value.InfoHash, kv => new { kv.Key, kv.Value.LastTime });
+            //foreach (var kv in rmList)
+            //{
+            //    var infohash = kv.Key;
+            //    var msgId = kv.Value;
+            //    if (_mappingInfo.TryRemove(msgId.Key, out var map))
+            //    {
+            //        _bucket.Add(msgId.Key);
+            //    }
+            //    if (_idMappingInfo.TryRemove(infohash, out var idMap))
+            //    {
+            //        if (idMap.Count > 0 && (DateTime.Now - msgId.LastTime).TotalSeconds > _expireSeconds)//过期了的消息节点过滤
+            //        {
+            //            foreach (var peer in idMap.GetPeers())
+            //            {
+            //                _filter.Add(peer);
+            //            }
+            //        }
+            //    }
+            //}
+            //foreach (var mapInfo in _idMappingInfo)
+            //{
+            //    if (mapInfo.Value.Count <= 0)
+            //        _idMappingInfo.TryRemove(mapInfo.Key, out var rm);
+
+            //}
+            //log.Info($"清理过期的命令ID,清理后可用命令ID数:{_bucket.Count},用时:{(DateTime.Now - startTime).TotalSeconds}");
         }
 
         protected override bool RegisterGetPeersMessage(byte[] infoHash, DhtNode node, out TransactionId msgId)
